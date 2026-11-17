@@ -1,39 +1,38 @@
 # PARSIAN OS Backend
 
-FastAPI service foundation. The first increment provides application configuration, API routing, liveness/readiness probes, PostgreSQL connectivity checks, container packaging, and basic tests. Business modules and authentication are intentionally not represented as complete yet.
+FastAPI service foundation with PostgreSQL/SQLAlchemy, Alembic migrations, initial identity/role/permission and audit models. Authentication endpoints and business workflows are not yet implemented.
 
 ## Local setup
 
 ```bash
 cd backend
 python -m venv .venv
-# Windows: .venv\\Scripts\\activate
+# Windows PowerShell: .venv\\Scripts\\Activate.ps1
 # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-copy .env.example .env  # Windows PowerShell
-# cp .env.example .env   # macOS/Linux
+copy .env.example .env  # Windows PowerShell; use cp on macOS/Linux
 uvicorn app.main:app --reload
 ```
 
-Set `DATABASE_URL` in `.env` to a reachable PostgreSQL database before calling the readiness endpoint. The liveness endpoint does not require a database connection.
+Set `DATABASE_URL` in `.env` to a reachable PostgreSQL database. The liveness endpoint does not require database access; readiness does.
 
-## Endpoints
+## Database migrations
 
-- `GET /` service root
-- `GET /api/v1/health/live` process liveness
-- `GET /api/v1/health/ready` database readiness (`503` when unavailable)
-- `GET /api/v1/system/version` service metadata
-- `GET /docs` interactive OpenAPI docs outside production
+```bash
+alembic upgrade head
+alembic current
+```
+
+The first migration creates users, roles, permissions, their many-to-many mappings, and audit events. Review and back up before applying to any persistent environment.
 
 ## Tests
 
 ```bash
-pip install -r requirements.txt
 pytest
 ```
 
-The initial tests cover liveness and version metadata and do not require PostgreSQL. Database migrations, authentication, authorization, and business APIs are future increments.
+The initial automated tests cover liveness and version metadata only. Run integration tests against a disposable PostgreSQL database before treating migrations as production-ready.
 
-## Configuration
+## Security notes
 
-Copy `.env.example` to `.env`; never commit real secrets. Use a dedicated least-privilege database account outside local development.
+Passwords are represented only as password hashes in the schema. Password hashing and token issuance must use the approved service layer; no default administrator or production credential is seeded. Never commit `.env` or real secrets.
