@@ -26,11 +26,11 @@ def test_alembic_upgrade_creates_identity_and_lockout_schema() -> None:
     engine = create_engine(DATABASE_URL)
     try:
         inspector = inspect(engine)
-        assert {"users", "roles", "permissions", "user_roles", "role_permissions", "audit_events"} <= set(inspector.get_table_names())
+        assert {"users", "roles", "permissions", "user_roles", "role_permissions", "audit_events", "customers"} <= set(inspector.get_table_names())
         user_columns = {column["name"] for column in inspector.get_columns("users")}
         assert {"failed_login_attempts", "locked_until", "must_change_password"} <= user_columns
         with engine.connect() as connection:
             revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-        assert revision == "0002_auth_lockout"
+        assert revision == "0003_customers"
     finally:
         engine.dispose()
