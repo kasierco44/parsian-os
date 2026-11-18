@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { getCustomers, getMe, getStoredToken, isApiConfigured, login as apiLogin, logout as apiLogout } from "./src/api/client";
+import { getCustomers, getMe, getStoredToken, isApiConfigured, login as apiLogin, logout as apiLogout, changePassword as apiChangePassword } from "./src/api/client";
 import {
   I18nManager, KeyboardAvoidingView, Modal, Platform, Pressable,
   SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View
@@ -50,7 +50,7 @@ export default function App() {
   const [apiMode, setApiMode] = useState(false);
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState("");
-  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);\n  const [passwordChangeRequired, setPasswordChangeRequired] = useState(false);\n  const [currentPassword, setCurrentPassword] = useState("");\n  const [newPassword, setNewPassword] = useState("");\n  const [confirmPassword, setConfirmPassword] = useState("");
   const [tab, setTab] = useState("خانه");
   const [customers, setCustomers] = useState(initialCustomers);
   const [search, setSearch] = useState("");
@@ -99,6 +99,24 @@ export default function App() {
     finally { setLoginBusy(false); }
   };
 
+  const submitPasswordChange = async () => {
+    setLoginError("");
+    if (!currentPassword || newPassword.length < 12 || newPassword !== confirmPassword) {
+      setLoginError("رمز فعلی را وارد کنید؛ رمز جدید باید حداقل ۱۲ نویسه باشد و تکرار آن یکسان باشد.");
+      return;
+    }
+    setLoginBusy(true);
+    try {
+      await apiChangePassword({ token: apiToken, currentPassword, newPassword });
+      const me = await getMe(apiToken);
+      const rows = await getCustomers({ token: apiToken });
+      setApiUser(me); setApiMode(true); setPasswordChangeRequired(false);
+      setCustomers(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
+      setEntered(true); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+    } catch (e) { setLoginError(e.message || "تغییر رمز عبور انجام نشد."); }
+    finally { setLoginBusy(false); }
+  };
+
   const syncCustomers = async () => {
     if (!apiToken) return;
     setSyncBusy(true);
@@ -115,6 +133,25 @@ export default function App() {
     setTodayTasks(prev => [{ id: Date.now(), title: note.trim(), time: "جدید", done: false }, ...prev]);
     setNote(""); setModal(false); showToast("پیگیری آزمایشی ثبت شد");
   };
+
+  if (!entered && passwordChangeRequired) return (
+    <SafeAreaView style={styles.login}>
+      <ExpoStatusBar style="light" />
+      <View style={styles.brandMark}><Text style={styles.brandMarkText}>پ</Text></View>
+      <Text style={styles.brandTitle}>تغییر رمز عبور</Text>
+      <Text style={styles.brandSub}>برای امنیت حساب، ابتدا رمز موقت را تغییر دهید.</Text>
+      <View style={styles.loginCard}>
+        <Text style={styles.fieldLabel}>رمز فعلی / موقت</Text>
+        <TextInput style={styles.input} value={currentPassword} onChangeText={setCurrentPassword} secureTextEntry textAlign="right" />
+        <Text style={styles.fieldLabel}>رمز جدید (حداقل ۱۲ نویسه)</Text>
+        <TextInput style={styles.input} value={newPassword} onChangeText={setNewPassword} secureTextEntry textAlign="right" />
+        <Text style={styles.fieldLabel}>تکرار رمز جدید</Text>
+        <TextInput style={styles.input} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry textAlign="right" />
+        {loginError ? <Text style={styles.loginError}>{loginError}</Text> : null}
+        <Pressable style={styles.primaryBtn} disabled={loginBusy} onPress={submitPasswordChange}><Text style={styles.primaryBtnText}>{loginBusy ? "در حال ثبت..." : "ثبت رمز جدید و ورود"}</Text></Pressable>
+      </View>
+    </SafeAreaView>
+  );
 
   if (!entered) return (
     <SafeAreaView style={styles.login}>
