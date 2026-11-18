@@ -38,7 +38,7 @@ def _accounting(user: User) -> bool:
 
 
 def _can_view_order(user: User, order: SalesOrder) -> bool:
-    return _manager(user) or order.seller_user_id == user.id
+    return _manager(user) or "accountant" in _roles(user) or order.seller_user_id == user.id
 
 
 def _number(prefix: str) -> str:
