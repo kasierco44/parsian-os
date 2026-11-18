@@ -170,7 +170,7 @@ def submit_order(order_id: UUID, user: User = Depends(get_current_user), db: Ses
 @router.get("/orders", response_model=list[SalesOrderRead])
 def list_orders(status_filter: str | None = Query(default=None, alias="status"), user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     statement = select(SalesOrder).options(selectinload(SalesOrder.lines)).order_by(SalesOrder.created_at.desc())
-    if not _manager(user):
+    if not _accounting(user):
         statement = statement.where(SalesOrder.seller_user_id == user.id)
     if status_filter:
         statement = statement.where(SalesOrder.status == status_filter)
