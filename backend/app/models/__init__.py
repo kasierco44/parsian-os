@@ -5,6 +5,7 @@ from app.models.product import CatalogState, Product, ProductMedia
 from app.models.replication import ReplicationEvent, ReplicationState
 from app.models.identity import Permission, Role, User, role_permissions, user_roles
 from app.models.sync import SyncOperation, SyncRecord
-from app.models.sales import (SalesOrder, SalesOrderLine, SalesInvoice, PaymentReceipt, Cheque, CommissionTier, CommissionAccrual, InventoryBalance, InventoryMovement, JournalEntry, JournalLine)\nfrom app.models.suppliers import Supplier, SupplierBill, SupplierPayment
+from app.models.sales import (SalesOrder, SalesOrderLine, SalesInvoice, PaymentReceipt, Cheque, CommissionTier, CommissionAccrual, InventoryBalance, InventoryMovement, JournalEntry, JournalLine)
+from app.models.suppliers import Supplier, SupplierBill, SupplierPayment
 
 __all__ = ["AuditEvent", "AccountingAccount", "Customer", "Permission", "Role", "User", "role_permissions", "user_roles", "SyncOperation", "SyncRecord", "CatalogState", "Product", "ProductMedia", "ReplicationEvent", "ReplicationState", "SalesOrder", "SalesOrderLine", "SalesInvoice", "PaymentReceipt", "Cheque", "CommissionTier", "CommissionAccrual", "InventoryBalance", "InventoryMovement", "JournalEntry", "JournalLine", "Supplier", "SupplierBill", "SupplierPayment"]
