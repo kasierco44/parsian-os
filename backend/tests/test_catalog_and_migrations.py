@@ -29,6 +29,8 @@ def test_customer_and_catalog_routes_are_registered() -> None:
     assert "/api/v1/customers" in paths
     assert "/api/v1/catalog/manifest" in paths
     assert "/api/v1/catalog/products" in paths
+    assert "/api/v1/users" in paths
+    assert "/api/v1/replication/push" in paths
 
 
 def test_alembic_revision_chain_is_contiguous() -> None:
