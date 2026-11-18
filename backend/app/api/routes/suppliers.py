@@ -325,6 +325,29 @@ def bounce_supplier_cheque(
     return {"id": str(payment.id), "status": payment.status, "journal_entry_id": str(entry.id)}
 
 
+@router.get("/payments")
+def list_supplier_payments(
+    supplier_id: UUID | None = None, status_filter: str | None = Query(default=None, alias="status"),
+    user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    if not _accounting(user):
+        raise HTTPException(status_code=403, detail="مشاهده پرداخت‌های تأمین‌کنندگان فقط برای مدیر یا حسابدار مجاز است.")
+    statement = select(SupplierPayment).order_by(SupplierPayment.payment_date.desc(), SupplierPayment.created_at.desc())
+    if supplier_id:
+        statement = statement.where(SupplierPayment.supplier_id == supplier_id)
+    if status_filter:
+        statement = statement.where(SupplierPayment.status == status_filter)
+    rows = db.scalars(statement.limit(1000)).all()
+    return [{
+        "id": str(item.id), "payment_number": item.payment_number,
+        "supplier_id": str(item.supplier_id), "bill_id": str(item.bill_id),
+        "amount": item.amount, "method": item.method, "status": item.status,
+        "payment_date": item.payment_date, "due_date": item.due_date,
+        "bank_name": item.bank_name, "cheque_number": item.cheque_number,
+        "reference": item.reference, "cleared_at": item.cleared_at,
+    } for item in rows]
+
+
 @router.get("/{supplier_id}/ledger")
 def supplier_ledger(
     supplier_id: UUID, from_date: date | None = None, to_date: date | None = None,
@@ -380,7 +403,7 @@ def supplier_cash_flow(
     if from_date:
         history = history.where(JournalEntry.posted_at >= datetime.combine(from_date, time.min, tzinfo=timezone.utc))
     if to_date:
-        history = history.where(JournalEntry.posted_at < datetime.combine(to_date, time.max, tzinfo=timezone.utc))
+        history = history.where(JournalEntry.posted_at < datetime.combine(date.fromordinal(to_date.toordinal() + 1), time.min, tzinfo=timezone.utc))
     history_rows = db.execute(history.group_by(func.date(JournalEntry.posted_at)).order_by(func.date(JournalEntry.posted_at))).all()
     horizon = date.fromordinal(today.toordinal() + forecast_days)
     bills = db.scalars(select(SupplierBill).where(SupplierBill.due_date >= today, SupplierBill.due_date <= horizon).order_by(SupplierBill.due_date)).all()
