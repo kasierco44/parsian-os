@@ -54,7 +54,9 @@ The image includes Alembic migrations and runs `alembic upgrade head` before sta
 
 The default API bind address is loopback. Put a TLS reverse proxy in front of it. For direct office-LAN access, set `API_BIND_ADDRESS=0.0.0.0` and restrict inbound firewall access to the office network. Product media is stored in the private Docker volume `catalog_media`; back it up separately from PostgreSQL.
 
-This Compose file is a **single-node deployment**, not office/cloud replication or high availability. Do not expose PostgreSQL publicly.
+This Compose file deploys one node. For an office/cloud pair, give each server a different `PARSIAN_NODE_ID`, configure the same high-entropy `REPLICATION_SHARED_SECRET`, and set each node's `REPLICATION_PEER_NODE_ID` and `REPLICATION_PEER_URL` to the other node. The peer URL must include the API prefix (for example `https://cloud.example/api/v1`). Enable the worker with `docker compose --profile replication up -d --build` on both nodes. The worker uses signed HMAC requests over HTTPS, durable peer cursors, idempotent event IDs, and transfers product media with SHA-256 verification. User identities are mapped by username if UUIDs differ, so provision the same usernames on both nodes before replicating their customer/task data. PostgreSQL and media remain private; do not expose PostgreSQL publicly.
+
+The replication worker currently materializes customer, product, product-media, and offline task/follow-up journal events. It is an initial two-node replication implementation, not a substitute for a full conflict-resolution UI or disaster-recovery test. It does not yet replicate user/role administration, financial ledgers, inventory postings, cheque settlements, or final invoices. Do not run the same node ID on both servers.
 
 ## Offline behavior and limits
 
