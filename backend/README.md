@@ -37,8 +37,10 @@ Set `DATABASE_URL` to PostgreSQL and replace `JWT_SECRET` with a long random sec
 - `POST /api/v1/sales/orders/{id}/invoice`: manager-only final invoice issuance after approval; tracked stock is checked and deducted in the same database transaction.
 - `POST /api/v1/sales/invoices/{id}/receipts`: cash, bank transfer or cheque receipt. Send a unique `Idempotency-Key` header (12–120 characters) for safe retries.
 - `POST /api/v1/sales/cheques/{id}/clear` and `POST /api/v1/sales/cheques/{id}/bounce`: accountant/manager settlement. A cheque is not counted as collected until cleared.
-- `GET/POST /api/v1/sales/commission/tiers`: manager-configured monthly collection-based commission tiers (rates are stored in basis points).\n- `GET /api/v1/sales/commission/summary`: monthly collected amount and earned commission, seller sees own summary and accountant/manager can view all.
-- `POST /api/v1/sales/inventory/adjustments`, `GET /api/v1/sales/inventory/balances`: accountant/manager stock corrections and balances; products must be marked `track_inventory` to be stock-deducted on invoice. Set `cost_price` to post inventory valuation entries.\n- Offline `order_draft` sync records are validated and materialized into the same sales-order workflow; they remain drafts until submitted and approved.
+- `GET/POST /api/v1/sales/commission/tiers`: manager-configured monthly collection-based commission tiers (rates are stored in basis points).
+- `GET /api/v1/sales/commission/summary`: monthly collected amount and earned commission, seller sees own summary and accountant/manager can view all.
+- `POST /api/v1/sales/inventory/adjustments`, `GET /api/v1/sales/inventory/balances`: accountant/manager stock corrections and balances; products must be marked `track_inventory` to be stock-deducted on invoice. Set `cost_price` to post inventory valuation entries.
+- Offline `order_draft` sync records are validated and materialized into the same sales-order workflow; they remain drafts until submitted and approved.
 
 Sellers receive only customers assigned to their user ID. Product stock and accounting balances are not included in the seller catalog API.
 
