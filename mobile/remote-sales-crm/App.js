@@ -90,7 +90,18 @@ export default function App() {
     setLoginBusy(true);
     try {
       const result = await apiLogin(username, password);
-      const me = await getMe(result.access_token);
+      let me;
+      try {
+        me = await getMe(result.access_token);
+      } catch (e) {
+        if (e.status === 403 && String(e.detail || "").toLowerCase().includes("password change required")) {
+          setApiToken(result.access_token);
+          setPasswordChangeRequired(true);
+          setLoginError("");
+          return;
+        }
+        throw e;
+      }
       const rows = await getCustomers({ token: result.access_token });
       setApiToken(result.access_token); setApiUser(me); setApiMode(true);
       setCustomers(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
