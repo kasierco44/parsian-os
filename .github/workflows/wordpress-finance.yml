@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: PHP syntax check
-        run: php -l wordpress/parsian-finance/parsian-finance.php
+        run: |\n          php -l wordpress/parsian-finance/parsian-finance.php\n          php -l wordpress/parsian-finance/backend-bridge.php
       - name: Build plugin ZIP
         run: |
           cd wordpress
