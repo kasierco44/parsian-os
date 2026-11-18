@@ -63,6 +63,10 @@ export default function App() {
   const [tab, setTab] = useState("خانه");
   const [customers, setCustomers] = useState(initialCustomers);
   const [products, setProducts] = useState([]);
+  const [proformas, setProformas] = useState([]);
+  const [proformaModal, setProformaModal] = useState(false);
+  const [proformaProductId, setProformaProductId] = useState("");
+  const [proformaQuantity, setProformaQuantity] = useState("1");
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(false);
   const [customerModal, setCustomerModal] = useState(false);
@@ -84,16 +88,18 @@ export default function App() {
     let active = true;
     (async () => {
       try {
-        const [cachedCustomers, cachedTasks, cachedProducts, conflicts] = await Promise.all([
+        const [cachedCustomers, cachedTasks, cachedProducts, cachedProformas, conflicts] = await Promise.all([
           readCachedRecords("customer"),
           readCachedRecords("task"),
           readCachedRecords("product"),
+          readCachedRecords("proforma_draft"),
           getConflictedOperations(),
         ]);
         if (!active) return;
         if (cachedCustomers.length) setCustomers(cachedCustomers);
         if (cachedTasks.length) setTodayTasks(cachedTasks);
         if (cachedProducts.length) setProducts(cachedProducts);
+        if (cachedProformas.length) setProformas(cachedProformas);
         setSyncConflictCount(conflicts.length);
       } catch {
         // A fresh install may not have created the local database yet.
@@ -158,6 +164,8 @@ export default function App() {
         await synchronize({ token: apiToken });
         const tasks = await readCachedRecords("task");
         if (tasks.length) setTodayTasks(tasks);
+        const localProformas = await readCachedRecords("proforma_draft");
+        if (localProformas.length) setProformas(localProformas);
         const latestProducts = await synchronizeCatalog(apiToken);
         setProducts(latestProducts);
         const serverCustomers = await getCustomers({ token: apiToken });
@@ -316,6 +324,56 @@ export default function App() {
     finally { setSyncBusy(false); }
   };
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2200); };
+  const addProformaDraft = async () => {
+    const product = products.find(item => String(item.id) === String(proformaProductId));
+    const quantity = Math.max(1, Math.min(100000, Number.parseInt(proformaQuantity, 10) || 1));
+    if (!selected) {
+      showToast("ابتدا مشتری را انتخاب کنید");
+      return;
+    }
+    if (!product) {
+      showToast("یک محصول از کاتالوگ انتخاب کنید");
+      return;
+    }
+    const id = makeUuid();
+    const unitPrice = product.unit_price == null ? null : Number(product.unit_price);
+    const payload = {
+      customer_id: String(selected.id),
+      customer_name: selected.name,
+      items: [{
+        product_id: String(product.id),
+        sku: product.sku,
+        name: product.name,
+        quantity,
+        unit_price: unitPrice,
+        line_total: unitPrice == null ? null : unitPrice * quantity,
+      }],
+      status: "draft",
+      created_at: new Date().toISOString(),
+      note: "پیش‌نویس؛ نیازمند تأیید سرور",
+    };
+    const draft = {
+      id,
+      local_reference: "DRAFT-" + id.slice(0, 8).toUpperCase(),
+      ...payload,
+      total: unitPrice == null ? null : unitPrice * quantity,
+    };
+    try {
+      await cacheRecord("proforma_draft", id, draft);
+      if (apiToken) {
+        await queueOfflineChange({ entityType: "proforma_draft", entityId: id, operation: "upsert", payload });
+      }
+      setProformas(previous => [draft, ...previous]);
+      setProformaModal(false);
+      setProformaProductId("");
+      setProformaQuantity("1");
+      showToast("پیش‌فاکتور به‌صورت پیش‌نویس ذخیره شد؛ قطعی نیست");
+      setTab("پیش‌فاکتور");
+    } catch (error) {
+      showToast(error.message || "ذخیره پیش‌فاکتور ناموفق بود");
+    }
+  };
+
   const addFollowup = async () => {
     if (!note.trim()) return;
     const task = { id: String(Date.now()), title: note.trim(), time: "جدید", done: false };
@@ -437,13 +495,29 @@ export default function App() {
       <View style={styles.card}><Info label="آخرین ارتباط" value={selected.last} /><Info label="اقدام بعدی" value={selected.due} /><Info label="نوع مشتری" value="پخش / عمده‌فروش" /><Info label="مانده حساب" value="اطلاعات نمونه؛ متصل نیست" /></View>
       <SectionTitle title="اقدامات سریع" />
       <Pressable style={styles.primaryBtn} onPress={() => setModal(true)}><Text style={styles.primaryBtnText}>＋ ثبت پیگیری</Text></Pressable>
-      <Pressable style={styles.outlineBtn} onPress={() => showToast("ثبت سفارش در نسخه بعد متصل می‌شود")}><Text style={styles.outlineBtnText}>ثبت سفارش آزمایشی</Text></Pressable>
+      <Pressable style={styles.outlineBtn} onPress={() => { setProformaProductId(products[0]?.id ? String(products[0].id) : ""); setProformaModal(true); }}><Text style={styles.outlineBtnText}>ثبت پیش‌فاکتور (پیش‌نویس)</Text></Pressable>
     </>
   ) : null;
 
   function Info({ label, value }) {
     return <View style={styles.infoRow}><Text style={styles.infoValue}>{value}</Text><Text style={styles.infoLabel}>{label}</Text></View>;
   }
+
+  const proformaScreen = (
+    <>
+      <SectionTitle title="پیش‌فاکتورهای پیش‌نویس" action="کاتالوگ محصولات" onAction={() => setTab("محصولات")} />
+      <Text style={styles.catalogHint}>این اسناد پیش‌نویس هستند؛ شماره فاکتور قطعی، موجودی و مانده حساب فقط پس از تأیید سرور ثبت می‌شوند.</Text>
+      {proformas.map(item => (
+        <View key={item.id} style={styles.proformaCard}>
+          <View style={styles.proformaTop}><Text style={styles.productMeta}>{item.local_reference}</Text><Pill tone="amber">پیش‌نویس</Pill></View>
+          <Text style={styles.productName}>{item.customer_name}</Text>
+          {(item.items || []).map((line, index) => <Text key={index} style={styles.productMeta}>{line.name} × {line.quantity}</Text>)}
+          <Text style={styles.productPrice}>{item.total == null ? "قیمت در کاتالوگ ثبت نشده" : "جمع پیش‌نویس: " + money(item.total)}</Text>
+        </View>
+      ))}
+      {proformas.length === 0 ? <Text style={styles.empty}>هنوز پیش‌فاکتوری ثبت نشده است. از صفحه جزئیات مشتری می‌توانید پیش‌نویس بسازید.</Text> : null}
+    </>
+  );
 
   const productsScreen = (
     <>
@@ -472,7 +546,7 @@ export default function App() {
     </>
   );
 
-  let content = tab === "خانه" ? dashboard : tab === "مشتریان" ? customersScreen : tab === "پیگیری‌ها" ? followupsScreen : tab === "محصولات" ? productsScreen : tab === "جزئیات مشتری" ? detailScreen : profileScreen;
+  let content = tab === "خانه" ? dashboard : tab === "مشتریان" ? customersScreen : tab === "پیگیری‌ها" ? followupsScreen : tab === "محصولات" ? productsScreen : tab === "پیش‌فاکتور" ? proformaScreen : tab === "جزئیات مشتری" ? detailScreen : profileScreen;
 
   return (
     <SafeAreaView style={styles.app}>
@@ -488,12 +562,34 @@ export default function App() {
         <Tab icon="♙" label="مشتریان" active={tab === "مشتریان"} onPress={() => setTab("مشتریان")} />
         <Tab icon="◷" label="پیگیری‌ها" active={tab === "پیگیری‌ها"} onPress={() => setTab("پیگیری‌ها")} />
         <Tab icon="▣" label="محصولات" active={tab === "محصولات"} onPress={() => setTab("محصولات")} />
+        <Tab icon="▤" label="پیش‌فاکتور" active={tab === "پیش‌فاکتور"} onPress={() => setTab("پیش‌فاکتور")} />
         <Tab icon="☻" label="حساب من" active={tab === "حساب من"} onPress={() => setTab("حساب من")} />
       </View>
       {toast ? <View style={styles.toast}><Text style={styles.toastText}>{toast}</Text></View> : null}
       <Modal visible={modal} transparent animationType="fade" onRequestClose={() => setModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.modalBackdrop}>
           <View style={styles.modalCard}><Text style={styles.modalTitle}>ثبت پیگیری جدید</Text><Text style={styles.fieldLabel}>شرح پیگیری</Text><TextInput value={note} onChangeText={setNote} placeholder="مثلاً تماس برای پیگیری سفارش..." textAlign="right" multiline style={[styles.input, styles.noteInput]} /><Pressable style={styles.primaryBtn} onPress={addFollowup}><Text style={styles.primaryBtnText}>ثبت پیگیری</Text></Pressable><Pressable style={styles.cancelBtn} onPress={() => setModal(false)}><Text style={styles.cancelText}>انصراف</Text></Pressable></View>
+        </KeyboardAvoidingView>
+      </Modal>
+      <Modal visible={proformaModal} transparent animationType="fade" onRequestClose={() => setProformaModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>پیش‌نویس پیش‌فاکتور</Text>
+            <Text style={styles.fieldLabel}>مشتری</Text>
+            <Text style={styles.input}>{selected?.name || "مشتری انتخاب نشده"}</Text>
+            <Text style={styles.fieldLabel}>محصول</Text>
+            <ScrollView style={{ maxHeight: 170 }}>
+              {products.map(product => (
+                <Pressable key={product.id} style={[styles.productChoice, String(product.id) === String(proformaProductId) && styles.productChoiceActive]} onPress={() => setProformaProductId(String(product.id))}>
+                  <Text style={styles.productChoiceText}>{product.name}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Text style={styles.fieldLabel}>تعداد</Text>
+            <TextInput value={proformaQuantity} onChangeText={setProformaQuantity} keyboardType="number-pad" textAlign="right" style={styles.input} />
+            <Pressable style={styles.primaryBtn} onPress={addProformaDraft}><Text style={styles.primaryBtnText}>ذخیره پیش‌نویس</Text></Pressable>
+            <Pressable style={styles.cancelBtn} onPress={() => setProformaModal(false)}><Text style={styles.cancelText}>انصراف</Text></Pressable>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
       <Modal visible={customerModal} transparent animationType="fade" onRequestClose={() => setCustomerModal(false)}>
@@ -604,6 +700,11 @@ const styles = StyleSheet.create({
   conflictBanner: { backgroundColor: "#FCE8E8", borderRadius: 10, padding: 10, marginBottom: 12 },
   conflictText: { color: C.red, fontSize: 11, fontWeight: "800", textAlign: "center" },
   catalogHint: { color: C.muted, fontSize: 11, textAlign: "right", marginBottom: 12 },
+  productChoice: { borderWidth: 1, borderColor: C.line, borderRadius: 9, padding: 10, marginTop: 6 },
+  productChoiceActive: { borderColor: C.red, backgroundColor: C.redSoft },
+  productChoiceText: { color: C.ink, textAlign: "right", fontSize: 12 },
+  proformaCard: { backgroundColor: "#fff", borderRadius: 14, padding: 13, marginBottom: 10, borderWidth: 1, borderColor: C.line },
+  proformaTop: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
   productCard: { backgroundColor: "#fff", borderRadius: 14, padding: 12, marginBottom: 10, flexDirection: "row-reverse", alignItems: "center", borderWidth: 1, borderColor: C.line },
   productImage: { width: 82, height: 82, backgroundColor: "#fff", borderRadius: 10 },
   productImagePlaceholder: { width: 82, height: 82, borderRadius: 10, backgroundColor: C.redSoft, alignItems: "center", justifyContent: "center" },
