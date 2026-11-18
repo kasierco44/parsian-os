@@ -50,7 +50,11 @@ export default function App() {
   const [apiMode, setApiMode] = useState(false);
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState("");
-  const [syncBusy, setSyncBusy] = useState(false);\n  const [passwordChangeRequired, setPasswordChangeRequired] = useState(false);\n  const [currentPassword, setCurrentPassword] = useState("");\n  const [newPassword, setNewPassword] = useState("");\n  const [confirmPassword, setConfirmPassword] = useState("");
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [passwordChangeRequired, setPasswordChangeRequired] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [tab, setTab] = useState("خانه");
   const [customers, setCustomers] = useState(initialCustomers);
   const [search, setSearch] = useState("");
@@ -78,7 +82,7 @@ export default function App() {
         setApiToken(token); setApiUser(me); setApiMode(true); setEntered(true);
         const rows = await getCustomers({ token });
         if (active && Array.isArray(rows)) setCustomers(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
-      } catch { await apiLogout(); }
+      } catch (e) {\n        if (e.status === 403 && String(e.detail || "").toLowerCase().includes("password change required")) {\n          if (active) { setApiToken(token); setPasswordChangeRequired(true); }\n        } else { await apiLogout(); }\n      }
     })();
     return () => { active = false; };
   }, []);
