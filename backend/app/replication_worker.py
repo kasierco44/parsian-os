@@ -63,7 +63,7 @@ def replicate_once(client: httpx.Client, peer_url: str, node: str, peer_node: st
         outgoing = session.scalars(select(ReplicationEvent).where(
             ReplicationEvent.origin_node == node,
             ReplicationEvent.id > state.outbound_cursor,
-        ).order_by(ReplicationEvent.id).limit(20)).all()
+        ).order_by(ReplicationEvent.id).limit(1)).all()
         if outgoing:
             payload = {"events": [_event_payload(event) for event in outgoing]}
             body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
@@ -73,7 +73,7 @@ def replicate_once(client: httpx.Client, peer_url: str, node: str, peer_node: st
             state.outbound_cursor = outgoing[-1].id
             pushed = len(outgoing)
 
-        url = f"{peer_url}/replication/pull?cursor={state.inbound_cursor}&limit=20"
+        url = f"{peer_url}/replication/pull?cursor={state.inbound_cursor}&limit=1"
         response = client.get(url, headers=signed_headers("GET", url, b"", node, secret))
         response.raise_for_status()
         incoming = response.json()
