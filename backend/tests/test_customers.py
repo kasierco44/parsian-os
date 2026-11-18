@@ -33,10 +33,10 @@ def test_visitor_customer_scope_is_limited_to_assigned_records():
     statement = _customer_scope(select(Customer), visitor)
     compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
     assert "assigned_to_user_id" in compiled
-    assert str(visitor_id) in compiled
+    assert visitor_id.hex in compiled
 
 
 def test_superuser_customer_scope_is_not_restricted():
     admin = SimpleNamespace(is_superuser=True, id=uuid4(), roles=[])
     statement = _customer_scope(select(Customer), admin)
-    assert "assigned_to_user_id" not in str(statement)
+    assert "WHERE customers.assigned_to_user_id" not in str(statement)
