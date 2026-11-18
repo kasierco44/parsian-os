@@ -8,6 +8,8 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - 'mobile/remote-sales-crm/**'
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
