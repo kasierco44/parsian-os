@@ -7,6 +7,7 @@ import {
   SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View
 } from "react-native";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
+import * as Network from "expo-network";
 
 I18nManager.allowRTL(true);
 
@@ -92,6 +93,29 @@ export default function App() {
   const saveCustomerCache = async (rows) => {
     await Promise.all(rows.map(customer => cacheRecord("customer", String(customer.id), customer)));
   };
+
+  useEffect(() => {
+    if (!apiToken) return undefined;
+    let syncing = false;
+    const syncWhenOnline = async (state) => {
+      if (!state?.isConnected || state.isInternetReachable === false || syncing) return;
+      syncing = true;
+      try {
+        await synchronize({ token: apiToken });
+        const tasks = await readCachedRecords("task");
+        if (tasks.length) setTodayTasks(tasks);
+      } catch {
+        // Keep the outbox and cached records intact; the next network event retries.
+      } finally {
+        syncing = false;
+      }
+    };
+    const subscription = Network.addNetworkStateListener(syncWhenOnline);
+    Network.getNetworkStateAsync().then(syncWhenOnline).catch(() => {});
+    return () => subscription.remove();
+  }, [apiToken]);
+
+
 
   const toggleTask = async (taskId) => {
     const next = todayTasks.map(task => task.id === taskId ? { ...task, done: !task.done } : task);
