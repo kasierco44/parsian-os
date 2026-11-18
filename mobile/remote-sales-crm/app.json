@@ -17,6 +17,10 @@
       },
       "softwareKeyboardLayoutMode": "pan",
       "supportsRTL": true
-    }
+    },
+    "plugins": [
+      "expo-sqlite",
+      "expo-file-system"
+    ]
   }
 }
