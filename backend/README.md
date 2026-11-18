@@ -29,7 +29,7 @@ Set `DATABASE_URL` to PostgreSQL and replace `JWT_SECRET` with a long random sec
 - `GET /api/v1/customers/{id}`: authorized customer detail.
 - `POST /api/v1/sync/push`, `GET /api/v1/sync/pull`: persistent outbox push and cursor-based pull.
 - `GET /api/v1/catalog/manifest?since_version=0`: versioned product and media manifest.
-- `POST /api/v1/catalog/products`, `PATCH /api/v1/catalog/products/{id}`: manager-only catalog management.
+- `GET/POST /api/v1/catalog/products`, `PATCH /api/v1/catalog/products/{id}`: manager-only catalog management, including cost and inventory controls; the seller manifest never returns those internal fields.
 - `POST /api/v1/catalog/products/{id}/media`: manager-only raw image/PDF upload (12 MiB maximum; send the MIME type and `X-File-Name` headers).
 - `GET /api/v1/catalog/media/{id}/download`: authenticated private media download.
 - `POST /api/v1/sales/orders`: create a multi-line seller order using active catalog products and price snapshots.
