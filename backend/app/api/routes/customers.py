@@ -19,6 +19,19 @@ def _can_manage_all(user: User) -> bool:
     return user.is_superuser or any(role.code in {"manager", "admin", "owner"} for role in user.roles)
 
 
+def _replication_payload(customer: Customer) -> dict:
+    return {
+        "assigned_to_user_id": str(customer.assigned_to_user_id),
+        "assigned_to_username": customer.assigned_to.username,
+        "created_by_user_id": str(customer.created_by_user_id),
+        "created_by_username": customer.created_by.username,
+        "name": customer.name, "phone": customer.phone, "city": customer.city,
+        "province": customer.province, "address": customer.address,
+        "customer_type": customer.customer_type, "notes": customer.notes,
+        "status": customer.status, "is_active": customer.is_active,
+    }
+
+
 @router.get("", response_model=list[CustomerRead])
 def list_customers(q: str | None = Query(default=None, max_length=120), limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0), user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     statement = select(Customer).where(Customer.is_active.is_(True))
@@ -34,6 +47,9 @@ def list_customers(q: str | None = Query(default=None, max_length=120), limit: i
 def create_customer(payload: CustomerCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     customer = Customer(assigned_to_user_id=user.id, created_by_user_id=user.id, **payload.model_dump())
     db.add(customer)
+    db.flush()
+    customer.replication_version = 1
+    record_replication_event(db, entity_type="customer", entity_id=str(customer.id), version=customer.replication_version, payload=_replication_payload(customer))
     record_audit_event(db, action="customer_created", entity_type="customer", actor_user_id=user.id, entity_id=str(customer.id), details={"name": customer.name})
     db.commit()
     db.refresh(customer)
