@@ -206,3 +206,8 @@ export async function setCatalogVersion(version) {
   const db = await getOfflineDb();
   await db.runAsync("INSERT INTO sync_state(key,value) VALUES('catalog_version',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", String(version));
 }
+
+export async function getConflictedOperations() {
+  const database = await getOfflineDb();
+  return database.getAllAsync("SELECT * FROM outbox WHERE state = 'conflict' ORDER BY created_at DESC");
+}
