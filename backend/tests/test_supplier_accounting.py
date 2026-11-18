@@ -19,6 +19,8 @@ def test_supplier_accounting_routes_are_mounted():
     assert "/api/v1/suppliers/payments/{payment_id}/bounce" in paths
     assert "/api/v1/suppliers/{supplier_id}/ledger" in paths
     assert "/api/v1/suppliers/reports/cash-flow" in paths
+    route_paths = [route.path for route in app.routes]
+    assert route_paths.index("/api/v1/suppliers/reports/cash-flow") < route_paths.index("/api/v1/suppliers/{supplier_id}/ledger")
 
 
 def test_supplier_models_include_unique_idempotency_and_due_dates():
@@ -82,3 +84,25 @@ def test_supplier_opening_balance_schema_requires_positive_amount():
             supplier_id="00000000-0000-0000-0000-000000000001",
             amount=0, opening_date=date(2026, 11, 1), due_date=date(2026, 12, 1),
         )
+
+
+def test_journal_amount_columns_support_large_values():
+    from sqlalchemy import BigInteger
+    assert isinstance(JournalLine.__table__.c.debit.type, BigInteger)
+    assert isinstance(JournalLine.__table__.c.credit.type, BigInteger)
+
+
+def test_auth_me_schema_exposes_role_codes():
+    from app.schemas.identity import UserRead
+    fields = UserRead.model_fields
+    assert "role_codes" in fields
+    assert "is_superuser" in fields
+
+
+def test_supplier_migration_chain_widens_journal_amounts():
+    from pathlib import Path
+    supplier_migration = Path("migrations/versions/0011_supplier_payables.py").read_text()
+    amount_migration = Path("migrations/versions/0012_journal_amounts_bigint.py").read_text()
+    assert 'down_revision = "0010_unique_opening_balance"' in supplier_migration
+    assert 'down_revision = "0011_supplier_payables"' in amount_migration
+    assert 'type_=sa.BigInteger()' in amount_migration
