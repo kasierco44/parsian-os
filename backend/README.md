@@ -21,6 +21,8 @@ Set `DATABASE_URL` to PostgreSQL and replace `JWT_SECRET` with a long random sec
 
 - `GET /api/v1/health/live` and `GET /api/v1/health/ready`: process and database health.
 - `POST /api/v1/auth/login`, `GET /api/v1/auth/me`: bearer authentication.
+- `POST /api/v1/auth/password/change`: completes the required temporary-password change.
+- `POST /api/v1/users`: manager-only creation of seller/accountant accounts; newly provisioned users must change their temporary password.
 - `GET /api/v1/customers?q=&limit=&offset=`: assigned customers for sellers; managers and superusers can list all.
 - `POST /api/v1/customers`: create a customer assigned to the authenticated user.
 - `GET /api/v1/customers/{id}`: authorized customer detail.
