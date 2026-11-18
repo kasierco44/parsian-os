@@ -1,0 +1,26 @@
+name: PARSIAN FINAL PHP checks
+
+on:
+  push:
+    branches:
+      - "feature/parsian-final-wordpress-core"
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  php-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathai/setup-php@v2
+        with:
+          php-version: "8.2"
+      - name: Lint plugin PHP files
+        run: |
+          find wordpress-plugin/parsian-final -name "*.php" -print0 | xargs -0 -n1 php -l
+      - name: Verify plugin entry point and REST namespace
+        run: |
+          grep -q "Plugin Name: PARSIAN FINAL Core" wordpress-plugin/parsian-final/parsian-final.php
+          grep -q "parsian-final/v1" wordpress-plugin/parsian-final/includes/class-rest-api.php
