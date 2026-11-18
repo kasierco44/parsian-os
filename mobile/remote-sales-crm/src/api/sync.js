@@ -52,7 +52,7 @@ export async function synchronize({ token, batchSize = 50 } = {}) {
   const cursor = await getSyncCursor();
   const pulled = await syncRequest(`/pull?cursor=${encodeURIComponent(cursor || "0")}`, { token });
   for (const change of pulled.changes || []) {
-    await cacheRecord(change.entity_type, change.entity_id, change.payload, change.version, change.deleted);
+    await cacheRecord(change.entity_type, change.entity_id, { ...change.payload, id: change.entity_id }, change.version, change.deleted);
   }
   if (pulled.next_cursor != null) await setSyncCursor(pulled.next_cursor);
   return { pushed: (pushed.results || []).length, pulled: (pulled.changes || []).length, conflicts: (pushed.results || []).filter(x => x.status === "conflict").length };
