@@ -333,11 +333,12 @@ def bounce_cheque(cheque_id: UUID, payload: ChequeDecision, user: User = Depends
 
 @router.get("/commission/summary")
 def commission_summary(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     statement = select(
         CommissionAccrual.seller_user_id,
         func.coalesce(func.sum(CommissionAccrual.collected_amount), 0).label("collected_amount"),
         func.coalesce(func.sum(CommissionAccrual.commission_amount), 0).label("commission_amount"),
-    ).group_by(CommissionAccrual.seller_user_id)
+    ).where(CommissionAccrual.created_at >= month_start).group_by(CommissionAccrual.seller_user_id)
     if not _accounting(user):
         statement = statement.where(CommissionAccrual.seller_user_id == user.id)
     rows = db.execute(statement).all()
