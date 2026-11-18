@@ -79,7 +79,8 @@ def _record_collection(db: Session, *, receipt: PaymentReceipt, invoice: SalesIn
 
 
 def _accrue_commission(db: Session, *, receipt: PaymentReceipt, invoice: SalesInvoice) -> None:
-    month_start = receipt.received_at.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    collected_at = datetime.now(timezone.utc)
+    month_start = collected_at.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     already = db.scalar(select(func.coalesce(func.sum(CommissionAccrual.collected_amount), 0)).where(
         CommissionAccrual.seller_user_id == invoice.seller_user_id,
         CommissionAccrual.created_at >= month_start,
