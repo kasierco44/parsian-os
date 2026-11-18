@@ -74,11 +74,11 @@ def test_supplier_payables_migration_adds_subledger_and_cheque_account():
 def test_supplier_opening_balance_schema_requires_positive_amount():
     payload = SupplierOpeningBalanceCreate(
         supplier_id="00000000-0000-0000-0000-000000000001",
-        amount=4500000000, opening_date=date(2026, 11, 1),
+        amount=4500000000, opening_date=date(2026, 11, 1), due_date=date(2026, 12, 1),
     )
     assert payload.amount == 4500000000
     with pytest.raises(ValidationError):
         SupplierOpeningBalanceCreate(
             supplier_id="00000000-0000-0000-0000-000000000001",
-            amount=0, opening_date=date(2026, 11, 1),
+            amount=0, opening_date=date(2026, 11, 1), due_date=date(2026, 12, 1),
         )
