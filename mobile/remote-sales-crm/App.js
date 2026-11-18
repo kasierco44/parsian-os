@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { getCustomers, getMe, getStoredToken, isApiConfigured, login as apiLogin, logout as apiLogout, changePassword as apiChangePassword } from "./src/api/client";
-import { cacheRecord, readCachedRecords } from "./src/offline/database";
+import { cacheRecord, readCachedRecords, getConflictedOperations } from "./src/offline/database";
 import { queueOfflineChange, synchronize } from "./src/api/sync";
 import { synchronizeCatalog } from "./src/catalog/catalog";
 import {
@@ -55,6 +55,7 @@ export default function App() {
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [syncBusy, setSyncBusy] = useState(false);
+  const [syncConflictCount, setSyncConflictCount] = useState(0);
   const [passwordChangeRequired, setPasswordChangeRequired] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -83,15 +84,17 @@ export default function App() {
     let active = true;
     (async () => {
       try {
-        const [cachedCustomers, cachedTasks, cachedProducts] = await Promise.all([
+        const [cachedCustomers, cachedTasks, cachedProducts, conflicts] = await Promise.all([
           readCachedRecords("customer"),
           readCachedRecords("task"),
           readCachedRecords("product"),
+          getConflictedOperations(),
         ]);
         if (!active) return;
         if (cachedCustomers.length) setCustomers(cachedCustomers);
         if (cachedTasks.length) setTodayTasks(cachedTasks);
         if (cachedProducts.length) setProducts(cachedProducts);
+        setSyncConflictCount(conflicts.length);
       } catch {
         // A fresh install may not have created the local database yet.
       }
@@ -296,7 +299,8 @@ export default function App() {
     if (!apiToken) return;
     setSyncBusy(true);
     try {
-      await synchronize({ token: apiToken });
+      const syncResult = await synchronize({ token: apiToken });
+      setSyncConflictCount(syncResult.conflicts || 0);
       const rows = await getCustomers({ token: apiToken, query: search });
       const mapped = rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" }));
       setCustomers(mapped);
@@ -476,6 +480,7 @@ export default function App() {
       {header}
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.demoBanner}><Text style={styles.demoBannerText}>{apiMode ? "اتصال به سرور • اطلاعات مشتریان از حساب شما" : "محیط آزمایشی • اطلاعات این نسخه نمونه است"}</Text></View>
+        {syncConflictCount > 0 ? <Pressable style={styles.conflictBanner} onPress={() => showToast("تعارض همگام‌سازی حفظ شده است؛ برای رفع آن باید نسخه‌ها بررسی شوند.")}><Text style={styles.conflictText}>{money(syncConflictCount)} مورد تغییر همگام‌سازی‌نشده نیازمند بررسی است</Text></Pressable> : null}
         {content}
       </ScrollView>
       <View style={styles.bottomNav}>
@@ -596,6 +601,8 @@ const styles = StyleSheet.create({
   tab: { minWidth: 62, minHeight: 45, alignItems: "center", justifyContent: "center" },
   tabIcon: { color: "#8B909B", fontSize: 19 },
   tabLabel: { color: "#8B909B", fontSize: 9, marginTop: 3 },
+  conflictBanner: { backgroundColor: "#FCE8E8", borderRadius: 10, padding: 10, marginBottom: 12 },
+  conflictText: { color: C.red, fontSize: 11, fontWeight: "800", textAlign: "center" },
   catalogHint: { color: C.muted, fontSize: 11, textAlign: "right", marginBottom: 12 },
   productCard: { backgroundColor: "#fff", borderRadius: 14, padding: 12, marginBottom: 10, flexDirection: "row-reverse", alignItems: "center", borderWidth: 1, borderColor: C.line },
   productImage: { width: 82, height: 82, backgroundColor: "#fff", borderRadius: 10 },
