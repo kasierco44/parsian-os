@@ -13,7 +13,7 @@ from app.api.routes.auth import get_current_user
 from app.db.session import get_db
 from app.models.identity import User
 from app.models.product import CatalogState, Product, ProductMedia
-from app.schemas.product import CatalogManifest, ProductCreate, ProductMediaRead, ProductRead
+from app.schemas.product import CatalogManifest, ProductCreate, ProductMediaRead, ProductRead, ProductUpdate
 from app.services.audit import record_audit_event
 
 router = APIRouter(prefix="/catalog", tags=["product catalog"])
@@ -62,6 +62,24 @@ def create_product(payload: ProductCreate, user: User = Depends(get_current_user
     product = Product(**payload.model_dump(), catalog_version=version)
     db.add(product)
     record_audit_event(db, action="catalog_product_created", entity_type="product", actor_user_id=user.id, entity_id=str(product.id), details={"sku": product.sku, "catalog_version": version})
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@router.patch("/products/{product_id}", response_model=ProductRead)
+def update_product(product_id: UUID, payload: ProductUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not _is_manager(user):
+        raise HTTPException(status_code=403, detail="فقط مدیر مجاز به مدیریت کاتالوگ است.")
+    product = db.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="محصول پیدا نشد.")
+    changes = payload.model_dump(exclude_unset=True)
+    version = _next_catalog_version(db)
+    for key, value in changes.items():
+        setattr(product, key, value)
+    product.catalog_version = version
+    record_audit_event(db, action="catalog_product_updated", entity_type="product", actor_user_id=user.id, entity_id=str(product.id), details={"catalog_version": version, "fields": sorted(changes)})
     db.commit()
     db.refresh(product)
     return product
