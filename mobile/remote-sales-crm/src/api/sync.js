@@ -37,7 +37,7 @@ export async function synchronize({ token, batchSize = 50 } = {}) {
   const pendingRows = await getPendingOperations(batchSize);
   const pending = pendingRows.filter(row => row.entity_id).map(row => ({
     id: row.id, entity_type: row.entity_type, entity_id: row.entity_id, operation: row.operation,
-    payload: JSON.parse(row.payload), base_version: row.base_version, client_created_at: row.created_at,
+    payload: JSON.parse(row.payload), base_version: row.base_version == null ? null : Number(row.base_version),
   }));
   let pushed = { results: [] };
   if (pending.length) {
