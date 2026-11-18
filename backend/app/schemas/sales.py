@@ -114,3 +114,26 @@ class InventoryBalanceRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     product_id: UUID
     quantity_on_hand: int
+
+
+class ChequeRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    receipt_id: UUID
+    bank_name: str
+    cheque_number: str
+    due_date: date
+    drawer_name: str
+    status: str
+    cleared_at: datetime | None
+
+
+class CommissionAccrualRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    receipt_id: UUID
+    seller_user_id: UUID
+    collected_amount: int
+    rate_bps: int
+    commission_amount: int
+    created_at: datetime
