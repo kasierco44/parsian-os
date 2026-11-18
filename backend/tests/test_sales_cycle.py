@@ -172,3 +172,8 @@ def test_journal_line_account_code_references_chart_of_accounts():
     foreign_keys = list(JournalLine.__table__.c.account_code.foreign_keys)
     assert len(foreign_keys) == 1
     assert foreign_keys[0].target_fullname == "accounting_accounts.code"
+
+
+def test_account_ledger_endpoint_is_mounted():
+    paths = {route.path for route in app.routes}
+    assert "/api/v1/sales/accounting/account-ledger/{account_code}" in paths
