@@ -527,33 +527,36 @@ def profit_loss(
     if not _accounting(user):
         raise HTTPException(status_code=403, detail="گزارش سود و زیان فقط برای مدیر یا حسابدار مجاز است.")
     statement = select(
-        JournalLine.account_code,
+        JournalLine.account_code, AccountingAccount.name, AccountingAccount.account_type,
         func.coalesce(func.sum(JournalLine.debit), 0).label("debit"),
         func.coalesce(func.sum(JournalLine.credit), 0).label("credit"),
-    ).join(JournalEntry, JournalEntry.id == JournalLine.entry_id).where(
-        JournalLine.account_code.in_({
-            "SALES_REVENUE", "COST_OF_GOODS_SOLD", "SALES_COMMISSION_EXPENSE",
-            "INVENTORY_SHRINKAGE", "INVENTORY_ADJUSTMENT",
-        })
-    )
+    ).join(JournalEntry, JournalEntry.id == JournalLine.entry_id).join(
+        AccountingAccount, AccountingAccount.code == JournalLine.account_code
+    ).where(AccountingAccount.account_type.in_({"revenue", "expense"}))
     if from_date:
         statement = statement.where(JournalEntry.posted_at >= from_date)
     if to_date:
         statement = statement.where(JournalEntry.posted_at <= to_date)
-    rows = db.execute(statement.group_by(JournalLine.account_code)).all()
-    accounts = {row.account_code: {"debit": int(row.debit), "credit": int(row.credit)} for row in rows}
-    revenue = accounts.get("SALES_REVENUE", {}).get("credit", 0) - accounts.get("SALES_REVENUE", {}).get("debit", 0)
-    expenses = sum(
-        values["debit"] - values["credit"]
-        for code, values in accounts.items() if code != "SALES_REVENUE"
-    )
+    rows = db.execute(statement.group_by(
+        JournalLine.account_code, AccountingAccount.name, AccountingAccount.account_type
+    )).all()
+    accounts = {
+        row.account_code: {
+            "name": row.name, "account_type": row.account_type,
+            "debit": int(row.debit), "credit": int(row.credit),
+            "net_amount": int(row.credit - row.debit) if row.account_type == "revenue"
+                          else int(row.debit - row.credit),
+        } for row in rows
+    }
+    revenue = sum(item["net_amount"] for item in accounts.values() if item["account_type"] == "revenue")
+    expenses = sum(item["net_amount"] for item in accounts.values() if item["account_type"] == "expense")
     return {
         "revenue": revenue,
         "expenses": expenses,
         "net_profit": revenue - expenses,
         "currency_unit": "configured_company_base_unit",
         "accounts": accounts,
-        "note": "گزارش بر مبنای اسناد ثبت‌شده در دفتر روزنامه است؛ هزینه‌های ثبت‌نشده در آن منعکس نمی‌شوند.",
+        "note": "گزارش بر مبنای تمام سرفصل‌های درآمد و هزینه و اسناد ثبت‌شده در دفتر روزنامه است؛ اسناد ثبت‌نشده در آن منعکس نمی‌شوند.",
     }
 
 
