@@ -271,6 +271,7 @@ final class Parsian_OS_Backend_Bridge {
         $rules = array(
             'GET' => array(
                 '#^suppliers$#',
+                '#^suppliers/charge-accounts$#',
                 '#^suppliers/bills$#',
                 '#^suppliers/payments$#',
                 '#^suppliers/reports/cash-flow$#',
