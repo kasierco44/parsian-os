@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/remote-sales-crm-android
+      - feat/remote-sales-crm-android-mainline
   pull_request:
     branches:
       - main
