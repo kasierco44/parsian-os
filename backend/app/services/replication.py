@@ -31,8 +31,8 @@ def record_replication_event(db: Session, *, entity_type: str, entity_id: str, p
 
 
 def apply_remote_event(db: Session, event: ReplicationEvent) -> None:
-    entity_id = UUID(event.entity_id)
     if event.entity_type == "customer":
+        entity_id = UUID(event.entity_id)
         data = event.payload
         assigned_id = UUID(data["assigned_to_user_id"])
         created_by_id = UUID(data["created_by_user_id"])
@@ -55,6 +55,7 @@ def apply_remote_event(db: Session, event: ReplicationEvent) -> None:
         return
 
     if event.entity_type == "product":
+        entity_id = UUID(event.entity_id)
         data = event.payload
         record = db.get(Product, entity_id)
         if record is not None and record.replication_version >= event.version:
