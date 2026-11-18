@@ -2,6 +2,12 @@ name: PARSIAN OS Backend CI
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feat/remote-sales-offline-first
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-offline-ci.yml'
   pull_request:
     branches:
       - main
