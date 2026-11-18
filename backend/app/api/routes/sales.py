@@ -16,7 +16,7 @@ from app.models.sales import (
     JournalEntry, JournalLine, PaymentReceipt, SalesInvoice, SalesOrder, SalesOrderLine,
 )
 from app.schemas.sales import (
-    ChequeDecision, CommissionTierIn, CommissionTierRead, InventoryAdjustment,
+    ChequeDecision, ChequeRead, CommissionAccrualRead, CommissionTierIn, CommissionTierRead, InventoryAdjustment,
     InventoryBalanceRead, InvoiceRead, OrderDecision, PaymentCreate, PaymentRead,
     SalesOrderCreate, SalesOrderRead,
 )
@@ -439,3 +439,40 @@ def list_invoice_receipts(invoice_id: UUID, user: User = Depends(get_current_use
     if not _manager(user) and invoice.seller_user_id != user.id and "accountant" not in _roles(user):
         raise HTTPException(status_code=403, detail="به این فاکتور دسترسی ندارید.")
     return db.scalars(select(PaymentReceipt).where(PaymentReceipt.invoice_id == invoice.id).order_by(PaymentReceipt.received_at)).all()
+
+
+@router.get("/invoices", response_model=list[InvoiceRead])
+def list_invoices(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    statement = select(SalesInvoice).order_by(SalesInvoice.issued_at.desc()).limit(300)
+    if not _accounting(user):
+        statement = statement.where(SalesInvoice.seller_user_id == user.id)
+    return db.scalars(statement).all()
+
+
+@router.get("/cheques", response_model=list[ChequeRead])
+def list_cheques(status_filter: str | None = Query(default=None, alias="status"), user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    statement = (
+        select(Cheque)
+        .join(PaymentReceipt, PaymentReceipt.id == Cheque.receipt_id)
+        .join(SalesInvoice, SalesInvoice.id == PaymentReceipt.invoice_id)
+        .order_by(Cheque.due_date.asc())
+        .limit(500)
+    )
+    if not _accounting(user):
+        statement = statement.where(SalesInvoice.seller_user_id == user.id)
+    if status_filter:
+        statement = statement.where(Cheque.status == status_filter)
+    return db.scalars(statement).all()
+
+
+@router.get("/commission/accruals", response_model=list[CommissionAccrualRead])
+def list_commission_accruals(seller_user_id: UUID | None = None, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    statement = select(CommissionAccrual).order_by(CommissionAccrual.created_at.desc()).limit(500)
+    if _accounting(user):
+        if seller_user_id is not None:
+            statement = statement.where(CommissionAccrual.seller_user_id == seller_user_id)
+    else:
+        if seller_user_id is not None and seller_user_id != user.id:
+            raise HTTPException(status_code=403, detail="مشاهده پورسانت سایر فروشندگان مجاز نیست.")
+        statement = statement.where(CommissionAccrual.seller_user_id == user.id)
+    return db.scalars(statement).all()
