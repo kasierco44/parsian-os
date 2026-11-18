@@ -39,4 +39,5 @@ class SupplierOpeningBalanceCreate(BaseModel):
     supplier_id: UUID
     amount: int = Field(gt=0, le=10_000_000_000_000)
     opening_date: date
+    due_date: date
     description: str = Field(default="مانده افتتاحیه تأمین‌کننده", min_length=3, max_length=300)
