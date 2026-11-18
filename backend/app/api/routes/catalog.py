@@ -15,6 +15,7 @@ from app.models.identity import User
 from app.models.product import CatalogState, Product, ProductMedia
 from app.schemas.product import CatalogManifest, ProductCreate, ProductMediaRead, ProductRead, ProductUpdate
 from app.services.audit import record_audit_event
+from app.services.replication import record_replication_event
 
 router = APIRouter(prefix="/catalog", tags=["product catalog"])
 ALLOWED_MEDIA = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
@@ -79,6 +80,13 @@ def update_product(product_id: UUID, payload: ProductUpdate, user: User = Depend
     for key, value in changes.items():
         setattr(product, key, value)
     product.catalog_version = version
+    product.replication_version += 1
+    record_replication_event(db, entity_type="product", entity_id=str(product.id), version=product.replication_version, payload={
+        "sku": product.sku, "name": product.name, "category": product.category,
+        "vehicle_model": product.vehicle_model, "description": product.description,
+        "unit_price": product.unit_price, "is_active": product.is_active,
+        "catalog_version": product.catalog_version,
+    }, deleted=not product.is_active)
     record_audit_event(db, action="catalog_product_updated", entity_type="product", actor_user_id=user.id, entity_id=str(product.id), details={"catalog_version": version, "fields": sorted(changes)})
     db.commit()
     db.refresh(product)
