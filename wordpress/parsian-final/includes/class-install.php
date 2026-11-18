@@ -77,6 +77,63 @@ final class Parsian_Final_Install {
             ) $charset;"
         ];
         foreach ($crmTables as $sql) { dbDelta($sql); }
+        $domainTables = [
+            "CREATE TABLE {$p}payments (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                direction varchar(8) NOT NULL,
+                amount_toman bigint unsigned NOT NULL,
+                party_type varchar(30) NOT NULL DEFAULT 'other',
+                party_id bigint unsigned NOT NULL DEFAULT 0,
+                method varchar(20) NOT NULL DEFAULT 'cash',
+                reference varchar(190) NOT NULL DEFAULT '',
+                status varchar(24) NOT NULL DEFAULT 'pending_approval',
+                created_by bigint unsigned NOT NULL,
+                created_at datetime NOT NULL,
+                PRIMARY KEY  (id),
+                KEY status_date (status,created_at),
+                KEY party_lookup (party_type,party_id)
+            ) $charset;",
+            "CREATE TABLE {$p}cheques (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                direction varchar(12) NOT NULL,
+                amount_toman bigint unsigned NOT NULL,
+                due_date date NOT NULL,
+                bank_name varchar(120) NOT NULL DEFAULT '',
+                cheque_number varchar(100) NOT NULL DEFAULT '',
+                party_name varchar(190) NOT NULL DEFAULT '',
+                status varchar(24) NOT NULL DEFAULT 'pending',
+                created_by bigint unsigned NOT NULL,
+                created_at datetime NOT NULL,
+                PRIMARY KEY  (id),
+                KEY due_status (due_date,status),
+                KEY cheque_number (cheque_number)
+            ) $charset;",
+            "CREATE TABLE {$p}products (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                sku varchar(80) NOT NULL,
+                name varchar(190) NOT NULL,
+                unit varchar(30) NOT NULL DEFAULT 'عدد',
+                status varchar(24) NOT NULL DEFAULT 'active',
+                created_at datetime NOT NULL,
+                PRIMARY KEY  (id),
+                UNIQUE KEY sku (sku),
+                KEY product_name (name)
+            ) $charset;",
+            "CREATE TABLE {$p}stock_movements (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                product_id bigint unsigned NOT NULL,
+                quantity bigint NOT NULL,
+                direction varchar(8) NOT NULL,
+                reason varchar(190) NOT NULL DEFAULT '',
+                status varchar(24) NOT NULL DEFAULT 'pending_approval',
+                created_by bigint unsigned NOT NULL,
+                created_at datetime NOT NULL,
+                PRIMARY KEY  (id),
+                KEY product_status (product_id,status),
+                KEY created_at (created_at)
+            ) $charset;"
+        ];
+        foreach ($domainTables as $sql) { dbDelta($sql); }
         update_option('parsian_final_schema_version', PARSIAN_FINAL_VERSION, false);
         Parsian_Final_Roles::register();
     }
