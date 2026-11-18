@@ -64,7 +64,7 @@ final class Parsian_OS_Backend_Bridge {
         return self::SESSION_PREFIX . hash('sha256', get_current_user_id() . '|' . $wp_session);
     }
 
-    private function token() {
+    private function login_throttle_key($username) {\n        $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : 'unknown';\n        return 'parsian_os_login_fail_' . hash('sha256', strtolower($username) . '|' . $ip);\n    }\n\n    private function token() {
         $key = $this->session_key();
         if (!$key) {
             return '';
