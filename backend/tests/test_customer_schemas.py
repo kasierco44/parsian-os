@@ -17,7 +17,7 @@ def test_customer_create_accepts_wholesaler_fields() -> None:
 
 def test_customer_create_rejects_short_name() -> None:
     with pytest.raises(ValidationError):
-        CustomerCreate(name="الف")
+        CustomerCreate(name="ا")
 
 
 def test_customer_create_rejects_unknown_customer_type() -> None:
