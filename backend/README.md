@@ -25,6 +25,7 @@ Set `DATABASE_URL` to PostgreSQL and replace `JWT_SECRET` with a long random sec
 - `POST /api/v1/users`: manager-only creation of seller/accountant accounts; newly provisioned users must change their temporary password.
 - `GET /api/v1/customers?q=&limit=&offset=`: assigned customers for sellers; managers and superusers can list all.
 - `POST /api/v1/customers`: create a customer assigned to the authenticated user.
+- `PATCH /api/v1/customers/{id}`: update an assigned customer; only managers can reassign it to another active user.
 - `GET /api/v1/customers/{id}`: authorized customer detail.
 - `POST /api/v1/sync/push`, `GET /api/v1/sync/pull`: persistent outbox push and cursor-based pull.
 - `GET /api/v1/catalog/manifest?since_version=0`: versioned product and media manifest.
