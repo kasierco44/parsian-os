@@ -13,6 +13,7 @@ from app.schemas.customer import CustomerCreate
 from app.models.identity import User
 from app.schemas.sync import SyncChangeOut, SyncOperationResult, SyncPullOut, SyncPushIn, SyncPushOut
 from app.services.audit import record_audit_event
+from app.services.replication import record_replication_event
 
 router = APIRouter(prefix="/sync", tags=["offline synchronization"])
 
@@ -61,6 +62,16 @@ def push_operations(payload: SyncPushIn, user: User = Depends(get_current_user),
                 else:
                     for key, value in customer_data.items():
                         setattr(customer, key, value)
+            if customer is not None:
+                customer.replication_version = (customer.replication_version or 0) + 1
+                record_replication_event(db, entity_type="customer", entity_id=item.entity_id, version=customer.replication_version, deleted=item.operation == "delete", payload={
+                    "assigned_to_user_id": str(customer.assigned_to_user_id),
+                    "created_by_user_id": str(customer.created_by_user_id),
+                    "name": customer.name, "phone": customer.phone, "city": customer.city,
+                    "province": customer.province, "address": customer.address,
+                    "customer_type": customer.customer_type, "notes": customer.notes,
+                    "status": customer.status, "is_active": customer.is_active,
+                })
             db.add(SyncOperation(owner_user_id=user.id, operation_id=item.id, entity_type=item.entity_type, entity_id=item.entity_id, outcome="accepted"))
             record_audit_event(db, action="offline_customer_" + item.operation, entity_type="customer", actor_user_id=user.id, entity_id=item.entity_id, details={"operation_id": str(item.id)})
             previous = db.scalar(select(SyncRecord).where(SyncRecord.owner_user_id == user.id, SyncRecord.entity_type == "customer", SyncRecord.entity_id == item.entity_id).order_by(SyncRecord.id.desc()).limit(1))
@@ -96,6 +107,14 @@ def push_operations(payload: SyncPushIn, user: User = Depends(get_current_user),
             deleted=item.operation == "delete",
         )
         db.add(record)
+        record_replication_event(
+            db,
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            version=record.version,
+            deleted=record.deleted,
+            payload={"owner_user_id": str(user.id), "record": record.payload},
+        )
 
         db.add(SyncOperation(
             owner_user_id=user.id,
