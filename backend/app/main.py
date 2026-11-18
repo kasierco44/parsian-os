@@ -10,7 +10,7 @@ from app.api.routes.catalog import router as catalog_router
 from app.api.routes.replication import router as replication_router
 from app.api.routes.health import router as system_router
 from app.api.routes.sync import router as sync_router
-from app.api.routes.users import router as users_router
+from app.api.routes.users import router as users_router\nfrom app.api.routes.sales import router as sales_router
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -52,7 +52,7 @@ app.include_router(customers_router, prefix=settings.api_v1_prefix)
 app.include_router(catalog_router, prefix=settings.api_v1_prefix)
 app.include_router(replication_router, prefix=settings.api_v1_prefix)
 app.include_router(sync_router, prefix=settings.api_v1_prefix)
-app.include_router(users_router, prefix=settings.api_v1_prefix)
+app.include_router(users_router, prefix=settings.api_v1_prefix)\napp.include_router(sales_router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/", include_in_schema=False)
