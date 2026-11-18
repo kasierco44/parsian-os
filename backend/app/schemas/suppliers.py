@@ -32,3 +32,11 @@ class SupplierPaymentCreate(BaseModel):
     bank_name: str | None = Field(default=None, max_length=100)
     cheque_number: str | None = Field(default=None, max_length=80)
     reference: str | None = Field(default=None, max_length=120)
+
+
+
+class SupplierOpeningBalanceCreate(BaseModel):
+    supplier_id: UUID
+    amount: int = Field(gt=0, le=10_000_000_000_000)
+    opening_date: date
+    description: str = Field(default="مانده افتتاحیه تأمین‌کننده", min_length=3, max_length=300)
