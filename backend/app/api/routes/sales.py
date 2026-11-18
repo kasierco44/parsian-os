@@ -3,7 +3,8 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError\nfrom sqlalchemy.orm import Session, selectinload
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.routes.auth import get_current_user
 from app.db.session import get_db
