@@ -137,3 +137,15 @@ class CommissionAccrualRead(BaseModel):
     rate_bps: int
     commission_amount: int
     created_at: datetime
+
+
+class OpeningBalanceLine(BaseModel):
+    account_code: str = Field(min_length=1, max_length=40)
+    debit: int = Field(default=0, ge=0)
+    credit: int = Field(default=0, ge=0)
+
+
+class OpeningBalanceCreate(BaseModel):
+    opening_date: date
+    description: str = Field(default="مانده افتتاحیه", min_length=3, max_length=300)
+    lines: list[OpeningBalanceLine] = Field(min_length=2, max_length=200)
