@@ -45,7 +45,7 @@ def list_customers(q: str | None = Query(default=None, max_length=120), limit: i
 
 @router.post("", response_model=CustomerRead, status_code=status.HTTP_201_CREATED)
 def create_customer(payload: CustomerCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    customer = Customer(assigned_to_user_id=user.id, created_by_user_id=user.id, **payload.model_dump())
+    customer = Customer(assigned_to_user_id=user.id, created_by_user_id=user.id, assigned_to=user, created_by=user, **payload.model_dump())
     db.add(customer)
     db.flush()
     customer.replication_version = 1
