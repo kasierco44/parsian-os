@@ -74,8 +74,9 @@ export default function App() {
     let active = true;
     (async () => {
       if (!isApiConfigured()) return;
+      let token = null;
       try {
-        const token = await getStoredToken();
+        token = await getStoredToken();
         if (!token || !active) return;
         const me = await getMe(token);
         if (!active) return;
