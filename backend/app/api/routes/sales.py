@@ -19,7 +19,7 @@ from app.models.sales import (
 from app.schemas.sales import (
     ChequeDecision, ChequeRead, CommissionAccrualRead, CommissionTierIn, CommissionTierRead, InventoryAdjustment,
     InventoryBalanceRead, InvoiceRead, OrderDecision, PaymentCreate, PaymentRead,
-    SalesOrderCreate, SalesOrderRead, OpeningBalanceCreate,
+    SalesOrderCreate, SalesOrderRead, OpeningBalanceCreate, ManualCashEntryCreate,
 )
 from app.services.audit import record_audit_event
 
@@ -595,6 +595,84 @@ def customer_ledger(
         })
     return {"customer_id": str(customer_id), "entries": entries, "closing_balance": balance}
 
+
+
+
+def _post_manual_cash_entry(
+    db: Session, user: User, payload: ManualCashEntryCreate, *,
+    source_type: str, account_type: str,
+):
+    if not _accounting(user):
+        raise HTTPException(status_code=403, detail="ثبت اسناد مالی فقط برای مدیر یا حسابدار مجاز است.")
+    target = db.scalar(select(AccountingAccount).where(
+        AccountingAccount.code == payload.account_code,
+        AccountingAccount.is_active.is_(True),
+        AccountingAccount.account_type == account_type,
+    ))
+    if target is None:
+        raise HTTPException(status_code=422, detail="سرفصل انتخاب‌شده فعال نیست یا از نوع موردنیاز نیست.")
+    if db.scalar(select(AccountingAccount.code).where(AccountingAccount.parent_code == target.code)):
+        raise HTTPException(status_code=422, detail="ثبت مستقیم روی حساب گروه مجاز نیست؛ حساب معین را انتخاب کنید.")
+    cash_account = db.scalar(select(AccountingAccount).where(
+        AccountingAccount.code == payload.payment_account,
+        AccountingAccount.is_active.is_(True),
+        AccountingAccount.account_type == "asset",
+    ))
+    if cash_account is None:
+        raise HTTPException(status_code=422, detail="حساب صندوق یا بانک انتخاب‌شده فعال نیست.")
+    description = payload.description.strip()
+    if payload.reference:
+        description = f"{description} | مرجع: {payload.reference.strip()}"
+    if source_type == "operating_expense":
+        lines = [
+            {"account_code": target.code, "debit": payload.amount, "credit": 0},
+            {"account_code": cash_account.code, "debit": 0, "credit": payload.amount},
+        ]
+    else:
+        lines = [
+            {"account_code": cash_account.code, "debit": payload.amount, "credit": 0},
+            {"account_code": target.code, "debit": 0, "credit": payload.amount},
+        ]
+    entry = _journal(
+        db, source_type=source_type, source_id=str(uuid4()),
+        description=description, lines=lines,
+    )
+    entry.posted_at = datetime.combine(payload.entry_date, time.min, tzinfo=timezone.utc)
+    record_audit_event(
+        db, action=f"accounting_{source_type}_posted", entity_type="journal_entry",
+        actor_user_id=user.id, entity_id=str(entry.id),
+        details={"amount": payload.amount, "account_code": target.code,
+                 "payment_account": cash_account.code, "entry_date": payload.entry_date.isoformat()},
+    )
+    db.commit()
+    return {
+        "entry_id": str(entry.id), "entry_number": entry.entry_number,
+        "source_type": source_type, "amount": payload.amount,
+        "account_code": target.code, "payment_account": cash_account.code,
+        "entry_date": payload.entry_date, "status": "posted",
+    }
+
+
+@router.post("/accounting/expenses", status_code=status.HTTP_201_CREATED)
+def post_operating_expense(
+    payload: ManualCashEntryCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _post_manual_cash_entry(
+        db, user, payload, source_type="operating_expense", account_type="expense"
+    )
+
+
+@router.post("/accounting/other-income", status_code=status.HTTP_201_CREATED)
+def post_other_income(
+    payload: ManualCashEntryCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _post_manual_cash_entry(
+        db, user, payload, source_type="other_income", account_type="revenue"
+    )
 
 
 @router.get("/accounting/chart-of-accounts")
