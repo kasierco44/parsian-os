@@ -202,7 +202,7 @@ export default function App() {
     <View style={styles.header}>
       <View>
         <Text style={styles.headerEyebrow}>پارسیان‌یار | پنل ویزیتور</Text>
-        <Text style={styles.headerTitle}>{tab === "خانه" ? "سلام، {apiUser?.full_name || "ویزیتور عزیز"}" : tab}</Text>
+        <Text style={styles.headerTitle}>{tab === "خانه" ? `سلام، ${apiUser?.full_name || "ویزیتور عزیز"}` : tab}</Text>
       </View>
       <View style={styles.avatar}><Text style={styles.avatarText}>و</Text></View>
     </View>
