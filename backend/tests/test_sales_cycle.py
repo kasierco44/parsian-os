@@ -127,7 +127,7 @@ def test_commission_accrual_serializes_monthly_calculation_per_seller():
     assert statements[0]._for_update_arg is not None
 
 def test_accounting_reports_are_mounted():
-    paths = {route.path for route in app.routes}
+    paths = app.openapi()["paths"]
     assert "/api/v1/sales/accounting/trial-balance" in paths
     assert "/api/v1/sales/accounting/profit-loss" in paths
     assert "/api/v1/sales/accounting/customer-ledger/{customer_id}" in paths
@@ -143,7 +143,7 @@ def test_accounting_chart_model_has_unique_code_and_account_metadata():
 
 
 def test_chart_of_accounts_endpoints_are_mounted():
-    paths = {route.path for route in app.routes}
+    paths = app.openapi()["paths"]
     assert "/api/v1/sales/accounting/chart-of-accounts" in paths
 
 
@@ -163,7 +163,7 @@ def test_opening_balance_schema_requires_balanced_lines_at_api_layer():
 
 
 def test_opening_balance_route_is_mounted():
-    paths = {route.path for route in app.routes}
+    paths = app.openapi()["paths"]
     assert "/api/v1/sales/accounting/opening-balance" in paths
 
 
@@ -176,7 +176,7 @@ def test_journal_line_account_code_references_chart_of_accounts():
 
 
 def test_account_ledger_endpoint_is_mounted():
-    paths = {route.path for route in app.routes}
+    paths = app.openapi()["paths"]
     assert "/api/v1/sales/accounting/account-ledger/{account_code}" in paths
 
 
@@ -211,7 +211,7 @@ def test_manual_cash_entry_schema_and_accounting_routes():
         reference="رسید اجاره",
     )
     assert payload.amount == 2500000
-    paths = {route.path for route in app.routes}
+    paths = app.openapi()["paths"]
     assert "/api/v1/sales/accounting/expenses" in paths
     assert "/api/v1/sales/accounting/other-income" in paths
 
