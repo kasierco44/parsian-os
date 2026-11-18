@@ -158,11 +158,26 @@ def create_supplier_opening_balance(
             JournalLine.supplier_id == supplier.id,
         )) or 0)
         if existing_amount == payload.amount:
+            opening_bill = db.scalar(select(SupplierBill).where(
+                SupplierBill.idempotency_key == f"supplier-opening:{supplier.id}"
+            ))
             return {"supplier_id": str(supplier.id), "amount": existing_amount,
+                    "due_date": opening_bill.due_date if opening_bill else None,
                     "entry_number": existing.entry_number, "status": "already_posted"}
         raise HTTPException(status_code=409, detail="مانده افتتاحیه این تأمین‌کننده قبلاً ثبت شده است؛ اصلاح را با سند تعدیلی انجام دهید.")
     equity = _leaf_account(db, "EQUITY", {"equity"})
     payable = _leaf_account(db, "ACCOUNTS_PAYABLE", {"liability"})
+    if payload.due_date < payload.opening_date:
+        raise HTTPException(status_code=422, detail="سررسید بدهی افتتاحیه نمی‌تواند قبل از تاریخ ثبت باشد.")
+    opening_bill = SupplierBill(
+        bill_number=_number("PBO"),
+        idempotency_key=f"supplier-opening:{supplier.id}",
+        supplier_id=supplier.id, amount=payload.amount, account_code=equity.code,
+        bill_date=payload.opening_date, due_date=payload.due_date,
+        description=payload.description.strip(), created_by_user_id=user.id,
+    )
+    db.add(opening_bill)
+    db.flush()
     entry = _journal(db, source_type="supplier_opening_balance", source_id=str(supplier.id),
         description=f"{payload.description.strip()} - {supplier.name}",
         lines=[
@@ -175,7 +190,7 @@ def create_supplier_opening_balance(
         details={"amount": payload.amount, "opening_date": payload.opening_date.isoformat()})
     db.commit()
     return {"supplier_id": str(supplier.id), "amount": payload.amount,
-            "entry_number": entry.entry_number, "status": "posted"}
+            "due_date": payload.due_date, "entry_number": entry.entry_number, "status": "posted"}
 
 
 @router.post("/bills", status_code=status.HTTP_201_CREATED)
