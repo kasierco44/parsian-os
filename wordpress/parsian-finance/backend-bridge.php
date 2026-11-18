@@ -139,11 +139,21 @@ final class Parsian_OS_Backend_Bridge {
             return new WP_Error('session_missing', 'نشست وردپرس معتبر نیست؛ دوباره وارد وردپرس شوید.', array('status' => 401));
         }
 
+        $throttle_key = $this->login_throttle_key($username);
+        $failures = (int) get_transient($throttle_key);
+        if ($failures >= 5) {
+            return new WP_Error('login_rate_limited', 'تعداد تلاش‌های ورود زیاد است؛ ۱۵ دقیقه بعد دوباره تلاش کنید.', array('status' => 429));
+        }
         $result = $this->request('auth/login', 'POST', array('username' => $username, 'password' => $password));
         unset($password);
         if (is_wp_error($result)) {
+            $data = $result->get_error_data();
+            if (is_array($data) && isset($data['backend_status']) && in_array((int) $data['backend_status'], array(401, 423), true)) {
+                set_transient($throttle_key, $failures + 1, 15 * MINUTE_IN_SECONDS);
+            }
             return $result;
         }
+        delete_transient($throttle_key);
         if (empty($result['access_token']) || !is_string($result['access_token'])) {
             return new WP_Error('backend_token_missing', 'Backend توکن معتبر برنگرداند.', array('status' => 502));
         }
