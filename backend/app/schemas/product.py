@@ -13,6 +13,15 @@ class ProductCreate(BaseModel):
     unit_price: int | None = Field(default=None, ge=0)
 
 
+class ProductUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=180)
+    category: str | None = Field(default=None, max_length=100)
+    vehicle_model: str | None = Field(default=None, max_length=120)
+    description: str | None = None
+    unit_price: int | None = Field(default=None, ge=0)
+    is_active: bool | None = None
+
+
 class ProductRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
