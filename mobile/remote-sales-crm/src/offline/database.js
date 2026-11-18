@@ -118,3 +118,17 @@ export async function setSyncCursor(cursor) {
     String(cursor)
   );
 }
+
+export async function getCatalogVersion() {
+  const db = await getOfflineDb();
+  const row = await db.getFirstAsync("SELECT value FROM sync_state WHERE key = 'catalog_version'");
+  return Number(row?.value || 0);
+}
+
+export async function setCatalogVersion(version) {
+  const db = await getOfflineDb();
+  await db.runAsync(
+    "INSERT INTO sync_state(key,value) VALUES('catalog_version',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    String(version)
+  );
+}
