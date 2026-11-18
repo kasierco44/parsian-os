@@ -78,6 +78,21 @@ def _record_collection(db: Session, *, receipt: PaymentReceipt, invoice: SalesIn
     _accrue_commission(db, receipt=receipt, invoice=invoice)
 
 
+def _calculate_progressive_commission(already_collected: int, amount: int, tiers: list[CommissionTier]) -> tuple[int, int]:
+    """Return marginal commission and the effective blended rate in basis points."""
+    end_total = already_collected + amount
+    commission = 0
+    ordered = sorted((tier for tier in tiers if tier.is_active), key=lambda tier: tier.min_collected_amount)
+    for index, tier in enumerate(ordered):
+        start = max(already_collected, tier.min_collected_amount)
+        next_threshold = ordered[index + 1].min_collected_amount if index + 1 < len(ordered) else end_total
+        end = min(end_total, next_threshold)
+        if end > start:
+            commission += ((end - start) * tier.rate_bps) // 10000
+    effective_rate = (commission * 10000) // amount if amount else 0
+    return commission, effective_rate
+
+
 def _accrue_commission(db: Session, *, receipt: PaymentReceipt, invoice: SalesInvoice) -> None:
     collected_at = datetime.now(timezone.utc)
     month_start = collected_at.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -86,13 +101,7 @@ def _accrue_commission(db: Session, *, receipt: PaymentReceipt, invoice: SalesIn
         CommissionAccrual.created_at >= month_start,
     )) or 0
     tiers = db.scalars(select(CommissionTier).where(CommissionTier.is_active.is_(True)).order_by(CommissionTier.min_collected_amount)).all()
-    rate = 0
-    for tier in tiers:
-        if already + receipt.amount >= tier.min_collected_amount:
-            rate = tier.rate_bps
-        else:
-            break
-    commission = (receipt.amount * rate) // 10000
+    commission, rate = _calculate_progressive_commission(already, receipt.amount, tiers)
     db.add(CommissionAccrual(
         receipt_id=receipt.id, seller_user_id=invoice.seller_user_id,
         collected_amount=receipt.amount, rate_bps=rate, commission_amount=commission,
