@@ -61,7 +61,7 @@ export default function App() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [tab, setTab] = useState("خانه");
-  const [customers, setCustomers] = useState(initialCustomers);
+  const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
   const [proformas, setProformas] = useState([]);
   const [visits, setVisits] = useState([]);
@@ -81,11 +81,7 @@ export default function App() {
   const [selected, setSelected] = useState(null);
   const [note, setNote] = useState("");
   const [toast, setToast] = useState("");
-  const [todayTasks, setTodayTasks] = useState([
-    { id: 1, title: "تماس با لوازم یدکی امینی", time: "۱۰:۰۰", done: false },
-    { id: 2, title: "ارسال قیمت وایر استاندارد دنسو", time: "۱۲:۳۰", done: false },
-    { id: 3, title: "پیگیری وصول فاکتور مشتری قم", time: "۱۵:۰۰", done: true }
-  ]);
+  const [todayTasks, setTodayTasks] = useState([]);
 
   const filtered = useMemo(() => customers.filter(x => (x.name + (x.city || "") + (x.phone || "")).includes(search.trim())), [customers, search]);
   useEffect(() => {
@@ -101,8 +97,8 @@ export default function App() {
           getConflictedOperations(),
         ]);
         if (!active) return;
-        if (cachedCustomers.length) setCustomers(cachedCustomers);
-        if (cachedTasks.length) setTodayTasks(cachedTasks);
+        setCustomers(cachedCustomers);
+        setTodayTasks(cachedTasks);
         if (cachedProducts.length) setProducts(cachedProducts);
         if (cachedProformas.length) setProformas(cachedProformas);
         if (cachedVisits.length) setVisits(cachedVisits);
@@ -460,7 +456,16 @@ export default function App() {
         <TextInput style={styles.input} value={password} onChangeText={setPassword} textAlign="right" secureTextEntry placeholder="رمز عبور" />
         {loginError ? <Text style={styles.loginError}>{loginError}</Text> : null}
         <Pressable style={[styles.primaryBtn, loginBusy && { opacity: 0.6 }]} disabled={loginBusy} onPress={submitLogin}><Text style={styles.primaryBtnText}>{loginBusy ? "در حال ورود..." : "ورود با حساب سازمانی"}</Text></Pressable>
-        <Pressable style={styles.outlineBtn} onPress={() => { setApiMode(false); setEntered(true); }}><Text style={styles.outlineBtnText}>ورود نمایشی برای بررسی محیط</Text></Pressable>
+        <Pressable style={styles.outlineBtn} onPress={() => {
+          setApiMode(false);
+          setCustomers(initialCustomers);
+          setTodayTasks([
+            { id: 1, title: "تماس با لوازم یدکی امینی", time: "۱۰:۰۰", done: false },
+            { id: 2, title: "ارسال قیمت وایر استاندارد دنسو", time: "۱۲:۳۰", done: false },
+            { id: 3, title: "پیگیری وصول فاکتور مشتری قم", time: "۱۵:۰۰", done: true },
+          ]);
+          setEntered(true);
+        }}><Text style={styles.outlineBtnText}>ورود نمایشی برای بررسی محیط</Text></Pressable>
         <Text style={styles.demoHint}>{isApiConfigured() ? "اتصال API تنظیم شده است؛ برای ورود واقعی از حساب ایجادشده توسط مدیر استفاده کنید." : "اتصال API هنوز روی سرور/نسخه نصب‌شده تنظیم نشده است. ورود نمایشی فقط برای بررسی ظاهر است."}</Text>
       </View>
       <Text style={styles.version}>نسخه ۰.۲.۰ • CRM آفلاین</Text>
