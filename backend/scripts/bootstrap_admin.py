@@ -31,6 +31,8 @@ PERMISSION_SEEDS = {
     "roles.manage": "مدیریت نقش‌ها و مجوزها",
     "customers.read": "مشاهده مشتریان",
     "customers.write": "ثبت و ویرایش مشتریان",
+    "products.read": "مشاهده کاتالوگ و قیمت محصولات",
+    "products.write": "مدیریت محصولات و قیمت‌گذاری",
     "sales.read": "مشاهده فروش",
     "sales.write": "ثبت فروش",
     "accounting.read": "مشاهده امور مالی",
@@ -78,9 +80,9 @@ def main() -> int:
 
             db.flush()
             role_permission_codes = {
-                "accountant": {"customers.read", "accounting.read", "accounting.write", "warehouse.read", "warehouse.write"},
-                "seller": {"customers.read", "customers.write", "sales.read", "sales.write"},
-                "visitor": {"customers.read", "customers.write", "sales.read", "sales.write"},
+                "accountant": {"customers.read", "products.read", "accounting.read", "accounting.write", "warehouse.read", "warehouse.write"},
+                "seller": {"customers.read", "customers.write", "products.read", "sales.read", "sales.write"},
+                "visitor": {"customers.read", "customers.write", "products.read", "sales.read", "sales.write"},
                 "customer": {"customers.read"},
             }
             for role_code, permission_codes in role_permission_codes.items():
