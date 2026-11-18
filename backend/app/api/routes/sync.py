@@ -9,6 +9,7 @@ from app.api.routes.auth import get_current_user
 from app.db.session import get_db
 from app.models.customer import Customer
 from app.models.identity import User
+from app.models.product import Product
 from app.models.sync import SyncOperation, SyncRecord
 from app.schemas.customer import CustomerCreate
 from app.schemas.sync import SyncChangeOut, SyncOperationResult, SyncPullOut, SyncPushIn, SyncPushOut
@@ -33,6 +34,50 @@ def _latest_record(db: Session, user_id, entity_type: str, entity_id: str):
         .order_by(SyncRecord.id.desc())
         .limit(1)
     )
+
+
+def _validate_proforma_draft(db: Session, user: User, payload: dict) -> tuple[dict | None, str | None]:
+    try:
+        customer_id = UUID(str(payload.get("customer_id", "")))
+    except ValueError:
+        return None, "شناسه مشتری پیش‌نویس معتبر نیست."
+    customer = db.get(Customer, customer_id)
+    if customer is None or not customer.is_active:
+        return None, "مشتری پیش‌نویس وجود ندارد یا غیرفعال است."
+    if customer.assigned_to_user_id != user.id and not _can_manage_customer(user):
+        return None, "به مشتری انتخاب‌شده دسترسی ندارید."
+    items = payload.get("items")
+    if not isinstance(items, list) or not 1 <= len(items) <= 100:
+        return None, "اقلام پیش‌نویس باید بین ۱ تا ۱۰۰ ردیف باشند."
+    normalized_items = []
+    for line in items:
+        if not isinstance(line, dict):
+            return None, "ساختار یکی از اقلام پیش‌نویس معتبر نیست."
+        try:
+            product_id = UUID(str(line.get("product_id", "")))
+            quantity = int(line.get("quantity", 0))
+        except (ValueError, TypeError):
+            return None, "شناسه محصول یا تعداد معتبر نیست."
+        if quantity < 1 or quantity > 100000:
+            return None, "تعداد هر قلم باید بین ۱ تا ۱۰۰٬۰۰۰ باشد."
+        product = db.get(Product, product_id)
+        if product is None or not product.is_active:
+            return None, "یکی از محصولات پیش‌نویس حذف یا غیرفعال شده است."
+        quoted_price = line.get("unit_price")
+        if quoted_price is not None and (isinstance(quoted_price, bool) or not isinstance(quoted_price, int) or quoted_price < 0):
+            return None, "قیمت پیشنهادی قلم معتبر نیست."
+        normalized_items.append({
+            "product_id": str(product.id), "sku": product.sku, "name": product.name,
+            "quantity": quantity, "unit_price": quoted_price,
+            "line_total": quoted_price * quantity if quoted_price is not None else None,
+            "current_catalog_price": product.unit_price,
+            "catalog_version": product.catalog_version,
+        })
+    return {
+        "customer_id": str(customer.id), "customer_name": customer.name,
+        "items": normalized_items, "status": "draft",
+        "created_at": payload.get("created_at"), "note": payload.get("note", ""),
+    }, None
 
 
 def _customer_replication_payload(customer: Customer) -> dict:
@@ -104,12 +149,20 @@ def push_operations(payload: SyncPushIn, user: User = Depends(get_current_user),
                     payload=_customer_replication_payload(customer),
                 )
 
+        record_payload = item.payload if item.operation == "upsert" else {}
+        if item.entity_type == "proforma_draft" and item.operation == "upsert":
+            normalized, validation_error = _validate_proforma_draft(db, user, item.payload)
+            if validation_error:
+                results.append(SyncOperationResult(id=item.id, status="rejected", message=validation_error))
+                continue
+            record_payload = normalized
+
         new_version = current_version + 1
         sync_record = SyncRecord(
             owner_user_id=user.id,
             entity_type=item.entity_type,
             entity_id=item.entity_id,
-            payload=item.payload if item.operation == "upsert" else {},
+            payload=record_payload,
             version=new_version,
             deleted=item.operation == "delete",
         )
