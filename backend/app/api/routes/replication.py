@@ -1,8 +1,9 @@
+import base64
 import hashlib
 import hmac
-import json
 import os
 import time
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
@@ -63,6 +64,7 @@ async def push_replication_events(request: Request, db: Session = Depends(get_db
                 continue
             event = ReplicationEvent(**item.model_dump())
             apply_remote_event(db, event)
+            event.payload = {key: value for key, value in event.payload.items() if key != "content_b64"}
             db.add(event)
             accepted += 1
         db.commit()
@@ -79,16 +81,25 @@ async def push_replication_events(request: Request, db: Session = Depends(get_db
 
 
 @router.get("/pull", response_model=ReplicationPullOut)
-async def pull_replication_events(request: Request, cursor: int = Query(default=0, ge=0), limit: int = Query(default=200, ge=1, le=500), db: Session = Depends(get_db)):
+async def pull_replication_events(request: Request, cursor: int = Query(default=0, ge=0), limit: int = Query(default=100, ge=1, le=100), db: Session = Depends(get_db)):
     _verify_signature(request, b"")
     rows = db.scalars(select(ReplicationEvent).where(
         ReplicationEvent.id > cursor,
         ReplicationEvent.origin_node == local_node_id(),
     ).order_by(ReplicationEvent.id).limit(limit)).all()
     max_id = db.scalar(select(func.max(ReplicationEvent.id))) or cursor
-    events = [ReplicationEventOut(
-        event_uuid=row.event_uuid, origin_node=row.origin_node, entity_type=row.entity_type,
-        entity_id=row.entity_id, payload=row.payload, version=row.version, deleted=row.deleted,
-    ) for row in rows]
+    events = []
+    root = Path(os.getenv("CATALOG_MEDIA_ROOT", "/var/lib/parsian/catalog")).resolve()
+    for row in rows:
+        data = dict(row.payload)
+        if row.entity_type == "product_media":
+            target = (root / data["storage_key"]).resolve()
+            if root not in target.parents or not target.is_file():
+                raise HTTPException(status_code=409, detail="A product media file is missing on the source node.")
+            data["content_b64"] = base64.b64encode(target.read_bytes()).decode("ascii")
+        events.append(ReplicationEventOut(
+            event_uuid=row.event_uuid, origin_node=row.origin_node, entity_type=row.entity_type,
+            entity_id=row.entity_id, payload=data, version=row.version, deleted=row.deleted,
+        ))
     next_cursor = rows[-1].id if rows else max_id
     return ReplicationPullOut(events=events, next_cursor=next_cursor)
