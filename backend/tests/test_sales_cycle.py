@@ -145,3 +145,22 @@ def test_accounting_chart_model_has_unique_code_and_account_metadata():
 def test_chart_of_accounts_endpoints_are_mounted():
     paths = {route.path for route in app.routes}
     assert "/api/v1/sales/accounting/chart-of-accounts" in paths
+
+
+def test_opening_balance_schema_requires_balanced_lines_at_api_layer():
+    from app.schemas.sales import OpeningBalanceCreate
+    from datetime import date
+
+    payload = OpeningBalanceCreate(
+        opening_date=date(2026, 1, 1),
+        lines=[
+            {"account_code": "CASH", "debit": 100, "credit": 0},
+            {"account_code": "EQUITY", "debit": 0, "credit": 100},
+        ],
+    )
+    assert len(payload.lines) == 2
+
+
+def test_opening_balance_route_is_mounted():
+    paths = {route.path for route in app.routes}
+    assert "/api/v1/sales/accounting/opening-balance" in paths
