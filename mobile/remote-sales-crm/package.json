@@ -18,7 +18,8 @@
     "expo-font": "~14.0.12",
     "expo-secure-store": "~15.0.8",
     "expo-sqlite": "~16.0.9",
-    "expo-file-system": "~19.0.21"
+    "expo-file-system": "~19.0.21",
+    "expo-network": "~8.0.7"
   },
   "devDependencies": {
     "@types/react": "~19.1.10",
