@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.models.customer import Customer
 from app.models.identity import User
 from app.models.product import Product
+from app.models.sales import SalesOrder, SalesOrderLine
 from app.models.sync import SyncOperation, SyncRecord
 from app.schemas.customer import CustomerCreate
 from app.schemas.sync import SyncChangeOut, SyncOperationResult, SyncPullOut, SyncPushIn, SyncPushOut
@@ -79,6 +80,85 @@ def _validate_proforma_draft(db: Session, user: User, payload: dict) -> tuple[di
         "created_at": payload.get("created_at"), "note": payload.get("note", ""),
     }, None
 
+
+
+def _apply_offline_order_draft(db: Session, user: User, entity_id: str, payload: dict) -> tuple[dict | None, str | None]:
+    try:
+        order_id = UUID(entity_id)
+        customer_id = UUID(str(payload.get("customer_id", "")))
+    except (ValueError, TypeError):
+        return None, "شناسه سفارش یا مشتری معتبر نیست."
+    customer = db.get(Customer, customer_id)
+    if customer is None or not customer.is_active:
+        return None, "مشتری سفارش وجود ندارد یا غیرفعال است."
+    if customer.assigned_to_user_id != user.id and not _can_manage_customer(user):
+        return None, "به مشتری سفارش دسترسی ندارید."
+    items = payload.get("lines", payload.get("items"))
+    if not isinstance(items, list) or not 1 <= len(items) <= 100:
+        return None, "اقلام سفارش باید بین ۱ تا ۱۰۰ ردیف باشند."
+    normalized = []
+    subtotal = 0
+    discount_total = 0
+    for line in items:
+        if not isinstance(line, dict):
+            return None, "ساختار قلم سفارش معتبر نیست."
+        try:
+            product_id = UUID(str(line.get("product_id", "")))
+            quantity = int(line.get("quantity", 0))
+            discount = int(line.get("discount_amount", 0))
+        except (ValueError, TypeError):
+            return None, "شناسه محصول، تعداد یا تخفیف معتبر نیست."
+        product = db.get(Product, product_id)
+        if product is None or not product.is_active:
+            return None, "یکی از محصولات سفارش وجود ندارد یا غیرفعال است."
+        unit_price = line.get("unit_price", product.unit_price)
+        if unit_price is None or isinstance(unit_price, bool) or not isinstance(unit_price, int) or unit_price < 0:
+            return None, "قیمت قلم سفارش معتبر نیست."
+        if quantity < 1 or quantity > 100000 or discount < 0 or discount > quantity * unit_price:
+            return None, "تعداد یا تخفیف قلم سفارش خارج از محدوده مجاز است."
+        gross = quantity * unit_price
+        line_total = gross - discount
+        subtotal += gross
+        discount_total += discount
+        normalized.append({
+            "product_id": str(product.id), "sku": product.sku, "name": product.name,
+            "quantity": quantity, "unit_price": unit_price,
+            "discount_amount": discount, "line_total": line_total,
+        })
+    if subtotal - discount_total <= 0:
+        return None, "مبلغ نهایی سفارش باید بیشتر از صفر باشد."
+    order = db.get(SalesOrder, order_id)
+    if order is not None and order.seller_user_id != user.id and not _can_manage_customer(user):
+        return None, "به سفارش ثبت‌شده دسترسی ندارید."
+    if order is not None and order.status != "draft":
+        return None, "فقط سفارش پیش‌نویس قابل همگام‌سازی و ویرایش است."
+    if order is None:
+        order = SalesOrder(
+            id=order_id, order_number=f"SO-OFF-{order_id.hex[:12].upper()}",
+            customer_id=customer.id, seller_user_id=user.id, status="draft",
+        )
+        db.add(order)
+    else:
+        order.lines.clear()
+    order.customer_id = customer.id
+    order.note = str(payload.get("note", ""))[:2000]
+    order.subtotal = subtotal
+    order.discount_amount = discount_total
+    order.total_amount = subtotal - discount_total
+    for line in normalized:
+        order.lines.append(SalesOrderLine(
+            product_id=UUID(line["product_id"]), sku_snapshot=line["sku"],
+            name_snapshot=line["name"], quantity=line["quantity"],
+            unit_price=line["unit_price"], discount_amount=line["discount_amount"],
+            line_total=line["line_total"],
+        ))
+    db.flush()
+    return {
+        "customer_id": str(customer.id), "customer_name": customer.name,
+        "lines": normalized, "note": order.note, "status": "draft",
+        "subtotal": subtotal, "discount_amount": discount_total,
+        "total_amount": order.total_amount,
+    }, None
 
 def _customer_replication_payload(customer: Customer) -> dict:
     return {
@@ -150,6 +230,13 @@ def push_operations(payload: SyncPushIn, user: User = Depends(get_current_user),
                 )
 
         record_payload = item.payload if item.operation == "upsert" else {}
+        if item.entity_type == "order_draft" and item.operation == "upsert":
+            normalized_order, validation_error = _apply_offline_order_draft(db, user, item.entity_id, item.payload)
+            if validation_error:
+                results.append(SyncOperationResult(id=item.id, status="rejected", message=validation_error))
+                continue
+            record_payload = normalized_order
+
         if item.entity_type == "proforma_draft" and item.operation == "upsert":
             normalized, validation_error = _validate_proforma_draft(db, user, item.payload)
             if validation_error:
