@@ -21,7 +21,7 @@ The intended production topology is:
 - Every mutation has a globally unique operation ID; retries must be idempotent.
 - Keep local records and media when a request fails, the app closes, or a server is unavailable.
 - Preserve tombstones until every replication peer has acknowledged the deletion.
-- Pull using durable cursors; commit cached changes and cursor advancement atomically.
+- Pull using durable cursors; write all returned records before advancing the cursor so an interrupted batch is replayed safely.
 - Do not silently resolve conflicting edits. Surface the conflict and preserve both versions for review.
 - Product photos and documents are immutable versioned media objects; metadata carries checksum, size, MIME type, and version.
 - Store media outside PostgreSQL in private object storage/NAS; only metadata and object keys belong in the database.
