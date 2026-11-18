@@ -19,7 +19,7 @@ from app.models.sales import (
 from app.schemas.sales import (
     ChequeDecision, ChequeRead, CommissionAccrualRead, CommissionTierIn, CommissionTierRead, InventoryAdjustment,
     InventoryBalanceRead, InvoiceRead, OrderDecision, PaymentCreate, PaymentRead,
-    SalesOrderCreate, SalesOrderRead,
+    SalesOrderCreate, SalesOrderRead, OpeningBalanceCreate,
 )
 from app.services.audit import record_audit_event
 
@@ -658,4 +658,62 @@ def create_chart_account(
         "code": account.code, "name": account.name, "account_type": account.account_type,
         "normal_balance": account.normal_balance, "parent_code": account.parent_code,
         "is_system": account.is_system, "is_active": account.is_active,
+    }
+
+
+@router.post("/accounting/opening-balance", status_code=status.HTTP_201_CREATED)
+def post_opening_balance(
+    payload: OpeningBalanceCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not _manager(user):
+        raise HTTPException(status_code=403, detail="ثبت مانده افتتاحیه فقط برای مدیر مجاز است.")
+    if db.scalar(select(JournalEntry).where(JournalEntry.source_type == "opening_balance")):
+        raise HTTPException(status_code=409, detail="مانده افتتاحیه قبلاً ثبت شده است؛ برای اصلاح باید سند اصلاحی ثبت شود.")
+    codes = [line.account_code for line in payload.lines]
+    if len(codes) != len(set(codes)):
+        raise HTTPException(status_code=422, detail="هر سرفصل در سند افتتاحیه فقط یک بار مجاز است.")
+    total_debit = sum(line.debit for line in payload.lines)
+    total_credit = sum(line.credit for line in payload.lines)
+    if total_debit <= 0 or total_debit != total_credit:
+        raise HTTPException(status_code=422, detail="جمع بدهکار و بستانکار باید برابر و بیشتر از صفر باشد.")
+    accounts = db.scalars(
+        select(AccountingAccount).where(
+            AccountingAccount.code.in_(codes), AccountingAccount.is_active.is_(True)
+        )
+    ).all()
+    account_map = {account.code: account for account in accounts}
+    if len(account_map) != len(codes):
+        raise HTTPException(status_code=422, detail="یک یا چند سرفصل وجود ندارد یا غیرفعال است.")
+    parent_codes = {account.parent_code for account in accounts if account.parent_code}
+    if any(code in parent_codes for code in codes):
+        raise HTTPException(status_code=422, detail="ثبت مستقیم روی حساب گروه مجاز نیست؛ از حساب معین استفاده کنید.")
+    for line in payload.lines:
+        account = account_map[line.account_code]
+        if line.debit and line.credit:
+            raise HTTPException(status_code=422, detail="هر ردیف فقط می‌تواند بدهکار یا بستانکار باشد.")
+        if account.normal_balance == "debit" and line.credit:
+            raise HTTPException(status_code=422, detail=f"ماهیت حساب {account.name} بدهکار است.")
+        if account.normal_balance == "credit" and line.debit:
+            raise HTTPException(status_code=422, detail=f"ماهیت حساب {account.name} بستانکار است.")
+    entry = _journal(
+        db, source_type="opening_balance", source_id="initial",
+        description=payload.description,
+        lines=[
+            {"account_code": line.account_code, "debit": line.debit, "credit": line.credit}
+            for line in payload.lines
+        ],
+    )
+    entry.posted_at = datetime.combine(payload.opening_date, datetime.min.time(), tzinfo=timezone.utc)
+    record_audit_event(
+        db, action="accounting_opening_balance_posted", entity_type="journal_entry",
+        actor_user_id=user.id, entity_id=str(entry.id),
+        details={"opening_date": payload.opening_date.isoformat(), "total_debit": total_debit, "line_count": len(payload.lines)},
+    )
+    db.commit()
+    return {
+        "entry_id": str(entry.id), "entry_number": entry.entry_number,
+        "opening_date": payload.opening_date, "total_debit": total_debit,
+        "total_credit": total_credit, "status": "posted",
     }
