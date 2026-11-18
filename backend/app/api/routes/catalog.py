@@ -48,7 +48,7 @@ def _media_read(media: ProductMedia) -> ProductMediaRead:
 def catalog_manifest(since_version: int = Query(default=0, ge=0), user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     state = db.get(CatalogState, 1)
     current_version = state.version if state else 0
-    products = db.scalars(select(Product).where(Product.is_active.is_(True), Product.catalog_version > since_version).order_by(Product.name)).all()
+    products = db.scalars(select(Product).where(Product.catalog_version > since_version).order_by(Product.name)).all()
     product_ids = [p.id for p in products]
     media = db.scalars(select(ProductMedia).where(ProductMedia.is_active.is_(True), ProductMedia.catalog_version > since_version).order_by(ProductMedia.created_at)).all() if since_version == 0 else db.scalars(select(ProductMedia).where(ProductMedia.is_active.is_(True), ProductMedia.catalog_version > since_version).order_by(ProductMedia.created_at)).all()
     return CatalogManifest(version=current_version, products=products, media=[_media_read(item) for item in media if item.product_id in product_ids or item.catalog_version > since_version])
