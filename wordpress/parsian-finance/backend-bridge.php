@@ -69,13 +69,42 @@ final class Parsian_OS_Backend_Bridge {
         return 'parsian_os_login_fail_' . hash('sha256', strtolower($username) . '|' . $ip);
     }
 
+    private function encrypt_token($token) {
+        if (!function_exists('openssl_encrypt') || !function_exists('random_bytes')) {
+            return '';
+        }
+        $iv = random_bytes(12);
+        $tag = '';
+        $key = hash('sha256', wp_salt('auth'), true);
+        $ciphertext = openssl_encrypt($token, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
+        return $ciphertext === false ? '' : base64_encode($iv . $tag . $ciphertext);
+    }
+
+    private function decrypt_token($encrypted) {
+        if (!function_exists('openssl_decrypt')) {
+            return '';
+        }
+        $raw = base64_decode((string) $encrypted, true);
+        if ($raw === false || strlen($raw) < 29) {
+            return '';
+        }
+        $iv = substr($raw, 0, 12);
+        $tag = substr($raw, 12, 16);
+        $ciphertext = substr($raw, 28);
+        $key = hash('sha256', wp_salt('auth'), true);
+        $plain = openssl_decrypt($ciphertext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
+        return is_string($plain) ? $plain : '';
+    }
+
     private function token() {
         $key = $this->session_key();
         if (!$key) {
             return '';
         }
         $stored = get_transient($key);
-        return is_array($stored) && !empty($stored['access_token']) ? (string) $stored['access_token'] : '';
+        return is_array($stored) && !empty($stored['encrypted_token'])
+            ? $this->decrypt_token($stored['encrypted_token'])
+            : '';
     }
 
     private function request($path, $method, $payload = null, $token = '') {
@@ -158,8 +187,12 @@ final class Parsian_OS_Backend_Bridge {
             return new WP_Error('backend_token_missing', 'Backend توکن معتبر برنگرداند.', array('status' => 502));
         }
 
-        // The bearer token is stored only server-side and is bound to this WP login session.
-        set_transient($key, array('access_token' => $result['access_token']), self::SESSION_TTL);
+        // Encrypt the bearer token at rest; it is bound to this WP login session.
+        $encrypted_token = $this->encrypt_token($result['access_token']);
+        if ($encrypted_token === '') {
+            return new WP_Error('secure_storage_unavailable', 'ذخیره‌سازی امن نشست Backend روی سرور در دسترس نیست.', array('status' => 503));
+        }
+        set_transient($key, array('encrypted_token' => $encrypted_token), self::SESSION_TTL);
         $identity = $this->request('auth/me', 'GET', null, $result['access_token']);
         if (is_wp_error($identity)) {
             // A 403 from /me can mean the first-login password change is required.
