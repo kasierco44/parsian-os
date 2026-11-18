@@ -48,6 +48,7 @@ def upgrade() -> None:
         sa.Column("description", sa.String(300), nullable=False),
         sa.Column("created_by_user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.CheckConstraint("amount > 0", name="ck_supplier_bills_amount_positive"),
     )
     op.create_index("ix_supplier_bills_supplier_id", "supplier_bills", ["supplier_id"])
     op.create_index("ix_supplier_bills_due_date", "supplier_bills", ["due_date"])
@@ -72,6 +73,9 @@ def upgrade() -> None:
         sa.Column("created_by_user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("cleared_at", sa.DateTime(timezone=True)),
+        sa.CheckConstraint("amount > 0", name="ck_supplier_payments_amount_positive"),
+        sa.CheckConstraint("method IN ('cash', 'bank_transfer', 'cheque')", name="ck_supplier_payments_method"),
+        sa.CheckConstraint("status IN ('issued', 'cleared', 'bounced')", name="ck_supplier_payments_status"),
     )
     op.create_index("ix_supplier_payments_bill_id", "supplier_payments", ["bill_id"])
     op.create_index("ix_supplier_payments_supplier_id", "supplier_payments", ["supplier_id"])
