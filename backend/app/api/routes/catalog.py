@@ -40,7 +40,8 @@ def _product_payload(product: Product) -> dict:
     return {
         "sku": product.sku, "name": product.name, "category": product.category,
         "vehicle_model": product.vehicle_model, "description": product.description,
-        "unit_price": product.unit_price, "cost_price": product.cost_price,\n        "track_inventory": product.track_inventory, "is_active": product.is_active,
+        "unit_price": product.unit_price, "cost_price": product.cost_price,
+        "track_inventory": product.track_inventory, "is_active": product.is_active,
         "catalog_version": product.catalog_version,
     }
 
