@@ -68,3 +68,9 @@ This is transport infrastructure only. It does **not** yet switch the existing f
 ## Validation
 
 The repository workflow runs PHP syntax checks and builds the plugin ZIP. A live API test requires the real HTTPS Backend URL and test manager/accountant accounts, which are not available in repository CI. No deployment or live financial write test is claimed.
+
+## Central UI migration
+
+The finance panel UI now reads supplier, bill, payment, and selectable charge-account data through the authenticated Backend proxy. Supplier, bill, and payment creation are sent to the central API; bill/payment creation uses idempotency keys. Payments are linked to a selected bill UUID, and cheque clear/bounce transitions call the central state-transition endpoints. The UI requires an authenticated Backend manager/accountant session before loading central finance data.
+
+The legacy WordPress REST CRUD callbacks and legacy tables remain in the plugin for backward compatibility, but the updated panel UI no longer calls them. Do not use legacy REST routes directly. Existing legacy rows are not automatically migrated or reconciled into the Backend; perform a separately reviewed migration before relying on historical balances. Opening-balance entry is not exposed in this UI revision.
