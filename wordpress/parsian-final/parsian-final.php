@@ -17,6 +17,7 @@ require_once PARSIAN_FINAL_PATH . 'includes/class-roles.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-rest.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-crm.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-inventory.php';
+require_once PARSIAN_FINAL_PATH . 'includes/class-sync.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-finance.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-auth.php';
 register_activation_hook(__FILE__, ['Parsian_Final_Install', 'activate']);
@@ -26,6 +27,7 @@ add_action('plugins_loaded', static function (): void {
     (new Parsian_Final_REST())->register_routes();
     (new Parsian_Final_CRM())->register_routes();
     (new Parsian_Final_Inventory())->register_routes();
+    (new Parsian_Final_Sync())->register_routes();
     (new Parsian_Final_Finance())->register_routes();
     (new Parsian_Final_Auth())->register_routes();
 });
