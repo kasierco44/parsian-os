@@ -67,7 +67,6 @@ def upgrade() -> None:
     op.create_table("payment_receipts",
         sa.Column("id", UUID, primary_key=True),
         sa.Column("receipt_number", sa.String(40), nullable=False, unique=True),
-        sa.Column("idempotency_key", sa.String(100), nullable=True, unique=True),
         sa.Column("invoice_id", UUID, sa.ForeignKey("sales_invoices.id", ondelete="RESTRICT"), nullable=False),
         sa.Column("amount", sa.Integer(), nullable=False),
         sa.Column("method", sa.String(24), nullable=False),
