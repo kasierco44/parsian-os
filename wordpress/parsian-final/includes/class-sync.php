@@ -2,6 +2,10 @@
 if (!defined('ABSPATH')) { exit; }
 final class Parsian_Final_Sync {
     public function register_routes(): void {
+        register_rest_route('parsian-final/v1','/sync/devices',[
+            'methods'=>WP_REST_Server::CREATABLE,'callback'=>[$this,'register_device'],
+            'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_sync_use');}
+        ]);
         register_rest_route('parsian-final/v1','/sync/push',[
             'methods'=>WP_REST_Server::CREATABLE,'callback'=>[$this,'push'],
             'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_sync_use');}
@@ -10,6 +14,28 @@ final class Parsian_Final_Sync {
             'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'pull'],
             'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_sync_use');}
         ]);
+    }
+    public function register_device(WP_REST_Request $request): WP_REST_Response {
+        $p=$request->get_json_params();
+        $uuid=strtolower(sanitize_text_field($p['device_uuid']??''));
+        $platform=sanitize_key($p['platform']??'');
+        if(!wp_is_uuid($uuid)||!in_array($platform,['android','windows','web'],true))
+            return new WP_REST_Response(['code'=>'invalid_device'],400);
+        global $wpdb;
+        $table=$wpdb->prefix.'parsian_devices';
+        $existing=$wpdb->get_row($wpdb->prepare("SELECT id,user_id,revoked_at FROM {$table} WHERE device_uuid=%s",$uuid),ARRAY_A);
+        if($existing && (int)$existing['user_id']!==get_current_user_id())
+            return new WP_REST_Response(['code'=>'device_owned_by_another_user'],409);
+        if($existing && $existing['revoked_at']!==null)
+            return new WP_REST_Response(['code'=>'device_revoked'],403);
+        if(!$existing){
+            $ok=$wpdb->insert($table,[
+                'device_uuid'=>$uuid,'user_id'=>get_current_user_id(),'platform'=>$platform,
+                'label'=>sanitize_text_field($p['label']??''),'created_at'=>current_time('mysql',true)
+            ],['%s','%d','%s','%s','%s']);
+            if(!$ok)return new WP_REST_Response(['code'=>'device_register_failed'],500);
+        }
+        return new WP_REST_Response(['device_uuid'=>$uuid,'status'=>'registered'],201);
     }
     public function push(WP_REST_Request $request): WP_REST_Response {
         $p=$request->get_json_params();
