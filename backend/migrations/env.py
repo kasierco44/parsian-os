@@ -5,7 +5,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.models import AuditEvent, Customer, Permission, Role, User, SyncOperation, SyncRecord, CatalogState, Product, ProductMedia, ReplicationEvent, ReplicationState, SalesOrder, SalesOrderLine, SalesInvoice, PaymentReceipt, Cheque, CommissionTier, CommissionAccrual, InventoryBalance, InventoryMovement, JournalEntry, JournalLine  # noqa: F401
+from app.models import AccountingAccount, AuditEvent, Customer, Permission, Role, User, SyncOperation, SyncRecord, CatalogState, Product, ProductMedia, ReplicationEvent, ReplicationState, SalesOrder, SalesOrderLine, SalesInvoice, PaymentReceipt, Cheque, CommissionTier, CommissionAccrual, InventoryBalance, InventoryMovement, JournalEntry, JournalLine  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
