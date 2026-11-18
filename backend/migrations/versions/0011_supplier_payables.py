@@ -15,10 +15,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("journal_lines", sa.Column("supplier_id", postgresql.UUID(as_uuid=True), nullable=True))
-    op.create_foreign_key("fk_journal_lines_supplier_id_suppliers", "journal_lines", "suppliers", ["supplier_id"], ["id"], ondelete="RESTRICT")
-    op.create_index("ix_journal_lines_supplier_id", "journal_lines", ["supplier_id"])
-
     op.create_table(
         "suppliers",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -33,6 +29,10 @@ def upgrade() -> None:
     )
     op.create_index("ix_suppliers_code", "suppliers", ["code"], unique=True)
     op.create_index("ix_suppliers_name", "suppliers", ["name"])
+
+    op.add_column("journal_lines", sa.Column("supplier_id", postgresql.UUID(as_uuid=True), nullable=True))
+    op.create_foreign_key("fk_journal_lines_supplier_id_suppliers", "journal_lines", "suppliers", ["supplier_id"], ["id"], ondelete="RESTRICT")
+    op.create_index("ix_journal_lines_supplier_id", "journal_lines", ["supplier_id"])
 
     op.create_table(
         "supplier_bills",
