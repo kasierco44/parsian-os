@@ -17,6 +17,9 @@ def test_sales_router_is_mounted_in_application():
     assert "/api/v1/sales/orders/{order_id}/approve" in paths
     assert "/api/v1/sales/orders/{order_id}/invoice" in paths
     assert "/api/v1/sales/invoices/{invoice_id}/receipts" in paths
+    assert "/api/v1/sales/invoices" in paths
+    assert "/api/v1/sales/cheques" in paths
+    assert "/api/v1/sales/commission/accruals" in paths
     assert "/api/v1/sales/cheques/{cheque_id}/clear" in paths
 
 
