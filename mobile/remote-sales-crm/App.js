@@ -74,15 +74,22 @@ export default function App() {
     let active = true;
     (async () => {
       if (!isApiConfigured()) return;
+      let token = null;
       try {
-        const token = await getStoredToken();
+        token = await getStoredToken();
         if (!token || !active) return;
         const me = await getMe(token);
         if (!active) return;
         setApiToken(token); setApiUser(me); setApiMode(true); setEntered(true);
         const rows = await getCustomers({ token });
         if (active && Array.isArray(rows)) setCustomers(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
-      } catch (e) {\n        if (e.status === 403 && String(e.detail || "").toLowerCase().includes("password change required")) {\n          if (active) { setApiToken(token); setPasswordChangeRequired(true); }\n        } else { await apiLogout(); }\n      }
+      } catch (e) {
+        if (e.status === 403 && String(e.detail || "").toLowerCase().includes("password change required")) {
+          if (active) { setApiToken(token); setPasswordChangeRequired(true); }
+        } else {
+          await apiLogout();
+        }
+      }
     })();
     return () => { active = false; };
   }, []);
