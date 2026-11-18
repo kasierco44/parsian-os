@@ -41,7 +41,7 @@ The client may create local drafts for customer notes, visits, follow-ups, tasks
 
 ## Implementation status
 
-The Android branch currently contains a persistent SQLite outbox/cache, push/pull API foundation, task/follow-up offline persistence, and network-restoration sync trigger. The API sync journal is currently scoped to the authenticated user. The product catalog API, SQLCipher encryption, role-aware shared-record replication, office/cloud replication daemon, and production deployment are **not yet implemented**.
+The Android branch currently contains a persistent SQLite outbox/cache, push/pull API foundation, task/follow-up offline persistence, and network-restoration sync trigger. The API sync journal is scoped to the authenticated user. The Android build enables SQLCipher and migrates the earlier plaintext SQLite cache into an encrypted database while preserving the legacy database until the copy succeeds. A signed two-node replication API and worker now transfer customer, product, product-media, and task/follow-up events; users are mapped by username when UUIDs differ. Replication of user/role administration, financial ledgers, inventory postings, cheque settlements, and final invoices remains outside this first replication pass.
 
 The existing docker-compose.yml is a development single-node API/PostgreSQL stack. It is not an office/cloud replication deployment and must not be treated as high availability.
 
