@@ -36,26 +36,21 @@ def push_operations(payload: SyncPushIn, user: User = Depends(get_current_user),
             SyncRecord.owner_user_id == user.id,
             SyncRecord.entity_type == item.entity_type,
             SyncRecord.entity_id == item.entity_id,
-        ))
+        ).order_by(SyncRecord.id.desc()).limit(1))
         current_version = record.version if record else 0
         if item.base_version is not None and item.base_version != current_version:
             results.append(SyncOperationResult(id=item.id, status="conflict", version=current_version, message="نسخه اطلاعات روی سرور تغییر کرده است؛ نیازمند بررسی است."))
             continue
 
-        if record is None:
-            record = SyncRecord(
-                owner_user_id=user.id,
-                entity_type=item.entity_type,
-                entity_id=item.entity_id,
-                payload=item.payload if item.operation == "upsert" else {},
-                version=1,
-                deleted=item.operation == "delete",
-            )
-            db.add(record)
-        else:
-            record.version += 1
-            record.payload = item.payload if item.operation == "upsert" else {}
-            record.deleted = item.operation == "delete"
+        record = SyncRecord(
+            owner_user_id=user.id,
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            payload=item.payload if item.operation == "upsert" else {},
+            version=current_version + 1,
+            deleted=item.operation == "delete",
+        )
+        db.add(record)
 
         db.add(SyncOperation(
             owner_user_id=user.id,
