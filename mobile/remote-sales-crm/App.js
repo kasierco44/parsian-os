@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { getCustomers, getMe, getStoredToken, isApiConfigured, login as apiLogin, logout as apiLogout, changePassword as apiChangePassword } from "./src/api/client";
+import { cacheRecord, readCachedRecords } from "./src/offline/database";
+import { queueOfflineChange, synchronize } from "./src/api/sync";
 import {
   I18nManager, KeyboardAvoidingView, Modal, Platform, Pressable,
   SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View
@@ -69,6 +71,46 @@ export default function App() {
   ]);
 
   const filtered = useMemo(() => customers.filter(x => (x.name + (x.city || "") + (x.phone || "")).includes(search.trim())), [customers, search]);
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const [cachedCustomers, cachedTasks] = await Promise.all([
+          readCachedRecords("customer"),
+          readCachedRecords("task"),
+        ]);
+        if (!active) return;
+        if (cachedCustomers.length) setCustomers(cachedCustomers);
+        if (cachedTasks.length) setTodayTasks(cachedTasks);
+      } catch {
+        // A fresh install may not have created the local database yet.
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+
+  const saveCustomerCache = async (rows) => {
+    await Promise.all(rows.map(customer => cacheRecord("customer", String(customer.id), customer)));
+  };
+
+  const toggleTask = async (taskId) => {
+    const next = todayTasks.map(task => task.id === taskId ? { ...task, done: !task.done } : task);
+    const changed = next.find(task => task.id === taskId);
+    setTodayTasks(next);
+    if (!changed) return;
+    try {
+      await cacheRecord("task", String(changed.id), changed);
+      await queueOfflineChange({
+        entityType: "task",
+        entityId: String(changed.id),
+        operation: "upsert",
+        payload: changed,
+      });
+    } catch (error) {
+      showToast(error.message || "ذخیره محلی انجام نشد");
+    }
+  };
+
 
   useEffect(() => {
     let active = true;
@@ -82,7 +124,7 @@ export default function App() {
         if (!active) return;
         setApiToken(token); setApiUser(me); setApiMode(true); setEntered(true);
         const rows = await getCustomers({ token });
-        if (active && Array.isArray(rows)) setCustomers(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
+        if (active && Array.isArray(rows)) { const mapped = rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })); setCustomers(mapped); await saveCustomerCache(mapped); }
       } catch (e) {
         if (e.status === 403 && String(e.detail || "").toLowerCase().includes("password change required")) {
           if (active) { setApiToken(token); setPasswordChangeRequired(true); }
@@ -118,6 +160,7 @@ export default function App() {
       const rows = await getCustomers({ token: result.access_token });
       setApiToken(result.access_token); setApiUser(me); setApiMode(true);
       setCustomers(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
+      await saveCustomerCache(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
       setEntered(true);
     } catch (e) { setLoginError(e.message || "ورود ناموفق بود."); }
     finally { setLoginBusy(false); }
@@ -136,6 +179,7 @@ export default function App() {
       const rows = await getCustomers({ token: apiToken });
       setApiUser(me); setApiMode(true); setPasswordChangeRequired(false);
       setCustomers(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
+      await saveCustomerCache(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
       setEntered(true); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
     } catch (e) { setLoginError(e.message || "تغییر رمز عبور انجام نشد."); }
     finally { setLoginBusy(false); }
@@ -145,17 +189,34 @@ export default function App() {
     if (!apiToken) return;
     setSyncBusy(true);
     try {
+      await synchronize({ token: apiToken });
       const rows = await getCustomers({ token: apiToken, query: search });
-      setCustomers(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
-      showToast("فهرست مشتریان به‌روزرسانی شد");
-    } catch (e) { showToast(e.message || "همگام‌سازی ناموفق بود"); }
+      const mapped = rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" }));
+      setCustomers(mapped);
+      await saveCustomerCache(mapped);
+      showToast("همگام‌سازی و دریافت مشتریان انجام شد");
+    } catch (e) {
+      try {
+        const cached = await readCachedRecords("customer");
+        if (cached.length) setCustomers(cached);
+      } catch {}
+      showToast(e.message || "اتصال برقرار نیست؛ داده‌های ذخیره‌شده نمایش داده شدند");
+    }
     finally { setSyncBusy(false); }
   };
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2200); };
-  const addFollowup = () => {
+  const addFollowup = async () => {
     if (!note.trim()) return;
-    setTodayTasks(prev => [{ id: Date.now(), title: note.trim(), time: "جدید", done: false }, ...prev]);
-    setNote(""); setModal(false); showToast("پیگیری آزمایشی ثبت شد");
+    const task = { id: String(Date.now()), title: note.trim(), time: "جدید", done: false };
+    try {
+      await cacheRecord("task", task.id, task);
+      await queueOfflineChange({ entityType: "task", entityId: task.id, operation: "upsert", payload: task });
+      setTodayTasks(prev => [task, ...prev]);
+      setNote(""); setModal(false);
+      showToast("پیگیری روی دستگاه ذخیره شد و پس از اتصال همگام می‌شود");
+    } catch (error) {
+      showToast(error.message || "ذخیره پیگیری ناموفق بود");
+    }
   };
 
   if (!entered && passwordChangeRequired) return (
@@ -223,7 +284,7 @@ export default function App() {
       </View>
       <SectionTitle title="برنامه امروز" action="افزودن پیگیری" onAction={() => setModal(true)} />
       <View style={styles.card}>
-        {todayTasks.map((task, i) => <Pressable key={task.id} style={[styles.taskRow, i !== 0 && styles.topLine]} onPress={() => setTodayTasks(prev => prev.map(t => t.id === task.id ? { ...t, done: !t.done } : t))}>
+        {todayTasks.map((task, i) => <Pressable key={task.id} style={[styles.taskRow, i !== 0 && styles.topLine]} onPress={() => toggleTask(task.id)}>
           <View style={[styles.check, task.done && styles.checked]}>{task.done ? <Text style={styles.checkMark}>✓</Text> : null}</View>
           <View style={styles.taskBody}><Text style={[styles.taskTitle, task.done && styles.doneText]}>{task.title}</Text><Text style={styles.taskTime}>{task.time}</Text></View>
         </Pressable>)}
@@ -254,7 +315,7 @@ export default function App() {
   const followupsScreen = (
     <>
       <View style={styles.metricStrip}><Text style={styles.metricStripBig}>{money(todayTasks.filter(t => !t.done).length)}</Text><Text style={styles.metricStripText}>پیگیری باقی‌مانده</Text><Pressable style={styles.smallRedBtn} onPress={() => setModal(true)}><Text style={styles.smallRedText}>+ جدید</Text></Pressable></View>
-      {todayTasks.map((task, i) => <Pressable key={task.id} style={styles.followCard} onPress={() => setTodayTasks(prev => prev.map(t => t.id === task.id ? { ...t, done: !t.done } : t))}><View style={[styles.check, task.done && styles.checked]}>{task.done ? <Text style={styles.checkMark}>✓</Text> : null}</View><View style={styles.taskBody}><Text style={styles.taskTitle}>{task.title}</Text><Text style={styles.taskTime}>{task.time}</Text></View><Pill tone={task.done ? "green" : "amber"}>{task.done ? "انجام شد" : "باز"}</Pill></Pressable>)}
+      {todayTasks.map((task, i) => <Pressable key={task.id} style={styles.followCard} onPress={() => toggleTask(task.id)}><View style={[styles.check, task.done && styles.checked]}>{task.done ? <Text style={styles.checkMark}>✓</Text> : null}</View><View style={styles.taskBody}><Text style={styles.taskTitle}>{task.title}</Text><Text style={styles.taskTime}>{task.time}</Text></View><Pill tone={task.done ? "green" : "amber"}>{task.done ? "انجام شد" : "باز"}</Pill></Pressable>)}
     </>
   );
 
