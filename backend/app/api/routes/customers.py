@@ -10,6 +10,7 @@ from app.models.customer import Customer
 from app.models.identity import User
 from app.schemas.customer import CustomerCreate, CustomerRead
 from app.services.audit import record_audit_event
+from app.services.replication import record_replication_event
 
 router = APIRouter(prefix="/customers", tags=["customers"])
 
