@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { getCustomers, getMe, getStoredToken, isApiConfigured, login as apiLogin, logout as apiLogout } from "./src/api/client";
 import {
   I18nManager, KeyboardAvoidingView, Modal, Platform, Pressable,
   SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View
@@ -42,6 +43,14 @@ const SectionTitle = ({ title, action, onAction }) => (
 
 export default function App() {
   const [entered, setEntered] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [apiToken, setApiToken] = useState(null);
+  const [apiUser, setApiUser] = useState(null);
+  const [apiMode, setApiMode] = useState(false);
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [syncBusy, setSyncBusy] = useState(false);
   const [tab, setTab] = useState("خانه");
   const [customers, setCustomers] = useState(initialCustomers);
   const [search, setSearch] = useState("");
@@ -55,7 +64,51 @@ export default function App() {
     { id: 3, title: "پیگیری وصول فاکتور مشتری قم", time: "۱۵:۰۰", done: true }
   ]);
 
-  const filtered = useMemo(() => customers.filter(x => (x.name + x.city + x.phone).includes(search.trim())), [customers, search]);
+  const filtered = useMemo(() => customers.filter(x => (x.name + (x.city || "") + (x.phone || "")).includes(search.trim())), [customers, search]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      if (!isApiConfigured()) return;
+      try {
+        const token = await getStoredToken();
+        if (!token || !active) return;
+        const me = await getMe(token);
+        if (!active) return;
+        setApiToken(token); setApiUser(me); setApiMode(true); setEntered(true);
+        const rows = await getCustomers({ token });
+        if (active && Array.isArray(rows)) setCustomers(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
+      } catch { await apiLogout(); }
+    })();
+    return () => { active = false; };
+  }, []);
+
+  const submitLogin = async () => {
+    setLoginError("");
+    if (!isApiConfigured()) { setLoginError("اتصال سرور هنوز برای این نسخه تنظیم نشده است. برای بررسی ظاهر از ورود نمایشی استفاده کنید."); return; }
+    if (!username.trim() || !password) { setLoginError("نام کاربری و رمز عبور را وارد کنید."); return; }
+    setLoginBusy(true);
+    try {
+      const result = await apiLogin(username, password);
+      const me = await getMe(result.access_token);
+      const rows = await getCustomers({ token: result.access_token });
+      setApiToken(result.access_token); setApiUser(me); setApiMode(true);
+      setCustomers(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
+      setEntered(true);
+    } catch (e) { setLoginError(e.message || "ورود ناموفق بود."); }
+    finally { setLoginBusy(false); }
+  };
+
+  const syncCustomers = async () => {
+    if (!apiToken) return;
+    setSyncBusy(true);
+    try {
+      const rows = await getCustomers({ token: apiToken, query: search });
+      setCustomers(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
+      showToast("فهرست مشتریان به‌روزرسانی شد");
+    } catch (e) { showToast(e.message || "همگام‌سازی ناموفق بود"); }
+    finally { setSyncBusy(false); }
+  };
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2200); };
   const addFollowup = () => {
     if (!note.trim()) return;
@@ -71,12 +124,14 @@ export default function App() {
       <Text style={styles.brandSub}>سامانه ارتباط و فروش ویزیتورهای دورکار</Text>
       <View style={styles.loginCard}>
         <Text style={styles.loginHeading}>ورود به پنل ویزیتور</Text>
-        <Text style={styles.fieldLabel}>نام کاربری آزمایشی</Text>
-        <TextInput style={styles.input} value="visitor.demo" editable={false} textAlign="right" />
+        <Text style={styles.fieldLabel}>نام کاربری</Text>
+        <TextInput style={styles.input} value={username} onChangeText={setUsername} textAlign="right" autoCapitalize="none" placeholder="نام کاربری سازمانی" />
         <Text style={styles.fieldLabel}>رمز عبور</Text>
-        <TextInput style={styles.input} value="••••••••" editable={false} textAlign="right" secureTextEntry />
-        <Pressable style={styles.primaryBtn} onPress={() => setEntered(true)}><Text style={styles.primaryBtnText}>ورود به محیط آزمایشی</Text></Pressable>
-        <Text style={styles.demoHint}>این نسخه فقط برای بررسی ظاهر و مسیرهای برنامه است؛ ورود واقعی هنوز متصل نشده است.</Text>
+        <TextInput style={styles.input} value={password} onChangeText={setPassword} textAlign="right" secureTextEntry placeholder="رمز عبور" />
+        {loginError ? <Text style={styles.loginError}>{loginError}</Text> : null}
+        <Pressable style={[styles.primaryBtn, loginBusy && { opacity: 0.6 }]} disabled={loginBusy} onPress={submitLogin}><Text style={styles.primaryBtnText}>{loginBusy ? "در حال ورود..." : "ورود با حساب سازمانی"}</Text></Pressable>
+        <Pressable style={styles.outlineBtn} onPress={() => { setApiMode(false); setEntered(true); }}><Text style={styles.outlineBtnText}>ورود نمایشی برای بررسی محیط</Text></Pressable>
+        <Text style={styles.demoHint}>{isApiConfigured() ? "اتصال API تنظیم شده است؛ برای ورود واقعی از حساب ایجادشده توسط مدیر استفاده کنید." : "اتصال API هنوز روی سرور/نسخه نصب‌شده تنظیم نشده است. ورود نمایشی فقط برای بررسی ظاهر است."}</Text>
       </View>
       <Text style={styles.version}>نسخه آزمایشی ۰.۱.۰</Text>
     </SafeAreaView>
@@ -86,7 +141,7 @@ export default function App() {
     <View style={styles.header}>
       <View>
         <Text style={styles.headerEyebrow}>پارسیان‌یار | پنل ویزیتور</Text>
-        <Text style={styles.headerTitle}>{tab === "خانه" ? "سلام، ویزیتور عزیز" : tab}</Text>
+        <Text style={styles.headerTitle}>{tab === "خانه" ? "سلام، {apiUser?.full_name || "ویزیتور عزیز"}" : tab}</Text>
       </View>
       <View style={styles.avatar}><Text style={styles.avatarText}>و</Text></View>
     </View>
@@ -129,7 +184,7 @@ export default function App() {
     <>
       <View style={styles.searchBox}><Text style={styles.searchIcon}>⌕</Text><TextInput placeholder="جست‌وجوی نام، شهر یا شماره تماس" placeholderTextColor="#9A9EAA" value={search} onChangeText={setSearch} style={styles.searchInput} textAlign="right" /></View>
       <View style={styles.filterRow}><Pill tone="red">همه ({money(customers.length)})</Pill><Pill>فعال</Pill><Pill tone="amber">نیازمند پیگیری</Pill></View>
-      <SectionTitle title="فهرست مشتریان" action="مشتری جدید" onAction={() => showToast("ثبت مشتری جدید در نسخه بعد فعال می‌شود")} />
+      <SectionTitle title="فهرست مشتریان" action={apiMode ? (syncBusy ? "در حال همگام‌سازی" : "همگام‌سازی") : "مشتری جدید"} onAction={apiMode ? syncCustomers : () => showToast("ثبت مشتری جدید در نسخه بعد فعال می‌شود")} />
       {filtered.map(c => <CustomerCard key={c.id} item={c} onPress={() => { setSelected(c); setTab("جزئیات مشتری"); }} />)}
       {filtered.length === 0 && <Text style={styles.empty}>مشتری‌ای با این مشخصات پیدا نشد.</Text>}
     </>
@@ -161,7 +216,7 @@ export default function App() {
     <>
       <View style={styles.detailHero}><View style={styles.bigAvatar}><Text style={styles.bigAvatarText}>و</Text></View><Text style={styles.detailName}>ویزیتور نمونه</Text><Text style={styles.customerMeta}>کد پرسنلی: VIS-001</Text><Pill tone="green">حساب آزمایشی</Pill></View>
       <View style={styles.card}><Info label="هدف ماهانه" value="۱۰٬۰۰۰ دست" /><Info label="فروش ثبت‌شده" value="۱٬۸۵۰ دست" /><Info label="پورسانت تخمینی" value="۱۲.۴٪" /><Info label="وضعیت اتصال" value="آفلاین / داده نمونه" /></View>
-      <Pressable style={styles.outlineBtn} onPress={() => { setEntered(false); setTab("خانه"); }}><Text style={styles.outlineBtnText}>خروج از محیط آزمایشی</Text></Pressable>
+      <Pressable style={styles.outlineBtn} onPress={async () => { if (apiMode) await apiLogout(); setApiToken(null); setApiUser(null); setApiMode(false); setEntered(false); setTab("خانه"); }}><Text style={styles.outlineBtnText}>خروج از حساب</Text></Pressable>
     </>
   );
 
@@ -172,7 +227,7 @@ export default function App() {
       <ExpoStatusBar style="dark" />
       {header}
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.demoBanner}><Text style={styles.demoBannerText}>محیط آزمایشی • اطلاعات این نسخه نمونه است</Text></View>
+        <View style={styles.demoBanner}><Text style={styles.demoBannerText}>{apiMode ? "اتصال به سرور • اطلاعات مشتریان از حساب شما" : "محیط آزمایشی • اطلاعات این نسخه نمونه است"}</Text></View>
         {content}
       </ScrollView>
       <View style={styles.bottomNav}>
@@ -206,6 +261,7 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: "#fff", fontSize: 14, fontWeight: "900" },
   demoHint: { color: C.muted, fontSize: 11, textAlign: "center", lineHeight: 19, marginTop: 15 },
   version: { color: "#9B9FA9", fontSize: 11, marginTop: 24 },
+  loginError: { color: C.red, fontSize: 11, textAlign: "right", marginTop: 10 },
   header: { backgroundColor: "#fff", paddingHorizontal: 20, paddingTop: 12, paddingBottom: 15, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderColor: C.line },
   headerEyebrow: { color: C.muted, fontSize: 11, textAlign: "right" },
   headerTitle: { color: C.ink, fontSize: 19, fontWeight: "900", textAlign: "right", marginTop: 4 },
