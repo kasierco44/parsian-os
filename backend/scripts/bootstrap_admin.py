@@ -23,6 +23,7 @@ ROLE_SEEDS = {
     "customer": ("مشتری", "دسترسی محدود مشتری"),
 }
 PERMISSION_SEEDS = {
+    "audit.read": "مشاهده گزارش ممیزی",
     "users.read": "مشاهده کاربران",
     "users.create": "ایجاد کاربران",
     "users.update": "ویرایش کاربران",
