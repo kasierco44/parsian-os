@@ -36,6 +36,10 @@ def upgrade() -> None:
         sa.Column("version", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
+    op.bulk_insert(
+        sa.table("catalog_state", sa.column("id", sa.Integer()), sa.column("version", sa.Integer())),
+        [{"id": 1, "version": 0}],
+    )
     op.create_table(
         "product_media",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
