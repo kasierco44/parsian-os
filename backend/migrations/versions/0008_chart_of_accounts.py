@@ -14,21 +14,21 @@ depends_on = None
 
 accounts = [
     ("1000", "دارایی‌ها", "asset", "debit", None),
-    ("1010", "صندوق", "asset", "debit", "1000"),
-    ("1020", "بانک", "asset", "debit", "1000"),
-    ("1100", "حساب‌های دریافتنی", "asset", "debit", "1000"),
-    ("1200", "موجودی کالا", "asset", "debit", "1000"),
+    ("CASH", "صندوق", "asset", "debit", "1000"),
+    ("BANK", "بانک", "asset", "debit", "1000"),
+    ("ACCOUNTS_RECEIVABLE", "حساب‌های دریافتنی", "asset", "debit", "1000"),
+    ("INVENTORY_ASSET", "موجودی کالا", "asset", "debit", "1000"),
     ("2000", "بدهی‌ها", "liability", "credit", None),
-    ("2010", "حساب‌های پرداختنی", "liability", "credit", "2000"),
-    ("2020", "پورسانت پرداختنی", "liability", "credit", "2000"),
+    ("ACCOUNTS_PAYABLE", "حساب‌های پرداختنی", "liability", "credit", "2000"),
+    ("COMMISSION_PAYABLE", "پورسانت پرداختنی", "liability", "credit", "2000"),
     ("3000", "حقوق مالکانه", "equity", "credit", None),
     ("4000", "درآمدها", "revenue", "credit", None),
-    ("4010", "فروش کالا", "revenue", "credit", "4000"),
+    ("SALES_REVENUE", "فروش کالا", "revenue", "credit", "4000"),
     ("5000", "بهای تمام‌شده و هزینه‌ها", "expense", "debit", None),
-    ("5010", "بهای تمام‌شده کالای فروش‌رفته", "expense", "debit", "5000"),
-    ("5020", "هزینه پورسانت فروش", "expense", "debit", "5000"),
-    ("5030", "کسری و ضایعات انبار", "expense", "debit", "5000"),
-    ("5040", "تعدیلات موجودی", "revenue", "credit", "4000"),
+    ("COST_OF_GOODS_SOLD", "بهای تمام‌شده کالای فروش‌رفته", "expense", "debit", "5000"),
+    ("SALES_COMMISSION_EXPENSE", "هزینه پورسانت فروش", "expense", "debit", "5000"),
+    ("INVENTORY_SHRINKAGE", "کسری و ضایعات انبار", "expense", "debit", "5000"),
+    ("INVENTORY_ADJUSTMENT", "تعدیلات موجودی", "revenue", "credit", "4000"),
 ]
 
 def upgrade() -> None:
