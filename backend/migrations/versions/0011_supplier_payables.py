@@ -1,7 +1,7 @@
 """Add supplier subledger, bills, outgoing payments and cheque liabilities.
 
 Revision ID: 0011_supplier_payables
-Revises: 0010_opening_balance_unique
+Revises: 0010_unique_opening_balance
 """
 from alembic import op
 import sqlalchemy as sa
@@ -91,6 +91,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("DELETE FROM journal_entries WHERE source_type IN ('supplier_bill', 'supplier_payment', 'supplier_cheque_cleared', 'supplier_cheque_bounced', 'supplier_opening_balance')")
     op.drop_constraint("fk_journal_lines_supplier_id_suppliers", "journal_lines", type_="foreignkey")
     op.drop_index("ix_journal_lines_supplier_id", table_name="journal_lines")
     op.drop_column("journal_lines", "supplier_id")
