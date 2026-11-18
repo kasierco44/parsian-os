@@ -24,7 +24,7 @@ Set `DATABASE_URL` to a reachable PostgreSQL database and replace `JWT_SECRET` w
 - `POST /api/v1/auth/login`: accepts JSON `{ "username": "...", "password": "..." }` and returns a bearer access token.
 - `GET /api/v1/auth/me`: returns the authenticated user's public profile; requires `Authorization: Bearer <token>`.
 
-There is intentionally no public registration endpoint and no seeded administrator. User provisioning and role/permission administration must be implemented as a separately authorized workflow before real users can sign in.
+There is intentionally no public registration endpoint. Create the initial administrator only through the trusted CLI bootstrap command described below; it seeds the initial RBAC catalog and requires a password rotation on first login.
 
 ## Database migrations
 
@@ -41,7 +41,7 @@ The first migration creates users, roles, permissions, their many-to-many mappin
 pytest
 ```
 
-The automated tests cover liveness/version metadata and password/token utility behavior. Database-backed authentication integration tests and migration-from-empty/rollback tests are still required.
+The automated test suite includes authentication and authorization policy coverage, customer scope tests, and a PostgreSQL migration-from-empty integration test in CI.
 
 ## Security notes
 
@@ -110,3 +110,29 @@ Customer endpoints are mounted under `/api/v1/customers`:
 All endpoints require the corresponding `customers.read` or `customers.write` permission. Visitor-role accounts are restricted to customer records assigned to their own user ID; visitor accounts cannot assign or transfer customer ownership to another user. The customer master record includes type, contact information, province/city/address, identifiers, lead source, assigned user, credit limit and payment-term days. Financial transactions and balances are not part of this first CRM migration.
 
 Apply migration `0003_customers` after the authentication migrations. The bootstrap command now seeds role-specific permissions for accountant, seller, visitor and customer roles. Review these defaults against the company's access policy before issuing staff accounts.
+
+
+## Production Docker Compose deployment
+
+The repository includes a non-root API image, PostgreSQL 16 Compose service, readiness health checks, and automatic Alembic migrations at API container startup. This is a deployment template; it does not deploy itself or provision a public domain/TLS certificate.
+
+On the Linux server, install Docker Engine and the Compose plugin, then:
+
+```bash
+cd backend
+cp .env.production.example .env
+# Edit .env and replace every placeholder with unique production values.
+# Use a long URL-safe database password to avoid URL-encoding issues in DATABASE_URL.
+docker compose -f compose.production.yml config --quiet
+docker compose -f compose.production.yml up -d --build
+docker compose -f compose.production.yml ps
+curl -fsS http://127.0.0.1:8000/api/v1/health/ready
+```
+
+The API binds only to localhost port 8000. Put a TLS-enabled reverse proxy (for example, Nginx or Caddy) in front of it and proxy HTTPS traffic to `127.0.0.1:8000`. Do not expose PostgreSQL publicly. Restrict CORS to the actual HTTPS web admin origins; native Android requests do not use browser CORS enforcement.
+
+Create the first administrator only after the API and migrations are healthy. Run the bootstrap command from a trusted server terminal using environment variables, then remove the temporary password from the shell environment. Never place real credentials in GitHub commits, chat messages, or the repository.
+
+After deployment, configure the GitHub Actions repository variable `PARSIAN_API_BASE_URL` to the public HTTPS API base ending in `/api/v1`, then rebuild the Android app. Verify `/api/v1/health/ready`, administrator password rotation, a visitor login, and that a visitor cannot read another visitor's customers before onboarding staff.
+
+Back up PostgreSQL before upgrades. The Compose volume is persistent but is not a backup; configure encrypted off-host backups and test restores. Production deployment and device-level acceptance tests remain separate operational steps.
