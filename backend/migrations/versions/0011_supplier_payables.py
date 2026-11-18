@@ -9,7 +9,7 @@ from sqlalchemy.dialects import postgresql
 import uuid
 
 revision = "0011_supplier_payables"
-down_revision = "0010_opening_balance_unique"
+down_revision = "0010_unique_opening_balance"
 branch_labels = None
 depends_on = None
 
@@ -87,6 +87,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_constraint("fk_journal_lines_supplier_id_suppliers", "journal_lines", type_="foreignkey")
+    op.drop_index("ix_journal_lines_supplier_id", table_name="journal_lines")
+    op.drop_column("journal_lines", "supplier_id")
     op.execute("DELETE FROM journal_lines WHERE account_code = 'CHEQUES_PAYABLE'")
     op.execute("DELETE FROM accounting_accounts WHERE code = 'CHEQUES_PAYABLE'")
     op.drop_index("ix_supplier_payments_idempotency_key", table_name="supplier_payments")
@@ -104,5 +107,3 @@ def downgrade() -> None:
     op.drop_index("ix_suppliers_name", table_name="suppliers")
     op.drop_index("ix_suppliers_code", table_name="suppliers")
     op.drop_table("suppliers")
-    op.drop_index("ix_journal_lines_supplier_id", table_name="journal_lines")
-    op.drop_column("journal_lines", "supplier_id")
