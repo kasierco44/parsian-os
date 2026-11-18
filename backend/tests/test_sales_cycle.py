@@ -159,6 +159,7 @@ def test_opening_balance_schema_requires_balanced_lines_at_api_layer():
         ],
     )
     assert len(payload.lines) == 2
+    assert payload.lines[1].account_code == "EQUITY"
 
 
 def test_opening_balance_route_is_mounted():
@@ -185,3 +186,13 @@ def test_opening_balance_is_protected_by_partial_unique_index_migration():
     migration = Path("migrations/versions/0010_unique_opening_balance.py").read_text()
     assert "unique=True" in migration
     assert "source_type = 'opening_balance'" in migration
+
+
+def test_opening_balance_validation_and_ledger_use_calendar_dates():
+    from pathlib import Path
+
+    source = Path("app/api/routes/sales.py").read_text()
+    assert "دقیقاً یک مبلغ غیرصفر" in source
+    assert "from_date > to_date" in source
+    assert "end_exclusive" in source
+    assert "normal_balance == \"debit\"" not in source
