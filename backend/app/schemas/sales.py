@@ -149,3 +149,12 @@ class OpeningBalanceCreate(BaseModel):
     opening_date: date
     description: str = Field(default="مانده افتتاحیه", min_length=3, max_length=300)
     lines: list[OpeningBalanceLine] = Field(min_length=2, max_length=200)
+
+
+class ManualCashEntryCreate(BaseModel):
+    amount: int = Field(gt=0, le=10_000_000_000_000)
+    account_code: str = Field(min_length=1, max_length=40)
+    payment_account: str = Field(pattern=r"^(CASH|BANK)$")
+    description: str = Field(min_length=3, max_length=300)
+    entry_date: date
+    reference: str | None = Field(default=None, max_length=120)
