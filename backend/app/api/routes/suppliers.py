@@ -410,46 +410,6 @@ def list_supplier_payments(
     } for item in rows]
 
 
-@router.get("/{supplier_id}/ledger")
-def supplier_ledger(
-    supplier_id: UUID, from_date: date | None = None, to_date: date | None = None,
-    user: User = Depends(get_current_user), db: Session = Depends(get_db),
-):
-    if not _accounting(user):
-        raise HTTPException(status_code=403, detail="مشاهده دفتر تأمین‌کننده فقط برای مدیر یا حسابدار مجاز است.")
-    supplier = db.get(Supplier, supplier_id)
-    if supplier is None:
-        raise HTTPException(status_code=404, detail="تأمین‌کننده پیدا نشد.")
-    if from_date and to_date and from_date > to_date:
-        raise HTTPException(status_code=422, detail="ابتدای بازه نباید بعد از انتهای بازه باشد.")
-    base = select(JournalLine, JournalEntry).join(
-        JournalEntry, JournalEntry.id == JournalLine.entry_id
-    ).where(JournalLine.supplier_id == supplier.id)
-    opening_balance = 0
-    if from_date:
-        start_at = datetime.combine(from_date, time.min, tzinfo=timezone.utc)
-        opening_balance = int(db.scalar(select(func.coalesce(func.sum(JournalLine.credit - JournalLine.debit), 0)).join(
-            JournalEntry, JournalEntry.id == JournalLine.entry_id
-        ).where(JournalLine.supplier_id == supplier.id, JournalEntry.posted_at < start_at)) or 0)
-        base = base.where(JournalEntry.posted_at >= start_at)
-    if to_date:
-        end_exclusive = datetime.combine(date.fromordinal(to_date.toordinal() + 1), time.min, tzinfo=timezone.utc)
-        base = base.where(JournalEntry.posted_at < end_exclusive)
-    rows = db.execute(base.order_by(JournalEntry.posted_at.asc(), JournalEntry.entry_number.asc())).all()
-    balance = opening_balance
-    entries = []
-    for line, entry in rows:
-        balance += line.credit - line.debit
-        entries.append({
-            "entry_number": entry.entry_number, "date": entry.posted_at,
-            "description": entry.description, "account_code": line.account_code,
-            "debit": line.debit, "credit": line.credit, "payable_running_balance": balance,
-        })
-    return {"supplier_id": str(supplier.id), "supplier_code": supplier.code,
-            "supplier_name": supplier.name, "opening_payable_balance": opening_balance,
-            "entries": entries, "closing_payable_balance": balance}
-
-
 @router.get("/reports/cash-flow")
 def supplier_cash_flow(
     from_date: date | None = None, to_date: date | None = None,
@@ -507,3 +467,43 @@ def supplier_cash_flow(
         ).all()),
         "note": "پیش‌بینی بر اساس سررسید بدهی‌های ثبت‌شده و چک‌های صادرشده است؛ این گزارش تعهدات ثبت‌نشده و جریان‌های نقدی خارج از دفاتر را پوشش نمی‌دهد.",
     }
+
+
+@router.get("/{supplier_id}/ledger")
+def supplier_ledger(
+    supplier_id: UUID, from_date: date | None = None, to_date: date | None = None,
+    user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    if not _accounting(user):
+        raise HTTPException(status_code=403, detail="مشاهده دفتر تأمین‌کننده فقط برای مدیر یا حسابدار مجاز است.")
+    supplier = db.get(Supplier, supplier_id)
+    if supplier is None:
+        raise HTTPException(status_code=404, detail="تأمین‌کننده پیدا نشد.")
+    if from_date and to_date and from_date > to_date:
+        raise HTTPException(status_code=422, detail="ابتدای بازه نباید بعد از انتهای بازه باشد.")
+    base = select(JournalLine, JournalEntry).join(
+        JournalEntry, JournalEntry.id == JournalLine.entry_id
+    ).where(JournalLine.supplier_id == supplier.id)
+    opening_balance = 0
+    if from_date:
+        start_at = datetime.combine(from_date, time.min, tzinfo=timezone.utc)
+        opening_balance = int(db.scalar(select(func.coalesce(func.sum(JournalLine.credit - JournalLine.debit), 0)).join(
+            JournalEntry, JournalEntry.id == JournalLine.entry_id
+        ).where(JournalLine.supplier_id == supplier.id, JournalEntry.posted_at < start_at)) or 0)
+        base = base.where(JournalEntry.posted_at >= start_at)
+    if to_date:
+        end_exclusive = datetime.combine(date.fromordinal(to_date.toordinal() + 1), time.min, tzinfo=timezone.utc)
+        base = base.where(JournalEntry.posted_at < end_exclusive)
+    rows = db.execute(base.order_by(JournalEntry.posted_at.asc(), JournalEntry.entry_number.asc())).all()
+    balance = opening_balance
+    entries = []
+    for line, entry in rows:
+        balance += line.credit - line.debit
+        entries.append({
+            "entry_number": entry.entry_number, "date": entry.posted_at,
+            "description": entry.description, "account_code": line.account_code,
+            "debit": line.debit, "credit": line.credit, "payable_running_balance": balance,
+        })
+    return {"supplier_id": str(supplier.id), "supplier_code": supplier.code,
+            "supplier_name": supplier.name, "opening_payable_balance": opening_balance,
+            "entries": entries, "closing_payable_balance": balance}
