@@ -1,0 +1,24 @@
+name: WordPress Finance Plugin
+on:
+  push:
+    branches:
+      - feat/wordpress-finance-plugin
+  pull_request:
+    paths:
+      - 'wordpress/parsian-finance/**'
+      - '.github/workflows/wordpress-finance.yml'
+jobs:
+  php-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: PHP syntax check
+        run: php -l wordpress/parsian-finance/parsian-finance.php
+      - name: Build plugin ZIP
+        run: |
+          cd wordpress
+          zip -r parsian-finance.zip parsian-finance
+      - uses: actions/upload-artifact@v4
+        with:
+          name: parsian-finance-wordpress-plugin
+          path: wordpress/parsian-finance.zip
