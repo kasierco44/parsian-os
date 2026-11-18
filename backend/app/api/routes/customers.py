@@ -8,7 +8,7 @@ from app.api.routes.auth import get_current_user
 from app.db.session import get_db
 from app.models.customer import Customer
 from app.models.identity import User
-from app.schemas.customer import CustomerCreate, CustomerRead
+from app.schemas.customer import CustomerCreate, CustomerRead, CustomerUpdate
 from app.services.audit import record_audit_event
 from app.services.replication import record_replication_event
 
@@ -51,6 +51,34 @@ def create_customer(payload: CustomerCreate, user: User = Depends(get_current_us
     customer.replication_version = 1
     record_replication_event(db, entity_type="customer", entity_id=str(customer.id), version=customer.replication_version, payload=_replication_payload(customer))
     record_audit_event(db, action="customer_created", entity_type="customer", actor_user_id=user.id, entity_id=str(customer.id), details={"name": customer.name})
+    db.commit()
+    db.refresh(customer)
+    return customer
+
+
+@router.patch("/{customer_id}", response_model=CustomerRead)
+def update_customer(customer_id: UUID, payload: CustomerUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    statement = select(Customer).where(Customer.id == customer_id)
+    if not _can_manage_all(user):
+        statement = statement.where(Customer.assigned_to_user_id == user.id)
+    customer = db.scalar(statement)
+    if customer is None:
+        raise HTTPException(status_code=404, detail="مشتری پیدا نشد یا به آن دسترسی ندارید.")
+    changes = payload.model_dump(exclude_unset=True)
+    if "assigned_to_user_id" in changes:
+        if not _can_manage_all(user):
+            raise HTTPException(status_code=403, detail="تغییر مسئول مشتری فقط برای مدیر مجاز است.")
+        assignee = db.get(User, changes.pop("assigned_to_user_id"))
+        if assignee is None or not assignee.is_active:
+            raise HTTPException(status_code=404, detail="ویزیتور مقصد معتبر نیست.")
+        customer.assigned_to = assignee
+        customer.assigned_to_user_id = assignee.id
+    for key, value in changes.items():
+        setattr(customer, key, value)
+    customer.replication_version += 1
+    db.flush()
+    record_replication_event(db, entity_type="customer", entity_id=str(customer.id), version=customer.replication_version, payload=_replication_payload(customer), deleted=not customer.is_active)
+    record_audit_event(db, action="customer_updated", entity_type="customer", actor_user_id=user.id, entity_id=str(customer.id), details={"fields": sorted(payload.model_fields_set)})
     db.commit()
     db.refresh(customer)
     return customer
