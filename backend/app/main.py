@@ -10,7 +10,8 @@ from app.api.routes.catalog import router as catalog_router
 from app.api.routes.replication import router as replication_router
 from app.api.routes.health import router as system_router
 from app.api.routes.sync import router as sync_router
-from app.api.routes.users import router as users_router\nfrom app.api.routes.sales import router as sales_router
+from app.api.routes.users import router as users_router
+from app.api.routes.sales import router as sales_router
 from app.core.config import get_settings
 
 settings = get_settings()
