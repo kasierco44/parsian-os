@@ -177,3 +177,11 @@ def test_journal_line_account_code_references_chart_of_accounts():
 def test_account_ledger_endpoint_is_mounted():
     paths = {route.path for route in app.routes}
     assert "/api/v1/sales/accounting/account-ledger/{account_code}" in paths
+
+
+def test_opening_balance_is_protected_by_partial_unique_index_migration():
+    from pathlib import Path
+
+    migration = Path("migrations/versions/0010_unique_opening_balance.py").read_text()
+    assert "unique=True" in migration
+    assert "source_type = 'opening_balance'" in migration
