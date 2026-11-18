@@ -5,7 +5,6 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import get_current_user
 from app.core.audit import record_audit
 from app.core.authorization import require_permission, require_superuser
 from app.core.security import hash_password
