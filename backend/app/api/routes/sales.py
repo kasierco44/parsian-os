@@ -717,3 +717,52 @@ def post_opening_balance(
         "opening_date": payload.opening_date, "total_debit": total_debit,
         "total_credit": total_credit, "status": "posted",
     }
+
+
+@router.get("/accounting/account-ledger/{account_code}")
+def get_account_ledger(
+    account_code: str,
+    from_date: datetime | None = None,
+    to_date: datetime | None = None,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not _accounting(user):
+        raise HTTPException(status_code=403, detail="مشاهده دفتر حساب فقط برای مدیر یا حسابدار مجاز است.")
+    account = db.scalar(select(AccountingAccount).where(
+        AccountingAccount.code == account_code,
+        AccountingAccount.is_active.is_(True),
+    ))
+    if account is None:
+        raise HTTPException(status_code=404, detail="سرفصل فعال پیدا نشد.")
+    if db.scalar(select(AccountingAccount.code).where(AccountingAccount.parent_code == account.code)):
+        raise HTTPException(status_code=422, detail="برای مشاهده گردش، حساب معین را انتخاب کنید نه حساب گروه.")
+    base = select(JournalLine, JournalEntry).join(
+        JournalEntry, JournalEntry.id == JournalLine.entry_id
+    ).where(JournalLine.account_code == account.code)
+    opening = 0
+    if from_date:
+        prior = db.execute(base.where(JournalEntry.posted_at < from_date)).all()
+        opening = sum(line.debit - line.credit for line, _entry in prior)
+    statement = base
+    if from_date:
+        statement = statement.where(JournalEntry.posted_at >= from_date)
+    if to_date:
+        statement = statement.where(JournalEntry.posted_at <= to_date)
+    rows = db.execute(statement.order_by(
+        JournalEntry.posted_at.asc(), JournalEntry.entry_number.asc()
+    )).all()
+    balance = opening
+    entries = []
+    for line, entry in rows:
+        balance += line.debit - line.credit
+        entries.append({
+            "entry_number": entry.entry_number, "date": entry.posted_at,
+            "description": entry.description, "debit": line.debit,
+            "credit": line.credit, "running_balance": balance,
+        })
+    return {
+        "account_code": account.code, "account_name": account.name,
+        "account_type": account.account_type, "normal_balance": account.normal_balance,
+        "opening_balance": opening, "entries": entries, "closing_balance": balance,
+    }
