@@ -4,7 +4,7 @@ import { ApiError } from "./client";
 const API_PREFIX = "/sync";
 
 async function syncRequest(path, { token, method = "GET", body } = {}) {
-  const base = (process.env.EXPO_PUBLIC_API_BASE_URL || "").replace(/\\/+$/, "");
+  const base = (process.env.EXPO_PUBLIC_API_BASE_URL || "").replace(/\/+$/, "");
   if (!base) throw new ApiError("نشانی API تنظیم نشده است.");
   let response;
   try {
@@ -26,8 +26,9 @@ export async function queueOfflineChange(change) {
 }
 
 export async function synchronize({ token, batchSize = 50 } = {}) {
-  const pending = (await getPendingOperations(batchSize)).map(row => ({
-    id: row.id, entity_type: row.entity_type, operation: row.operation,
+  const pendingRows = await getPendingOperations(batchSize);
+  const pending = pendingRows.filter(row => row.entity_id).map(row => ({
+    id: row.id, entity_type: row.entity_type, entity_id: row.entity_id, operation: row.operation,
     payload: JSON.parse(row.payload), base_version: row.base_version, client_created_at: row.created_at,
   }));
   let pushed = { results: [] };
@@ -41,7 +42,7 @@ export async function synchronize({ token, batchSize = 50 } = {}) {
   }
 
   const cursor = await getSyncCursor();
-  const pulled = await syncRequest(`/pull${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, { token });
+  const pulled = await syncRequest(`/pull?cursor=${encodeURIComponent(cursor || "0")}`, { token });
   for (const change of pulled.changes || []) {
     await cacheRecord(change.entity_type, change.entity_id, change.payload, change.version, change.deleted);
   }
