@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PARSIAN OS Finance
  * Description: پنل مالی تأمین‌کنندگان پارسیان قطعه
- * Version: 0.1.0
+ * Version: 0.2.0
  * Requires at least: 6.2
  * Requires PHP: 7.4
  */
@@ -60,7 +60,7 @@ final class Parsian_OS_Finance {
     function bills(){global $wpdb;return rest_ensure_response($wpdb->get_results("SELECT b.*,s.name supplier_name FROM {$this->t['b']} b JOIN {$this->t['s']} s ON s.id=b.supplier_id ORDER BY b.id DESC LIMIT 500",ARRAY_A));}
     function payments(){global $wpdb;return rest_ensure_response($wpdb->get_results("SELECT p.*,s.name supplier_name FROM {$this->t['p']} p JOIN {$this->t['s']} s ON s.id=p.supplier_id ORDER BY p.id DESC LIMIT 500",ARRAY_A));}
     function summary(){global $wpdb;$b=(int)$wpdb->get_var("SELECT COALESCE(SUM(amount),0) FROM {$this->t['b']}");$p=(int)$wpdb->get_var("SELECT COALESCE(SUM(amount),0) FROM {$this->t['p']} WHERE status='paid'");$c=(int)$wpdb->get_var("SELECT COALESCE(SUM(amount),0) FROM {$this->t['p']} WHERE status='issued'");return rest_ensure_response(array('bills'=>$b,'paid'=>$p,'balance'=>max(0,$b-$p),'cheques'=>$c));}
-    function css(){return '#parsian-finance{direction:rtl;font:14px Tahoma,Arial;max-width:1100px;color:#20242b}.pfgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.pfcard{background:#fff;border:1px solid #ddd;border-radius:12px;padding:15px;margin:12px 0}.pfbtn{background:#991b1b;color:#fff;border:0;border-radius:8px;padding:12px 16px;min-height:44px;cursor:pointer}.pfbtn.alt{background:#eee;color:#222}.pfnav{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0}.pfform{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.pfform label{display:flex;flex-direction:column;gap:5px}.pfform input,.pfform select{min-height:42px;border:1px solid #ccc;border-radius:7px;padding:8px}.pftable{width:100%;border-collapse:collapse;min-width:600px}.pftable td,.pftable th{padding:10px;border-bottom:1px solid #ddd;text-align:right}.pfscroll{overflow:auto}.pfmsg{padding:12px;background:#fff4e5;margin:10px 0}';}
+    function css(){return '#parsian-finance{direction:rtl;font:14px Tahoma,Arial;max-width:1100px;color:#20242b}.pfgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.pfcard{background:#fff;border:1px solid #ddd;border-radius:12px;padding:15px;margin:12px 0}.pfbtn{background:#991b1b;color:#fff;border:0;border-radius:8px;padding:12px 16px;min-height:44px;cursor:pointer}.pfbtn.alt{background:#eee;color:#222}.pfnav{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0}.pfform{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.pfform label{display:flex;flex-direction:column;gap:5px}.pfform input,.pfform select{min-height:42px;border:1px solid #ccc;border-radius:7px;padding:8px}.pftable{width:100%;border-collapse:collapse;min-width:600px}.pftable td,.pftable th{padding:10px;border-bottom:1px solid #ddd;text-align:right}.pfscroll{overflow:auto}.pfmsg{padding:12px;background:#fff4e5;margin:10px 0}.pfauth{border:1px solid #cbd5e1;background:#f8fafc;border-radius:12px;padding:14px;margin:12px 0}.pfauth form{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.pfauth label{display:flex;flex-direction:column;gap:4px}.pfauth input{min-height:38px;border:1px solid #cbd5e1;border-radius:6px;padding:6px}';}
     function js(){return <<<'JS'
 (function(){
 var el=document.getElementById('parsian-finance');if(!el||!window.PF)return;var tab='home',data={s:[],b:[],p:[]},msg='';
@@ -68,16 +68,32 @@ function esc(x){return String(x==null?'':x).replace(/[&<>"']/g,function(c){retur
 function money(x){return new Intl.NumberFormat('fa-IR').format(Number(x||0))+' ریال';}
 function api(path,method,body){return fetch(PF.root+path,{method:method||'GET',credentials:'same-origin',headers:{'Content-Type':'application/json','X-WP-Nonce':PF.nonce},body:body?JSON.stringify(body):undefined}).then(function(r){return r.json().then(function(d){if(!r.ok)throw Error(d.message||'خطا');return d;});});}
 function form(id,html){return '<form class="pfform" id="'+id+'">'+html+'<button class="pfbtn">ثبت</button></form>';}
+function authBox(){
+var box=document.getElementById('pf-backend-auth');if(!box)return;
+api('backend/session').then(function(s){
+if(s.connected&&s.password_change_required){
+box.innerHTML='<b>تغییر رمز اولیه Backend الزامی است</b><form id="pf-backend-password"><label>رمز فعلی<input name="current_password" type="password" required autocomplete="current-password"></label><label>رمز جدید (حداقل ۱۲ نویسه)<input name="new_password" type="password" minlength="12" required autocomplete="new-password"></label><button class="pfbtn">تغییر رمز</button></form>';
+var pf=document.getElementById('pf-backend-password');pf.onsubmit=function(e){e.preventDefault();var d=new FormData(pf);api('backend/password','POST',{current_password:d.get('current_password'),new_password:d.get('new_password')}).then(function(){msg='رمز Backend با موفقیت تغییر کرد.';authBox();}).catch(function(x){box.innerHTML='<div class="pfmsg">'+esc(x.message)+'</div>';});};
+}else if(s.connected){
+var who=s.identity||{};box.innerHTML='<b>هویت مرکزی متصل است</b> — '+esc(who.full_name||who.username||'کاربر')+' <small>('+esc((who.role_codes||[]).join('، '))+')</small> <button type="button" class="pfbtn alt" id="pf-backend-logout">خروج از Backend</button>';
+document.getElementById('pf-backend-logout').onclick=function(){api('backend/logout','DELETE').then(function(){authBox();}).catch(function(x){box.innerHTML=esc(x.message);});};
+}else{
+box.innerHTML='<b>ورود مستقل به PARSIAN OS Backend</b><form id="pf-backend-login"><label>نام کاربری Backend<input name="username" autocomplete="username" required></label><label>رمز عبور Backend<input name="password" type="password" autocomplete="current-password" required></label><button class="pfbtn">ورود امن</button></form><small>توکن ورود فقط در سرور وردپرس نگهداری می‌شود و به مرورگر ارسال نمی‌شود.</small>';
+var lf=document.getElementById('pf-backend-login');lf.onsubmit=function(e){e.preventDefault();var d=new FormData(lf);var b=lf.querySelector('button');b.disabled=true;api('backend/login','POST',{username:d.get('username'),password:d.get('password')}).then(function(){msg='ورود Backend انجام شد.';authBox();}).catch(function(x){box.innerHTML='<div class="pfmsg">'+esc(x.message)+'</div>';authBox();});};
+}
+}).catch(function(x){box.innerHTML='<div class="pfmsg">اتصال Backend آماده نیست: '+esc(x.message)+'</div>';});
+}
+
 function sel(label,name,arr){return '<label>'+label+'<select name="'+name+'">'+arr.map(function(x){return '<option value="'+x[0]+'">'+esc(x[1])+'</option>';}).join('')+'</select></label>';}
 function inp(label,name,type,req){return '<label>'+label+'<input name="'+name+'" type="'+(type||'text')+'" '+(req?'required':'')+'></label>';}
 function table(head,rows){return '<div class="pfscroll"><table class="pftable"><thead><tr>'+head.map(function(x){return '<th>'+x+'</th>';}).join('')+'</tr></thead><tbody>'+(rows||'<tr><td colspan="'+head.length+'">موردی ثبت نشده است.</td></tr>')+'</tbody></table></div>';}
 function load(){return Promise.all([api('suppliers'),api('bills'),api('payments')]).then(function(v){data.s=v[0];data.b=v[1];data.p=v[2];render();});}
-function render(){var nav=[['home','داشبورد'],['sup','تأمین‌کنندگان'],['bill','ثبت بدهی'],['pay','پرداخت و چک']];var h='<h2>پارسیان OS | پنل مالی</h2><p>مدیریت بدهی و پرداخت تأمین‌کنندگان</p>'+(msg?'<div class="pfmsg">'+esc(msg)+'</div>':'')+'<div class="pfnav">'+nav.map(function(n){return '<button class="pfbtn '+(tab===n[0]?'':'alt')+'" data-tab="'+n[0]+'">'+n[1]+'</button>';}).join('')+'</div>';
+function render(){var nav=[['home','داشبورد'],['sup','تأمین‌کنندگان'],['bill','ثبت بدهی'],['pay','پرداخت و چک']];var h='<h2>پارسیان OS | پنل مالی</h2><p>مدیریت بدهی و پرداخت تأمین‌کنندگان</p><div class="pfauth" id="pf-backend-auth">در حال بررسی نشست Backend...</div>'+(msg?'<div class="pfmsg">'+esc(msg)+'</div>':'')+'<div class="pfnav">'+nav.map(function(n){return '<button class="pfbtn '+(tab===n[0]?'':'alt')+'" data-tab="'+n[0]+'">'+n[1]+'</button>';}).join('')+'</div>';
 if(tab==='home')h+='<div class="pfgrid" id="pfkpi"></div>';
 if(tab==='sup')h+='<div class="pfcard"><b>ثبت تأمین‌کننده</b>'+form('fs',inp('نام','name','text',true)+inp('تلفن','phone'))+'</div><div class="pfcard"><b>تأمین‌کنندگان</b>'+table(['نام','تلفن','جمع بدهی','پرداخت قطعی','مانده'],data.s.map(function(x){return '<tr><td>'+esc(x.name)+'</td><td>'+esc(x.phone)+'</td><td>'+money(x.bills)+'</td><td>'+money(x.paid)+'</td><td>'+money(x.balance)+'</td></tr>';}).join(''))+'</div>';
 if(tab==='bill')h+='<div class="pfcard"><b>ثبت بدهی یا مانده افتتاحیه</b>'+form('fb',sel('تأمین‌کننده','supplier_id',data.s.map(function(x){return [x.id,x.name];}))+inp('شرح','description','text',true)+inp('مبلغ به ریال','amount','number',true)+inp('شماره سند','document_no')+inp('سررسید','due_date','date')+(PF.opening?sel('نوع','bill_type',[['bill','بدهی جدید'],['opening','مانده افتتاحیه']]):''))+'</div><div class="pfcard">'+table(['تأمین‌کننده','شرح','مبلغ','سررسید'],data.b.map(function(x){return '<tr><td>'+esc(x.supplier_name)+'</td><td>'+esc(x.description)+'</td><td>'+money(x.amount)+'</td><td>'+esc(x.due_date)+'</td></tr>';}).join(''))+'</div>';
 if(tab==='pay')h+='<div class="pfcard"><b>ثبت پرداخت</b>'+form('fp',sel('تأمین‌کننده','supplier_id',data.s.map(function(x){return [x.id,x.name];}))+sel('روش','method',[['cash','نقدی'],['bank','بانکی'],['cheque','چک']])+inp('مبلغ به ریال','amount','number',true)+inp('تاریخ','paid_at','date',true)+inp('سررسید چک','due_date','date')+inp('شماره پیگیری / چک','reference_no'))+'</div><div class="pfcard">'+table(['تأمین‌کننده','روش','مبلغ','سررسید','وضعیت','عملیات'],data.p.map(function(x){return '<tr><td>'+esc(x.supplier_name)+'</td><td>'+esc(x.method)+'</td><td>'+money(x.amount)+'</td><td>'+esc(x.due_date)+'</td><td>'+esc(x.status)+'</td><td>'+(x.status==='issued'?'<button class="pfbtn" data-status="paid" data-id="'+x.id+'">پاس شد</button> <button class="pfbtn alt" data-status="bounced" data-id="'+x.id+'">برگشت</button>':'—')+'</td></tr>';}).join(''))+'</div>';
-el.innerHTML=h;el.querySelectorAll('[data-tab]').forEach(function(b){b.onclick=function(){tab=b.dataset.tab;msg='';render();};});
+el.innerHTML=h;authBox();el.querySelectorAll('[data-tab]').forEach(function(b){b.onclick=function(){tab=b.dataset.tab;msg='';render();};});
 if(tab==='home')api('summary').then(function(s){var k=document.getElementById('pfkpi');if(k)k.innerHTML=[['جمع بدهی',s.bills],['پرداخت قطعی',s.paid],['مانده',s.balance],['چک صادرشده',s.cheques]].map(function(x){return '<div class="pfcard"><small>'+x[0]+'</small><h2>'+money(x[1])+'</h2></div>';}).join('');});
 function submit(id,path){var f=document.getElementById(id);if(!f)return;f.onsubmit=function(e){e.preventDefault();var o={};new FormData(f).forEach(function(v,k){o[k]=v;});api(path,'POST',o).then(function(){msg='ثبت با موفقیت انجام شد.';return load();}).catch(function(x){msg='خطا: '+x.message;render();});};}
 submit('fs','suppliers');submit('fb','bills');submit('fp','payments');
@@ -89,3 +105,5 @@ JS;}
 }
 register_activation_hook(__FILE__,array('Parsian_OS_Finance','activate'));
 new Parsian_OS_Finance();
+require_once __DIR__ . '/backend-bridge.php';
+new Parsian_OS_Backend_Bridge();
