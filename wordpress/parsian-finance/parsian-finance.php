@@ -40,7 +40,8 @@ final class Parsian_OS_Finance {
     function assets($hook){if($hook==='toplevel_page_parsian-finance')$this->enqueue_assets();}
     private function enqueue_assets(){wp_register_style('parsian-finance',false);wp_enqueue_style('parsian-finance');wp_add_inline_style('parsian-finance',$this->css());wp_register_script('parsian-finance',false,array(), '0.1.0',true);wp_enqueue_script('parsian-finance');wp_add_inline_script('parsian-finance','window.PF='.wp_json_encode(array('root'=>rest_url('parsian-finance/v1/'),'nonce'=>wp_create_nonce('wp_rest'),'opening'=>current_user_can(self::OPEN))).';'.$this->js());}
     function ok(){return current_user_can(self::VIEW);}
-    function edit(){return current_user_can(self::EDIT);}
+    // Legacy WordPress-local write routes are disabled; all finance writes must go through the authenticated Backend proxy.
+    function edit(){return false;}
     function opening(){return current_user_can(self::OPEN);}
     function routes(){
         register_rest_route('parsian-finance/v1','/suppliers',array(array('methods'=>'GET','callback'=>array($this,'suppliers'),'permission_callback'=>array($this,'ok')),array('methods'=>'POST','callback'=>array($this,'add_supplier'),'permission_callback'=>array($this,'edit'))));
