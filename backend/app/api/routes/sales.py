@@ -224,6 +224,9 @@ def issue_invoice(order_id: UUID, user: User = Depends(get_current_user), db: Se
         return existing
     if order.status != "approved":
         raise HTTPException(status_code=409, detail="ابتدا باید سفارش تأیید مدیر را دریافت کند.")
+    customer = db.get(Customer, order.customer_id)
+    if customer is None or not customer.is_active:
+        raise HTTPException(status_code=409, detail="مشتری سفارش غیرفعال شده است؛ امکان صدور فاکتور وجود ندارد.")
     invoice = SalesInvoice(
         invoice_number=_number("INV"), order_id=order.id, customer_id=order.customer_id,
         seller_user_id=order.seller_user_id, total_amount=order.total_amount,
@@ -237,8 +240,8 @@ def issue_invoice(order_id: UUID, user: User = Depends(get_current_user), db: Se
     ]
     for line in order.lines:
         product = db.get(Product, line.product_id)
-        if product is None:
-            raise HTTPException(status_code=409, detail="محصول سفارش دیگر موجود نیست.")
+        if product is None or not product.is_active:
+            raise HTTPException(status_code=409, detail="محصول سفارش حذف یا غیرفعال شده است.")
         if product.track_inventory:
             if product.cost_price is None:
                 raise HTTPException(status_code=409, detail=f"بهای تمام‌شده محصول {product.name} تعریف نشده است.")
