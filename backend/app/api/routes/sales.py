@@ -711,7 +711,11 @@ def post_opening_balance(
         actor_user_id=user.id, entity_id=str(entry.id),
         details={"opening_date": payload.opening_date.isoformat(), "total_debit": total_debit, "line_count": len(payload.lines)},
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="مانده افتتاحیه همزمان توسط کاربر دیگری ثبت شده است.") from None
     return {
         "entry_id": str(entry.id), "entry_number": entry.entry_number,
         "opening_date": payload.opening_date, "total_debit": total_debit,
