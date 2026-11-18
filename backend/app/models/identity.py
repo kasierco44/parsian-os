@@ -38,6 +38,10 @@ class User(Base):
 
     roles: Mapped[list["Role"]] = relationship(secondary=user_roles, back_populates="users", lazy="selectin")
 
+    @property
+    def role_codes(self) -> list[str]:
+        return [role.code for role in self.roles]
+
 
 class Role(Base):
     __tablename__ = "roles"
