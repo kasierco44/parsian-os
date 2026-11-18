@@ -99,3 +99,30 @@ def test_monthly_commission_tiers_are_progressive(already, amount, expected_comm
         SimpleNamespace(is_active=True, min_collected_amount=500, rate_bps=200),
     ]
     assert _calculate_progressive_commission(already, amount, tiers) == (expected_commission, expected_rate)
+
+def test_commission_accrual_serializes_monthly_calculation_per_seller():
+    from app.api.routes.sales import _accrue_commission
+
+    seller_id = uuid4()
+    statements = []
+
+    class FakeDB:
+        def scalar(self, statement):
+            statements.append(statement)
+            return SimpleNamespace(id=seller_id) if len(statements) == 1 else 0
+
+        def scalars(self, statement):
+            return SimpleNamespace(all=lambda: [])
+
+        def add(self, value):
+            pass
+
+    _accrue_commission(
+        FakeDB(),
+        receipt=SimpleNamespace(id=uuid4(), amount=500),
+        invoice=SimpleNamespace(seller_user_id=seller_id, customer_id=uuid4(), invoice_number="INV-TEST"),
+    )
+
+    assert len(statements) == 2
+    assert statements[0]._for_update_arg is not None
+
