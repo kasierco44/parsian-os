@@ -61,6 +61,7 @@ class PaymentReceipt(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     receipt_number: Mapped[str] = mapped_column(String(40), unique=True, index=True, nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(String(120), unique=True, index=True)
     invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sales_invoices.id", ondelete="RESTRICT"), nullable=False, index=True)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     method: Mapped[str] = mapped_column(String(24), nullable=False)
