@@ -18,6 +18,8 @@ class Product(Base):
     vehicle_model: Mapped[str | None] = mapped_column(String(120))
     description: Mapped[str | None] = mapped_column(Text)
     unit_price: Mapped[int | None] = mapped_column(Integer)
+    cost_price: Mapped[int | None] = mapped_column(Integer)
+    track_inventory: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     catalog_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     replication_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
