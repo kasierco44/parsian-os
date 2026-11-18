@@ -300,7 +300,7 @@ export default function App() {
     setSyncBusy(true);
     try {
       const syncResult = await synchronize({ token: apiToken });
-      setSyncConflictCount(syncResult.conflicts || 0);
+      setSyncConflictCount((await getConflictedOperations()).length);
       const rows = await getCustomers({ token: apiToken, query: search });
       const mapped = rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" }));
       setCustomers(mapped);
