@@ -27,6 +27,15 @@ def push_operations(payload: SyncPushIn, user: User = Depends(get_current_user),
         ))
         if prior is not None:
             if item.entity_type == "customer":
+            latest_customer_event = db.scalar(select(SyncRecord).where(
+                SyncRecord.owner_user_id == user.id,
+                SyncRecord.entity_type == "customer",
+                SyncRecord.entity_id == item.entity_id,
+            ).order_by(SyncRecord.id.desc()).limit(1))
+            current_customer_version = latest_customer_event.version if latest_customer_event else 0
+            if item.base_version is not None and item.base_version != current_customer_version:
+                results.append(SyncOperationResult(id=item.id, status="conflict", version=current_customer_version, message="نسخه مشتری روی سرور تغییر کرده است؛ تغییرات نیازمند بررسی است."))
+                continue
             try:
                 customer_id = UUID(item.entity_id)
             except ValueError:
