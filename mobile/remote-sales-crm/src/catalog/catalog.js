@@ -44,12 +44,14 @@ export async function synchronizeCatalog(token) {
   for (const product of manifest.products || []) {
     const existing = productMap.get(String(product.id)) || {};
     const merged = { ...existing, ...product };
-    productMap.set(String(product.id), merged);
-    await cacheRecord("product", String(product.id), merged, product.catalog_version, false);
+    if (product.is_active === false) productMap.delete(String(product.id));
+    else productMap.set(String(product.id), merged);
+    await cacheRecord("product", String(product.id), merged, product.catalog_version, product.is_active === false);
   }
   for (const media of manifest.media || []) {
-    const uri = await downloadCatalogMedia({ token, media });
     const product = productMap.get(String(media.product_id));
+    if (!product) continue;
+    const uri = await downloadCatalogMedia({ token, media });
     if (product) {
       product.image_uri = uri;
       await cacheRecord("product", String(product.id), product, product.catalog_version, false);
