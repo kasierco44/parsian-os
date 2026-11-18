@@ -32,6 +32,13 @@ Set `DATABASE_URL` to PostgreSQL and replace `JWT_SECRET` with a long random sec
 - `POST /api/v1/catalog/products`, `PATCH /api/v1/catalog/products/{id}`: manager-only catalog management.
 - `POST /api/v1/catalog/products/{id}/media`: manager-only raw image/PDF upload (12 MiB maximum; send the MIME type and `X-File-Name` headers).
 - `GET /api/v1/catalog/media/{id}/download`: authenticated private media download.
+- `POST /api/v1/sales/orders`: create a multi-line seller order using active catalog products and price snapshots.
+- `POST /api/v1/sales/orders/{id}/submit`, `POST /api/v1/sales/orders/{id}/approve`, `POST /api/v1/sales/orders/{id}/reject`: manager approval workflow.
+- `POST /api/v1/sales/orders/{id}/invoice`: manager-only final invoice issuance after approval; tracked stock is checked and deducted in the same database transaction.
+- `POST /api/v1/sales/invoices/{id}/receipts`: cash, bank transfer or cheque receipt. Send a unique `Idempotency-Key` header (12–120 characters) for safe retries.
+- `POST /api/v1/sales/cheques/{id}/clear` and `POST /api/v1/sales/cheques/{id}/bounce`: accountant/manager settlement. A cheque is not counted as collected until cleared.
+- `GET/POST /api/v1/sales/commission/tiers`: manager-configured collection-based commission tiers.
+- `POST /api/v1/sales/inventory/adjustments`, `GET /api/v1/sales/inventory/balances`: accountant/manager stock corrections and balances.
 
 Sellers receive only customers assigned to their user ID. Product stock and accounting balances are not included in the seller catalog API.
 
@@ -42,7 +49,7 @@ alembic upgrade head
 alembic current
 ```
 
-The migration chain creates identity/audit, offline sync, assigned customers, and the versioned product catalog. Back up the database before applying migrations to an existing environment.
+The migration chain creates identity/audit, offline sync, assigned customers, the versioned product catalog, two-node replication, order-to-cash tables, and unique payment idempotency keys. Back up the database before applying migrations to an existing environment.
 
 ## Docker deployment (single node)
 
@@ -73,4 +80,4 @@ The sync journal is currently user-scoped. Cross-user assigned-record replicatio
 pytest -q
 ```
 
-Automated tests cover password/token utilities, schema validation, route registration, and migration revision continuity. Database-backed integration tests, real PostgreSQL migration/rollback tests, role-isolation tests, and end-to-end offline recovery tests remain release gates.
+Automated tests cover password/token utilities, schema validation, sales route registration, invoice collection states, balanced journal validation, payment idempotency mapping, and migration revision continuity. Database-backed integration tests, real PostgreSQL migration/rollback tests, concurrency/idempotency tests, role-isolation tests, and end-to-end offline recovery tests remain release gates.
