@@ -360,17 +360,21 @@ def supplier_ledger(
         raise HTTPException(status_code=404, detail="تأمین‌کننده پیدا نشد.")
     if from_date and to_date and from_date > to_date:
         raise HTTPException(status_code=422, detail="ابتدای بازه نباید بعد از انتهای بازه باشد.")
-    statement = select(JournalLine, JournalEntry).join(
+    base = select(JournalLine, JournalEntry).join(
         JournalEntry, JournalEntry.id == JournalLine.entry_id
-    ).where(JournalLine.supplier_id == supplier.id).order_by(
-        JournalEntry.posted_at.asc(), JournalEntry.entry_number.asc()
-    )
+    ).where(JournalLine.supplier_id == supplier.id)
+    opening_balance = 0
     if from_date:
-        statement = statement.where(JournalEntry.posted_at >= datetime.combine(from_date, time.min, tzinfo=timezone.utc))
+        start_at = datetime.combine(from_date, time.min, tzinfo=timezone.utc)
+        opening_balance = int(db.scalar(select(func.coalesce(func.sum(JournalLine.credit - JournalLine.debit), 0)).join(
+            JournalEntry, JournalEntry.id == JournalLine.entry_id
+        ).where(JournalLine.supplier_id == supplier.id, JournalEntry.posted_at < start_at)) or 0)
+        base = base.where(JournalEntry.posted_at >= start_at)
     if to_date:
-        statement = statement.where(JournalEntry.posted_at < datetime.combine(date.fromordinal(to_date.toordinal() + 1), time.min, tzinfo=timezone.utc))
-    rows = db.execute(statement).all()
-    balance = 0
+        end_exclusive = datetime.combine(date.fromordinal(to_date.toordinal() + 1), time.min, tzinfo=timezone.utc)
+        base = base.where(JournalEntry.posted_at < end_exclusive)
+    rows = db.execute(base.order_by(JournalEntry.posted_at.asc(), JournalEntry.entry_number.asc())).all()
+    balance = opening_balance
     entries = []
     for line, entry in rows:
         balance += line.credit - line.debit
@@ -380,7 +384,8 @@ def supplier_ledger(
             "debit": line.debit, "credit": line.credit, "payable_running_balance": balance,
         })
     return {"supplier_id": str(supplier.id), "supplier_code": supplier.code,
-            "supplier_name": supplier.name, "entries": entries, "closing_payable_balance": balance}
+            "supplier_name": supplier.name, "opening_payable_balance": opening_balance,
+            "entries": entries, "closing_payable_balance": balance}
 
 
 @router.get("/reports/cash-flow")
