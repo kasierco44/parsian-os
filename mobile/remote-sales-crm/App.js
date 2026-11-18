@@ -518,7 +518,7 @@ export default function App() {
   const customersScreen = (
     <>
       <View style={styles.searchBox}><Text style={styles.searchIcon}>⌕</Text><TextInput placeholder="جست‌وجوی نام، شهر یا شماره تماس" placeholderTextColor="#9A9EAA" value={search} onChangeText={setSearch} style={styles.searchInput} textAlign="right" /></View>
-      <View style={styles.filterRow}><Pill tone="red">همه ({money(customers.length)})</Pill><Pill>فعال</Pill><Pill tone="amber">نیازمند پیگیری</Pill></View>
+      <View style={styles.filterRow}><Pill tone="red">همه ({money(customers.length)})</Pill><Pill>فعال</Pill><Pill tone="amber">نیازمند پیگیری</Pill><Pressable style={styles.smallRedBtn} disabled={syncBusy} onPress={syncCustomers}><Text style={styles.smallRedText}>{syncBusy ? "..." : "همگام‌سازی"}</Text></Pressable></View>
       <SectionTitle title="فهرست مشتریان" action="＋ مشتری جدید" onAction={() => setCustomerModal(true)} />
       {filtered.map(c => <CustomerCard key={c.id} item={c} onPress={() => { setSelected(c); setTab("جزئیات مشتری"); }} />)}
       {filtered.length === 0 && <Text style={styles.empty}>مشتری‌ای با این مشخصات پیدا نشد.</Text>}
