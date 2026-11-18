@@ -36,8 +36,9 @@ final class Parsian_OS_Finance {
     }
     function menu(){add_menu_page('مالی پارسیان','مالی پارسیان',self::VIEW,'parsian-finance',array($this,'page'),'dashicons-chart-area',27);}
     function page(){if(!current_user_can(self::VIEW))wp_die('دسترسی غیرمجاز');echo '<div class="wrap"><div id="parsian-finance"></div></div>';}
-    function shortcode(){return current_user_can(self::VIEW)?'<div id="parsian-finance"></div>':'برای مشاهده پنل وارد حساب مجاز شوید.';}
-    function assets($hook){if($hook!=='toplevel_page_parsian-finance')return;wp_register_style('parsian-finance',false);wp_enqueue_style('parsian-finance');wp_add_inline_style('parsian-finance',$this->css());wp_register_script('parsian-finance',false,array(), '0.1.0',true);wp_enqueue_script('parsian-finance');wp_add_inline_script('parsian-finance','window.PF='.wp_json_encode(array('root'=>rest_url('parsian-finance/v1/'),'nonce'=>wp_create_nonce('wp_rest'),'opening'=>current_user_can(self::OPEN))).';'.$this->js());}
+    function shortcode(){if(!current_user_can(self::VIEW))return 'برای مشاهده پنل وارد حساب مجاز شوید.';$this->enqueue_assets();return '<div id="parsian-finance"></div>';}
+    function assets($hook){if($hook==='toplevel_page_parsian-finance')$this->enqueue_assets();}
+    private function enqueue_assets(){wp_register_style('parsian-finance',false);wp_enqueue_style('parsian-finance');wp_add_inline_style('parsian-finance',$this->css());wp_register_script('parsian-finance',false,array(), '0.1.0',true);wp_enqueue_script('parsian-finance');wp_add_inline_script('parsian-finance','window.PF='.wp_json_encode(array('root'=>rest_url('parsian-finance/v1/'),'nonce'=>wp_create_nonce('wp_rest'),'opening'=>current_user_can(self::OPEN))).';'.$this->js());}
     function ok(){return current_user_can(self::VIEW);}
     function edit(){return current_user_can(self::EDIT);}
     function opening(){return current_user_can(self::OPEN);}
