@@ -1,10 +1,6 @@
 name: Remote Sales CRM Android APK
 
 on:
-  push:
-    branches:
-      - feat/remote-sales-crm-android
-      - feat/remote-sales-offline-first
   pull_request:
     branches:
       - main
