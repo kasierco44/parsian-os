@@ -1,6 +1,6 @@
 # PARSIAN OS Backend
 
-FastAPI service foundation with PostgreSQL/SQLAlchemy, Alembic migrations, initial identity/role/permission and audit models. Authentication endpoints and business workflows are not yet implemented.
+FastAPI service foundation with PostgreSQL/SQLAlchemy, Alembic migrations, identity/role/permission models, audit events, and an initial bearer-token authentication flow.
 
 ## Local setup
 
@@ -14,7 +14,17 @@ copy .env.example .env  # Windows PowerShell; use cp on macOS/Linux
 uvicorn app.main:app --reload
 ```
 
-Set `DATABASE_URL` in `.env` to a reachable PostgreSQL database. The liveness endpoint does not require database access; readiness does.
+Set `DATABASE_URL` to a reachable PostgreSQL database and replace `JWT_SECRET` with a long random secret. Production startup refuses the development-only JWT secret.
+
+## Available endpoints
+
+- `GET /api/v1/health/live`: process liveness; no database dependency.
+- `GET /api/v1/health/ready`: database readiness.
+- `GET /api/v1/system/version`: service metadata.
+- `POST /api/v1/auth/login`: accepts JSON `{ "username": "...", "password": "..." }` and returns a bearer access token.
+- `GET /api/v1/auth/me`: returns the authenticated user's public profile; requires `Authorization: Bearer <token>`.
+
+There is intentionally no public registration endpoint and no seeded administrator. User provisioning and role/permission administration must be implemented as a separately authorized workflow before real users can sign in.
 
 ## Database migrations
 
@@ -31,8 +41,8 @@ The first migration creates users, roles, permissions, their many-to-many mappin
 pytest
 ```
 
-The initial automated tests cover liveness and version metadata only. Run integration tests against a disposable PostgreSQL database before treating migrations as production-ready.
+The automated tests cover liveness/version metadata and password/token utility behavior. Database-backed authentication integration tests and migration-from-empty/rollback tests are still required.
 
 ## Security notes
 
-Passwords are represented only as password hashes in the schema. Password hashing and token issuance must use the approved service layer; no default administrator or production credential is seeded. Never commit `.env` or real secrets.
+Passwords are stored only as Argon2 hashes through pwdlib. Access tokens are signed with HS256 and have a configurable lifetime. Never commit `.env`, production credentials, or real customer data.

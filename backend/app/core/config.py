@@ -15,6 +15,8 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://parsian:change-me@localhost:5432/parsian_os",
         repr=False,
     )
+    jwt_secret: str = Field(default="development-only-change-this-secret", repr=False)
+    access_token_expire_minutes: int = Field(default=30, ge=1, le=1440)
     cors_origins: str = "http://localhost:3000,http://localhost:8000"
     log_level: str = "INFO"
 

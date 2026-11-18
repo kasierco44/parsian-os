@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.auth import router as auth_router
 from app.api.routes.health import router as system_router
 from app.core.config import get_settings
 
@@ -16,6 +17,8 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    if settings.app_env == "production" and settings.jwt_secret == "development-only-change-this-secret":
+        raise RuntimeError("JWT_SECRET must be configured outside development")
     logging.getLogger(__name__).info("Starting %s (%s)", settings.app_name, settings.app_env)
     yield
     logging.getLogger(__name__).info("Shutting down %s", settings.app_name)
@@ -39,6 +42,7 @@ app.add_middleware(
 )
 
 app.include_router(system_router, prefix=settings.api_v1_prefix)
+app.include_router(auth_router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/", include_in_schema=False)
