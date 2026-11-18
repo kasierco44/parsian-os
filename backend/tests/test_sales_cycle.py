@@ -132,3 +132,16 @@ def test_accounting_reports_are_mounted():
     assert "/api/v1/sales/accounting/profit-loss" in paths
     assert "/api/v1/sales/accounting/customer-ledger/{customer_id}" in paths
 
+
+
+def test_accounting_chart_model_has_unique_code_and_account_metadata():
+    from app.models.accounting import AccountingAccount
+
+    table = AccountingAccount.__table__
+    assert table.c.code.unique is True
+    assert {"account_type", "normal_balance", "parent_code", "is_system", "is_active"} <= set(table.c.keys())
+
+
+def test_chart_of_accounts_endpoints_are_mounted():
+    paths = {route.path for route in app.routes}
+    assert "/api/v1/sales/accounting/chart-of-accounts" in paths
