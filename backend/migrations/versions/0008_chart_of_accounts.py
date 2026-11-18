@@ -22,6 +22,7 @@ accounts = [
     ("ACCOUNTS_PAYABLE", "حساب‌های پرداختنی", "liability", "credit", "2000"),
     ("COMMISSION_PAYABLE", "پورسانت پرداختنی", "liability", "credit", "2000"),
     ("3000", "حقوق مالکانه", "equity", "credit", None),
+    ("EQUITY", "سرمایه و سود انباشته", "equity", "credit", "3000"),
     ("4000", "درآمدها", "revenue", "credit", None),
     ("SALES_REVENUE", "فروش کالا", "revenue", "credit", "4000"),
     ("5000", "بهای تمام‌شده و هزینه‌ها", "expense", "debit", None),
