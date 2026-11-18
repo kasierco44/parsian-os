@@ -47,6 +47,41 @@ app.include_router(auth_router, prefix=settings.api_v1_prefix)
 app.include_router(admin_router, prefix=settings.api_v1_prefix)
 
 
+import logging
+from uuid import uuid4
+
+from fastapi import Request
+from app.db.session import get_session_factory
+from app.models.audit_event import AuditEvent
+
+@app.middleware("http")
+async def audit_mutating_requests(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        try:
+            client_ip = request.client.host if request.client else None
+            with get_session_factory()() as db:
+                db.add(
+                    AuditEvent(
+                        action=f"http.{request.method.lower()}",
+                        entity_type="http_request",
+                        entity_id=request.url.path[:80],
+                        request_id=request_id,
+                        ip_address=client_ip,
+                        details={
+                            "method": request.method,
+                            "path": request.url.path,
+                            "status_code": response.status_code,
+                        },
+                    )
+                )
+                db.commit()
+        except Exception:
+            logging.getLogger(__name__).exception("Failed to persist request audit event")
+    return response
+
 @app.get("/", include_in_schema=False)
 def root() -> dict[str, str]:
     return {"service": settings.app_name, "status": "running", "docs": "/docs"}
