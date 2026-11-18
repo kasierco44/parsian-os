@@ -59,9 +59,17 @@ def create_customer(
     actor: User = Depends(require_permission("customers.write")),
     db: Session = Depends(get_db),
 ) -> Customer:
-    if payload.assigned_to_user_id and db.get(User, payload.assigned_to_user_id) is None:
+    assigned_user_id = payload.assigned_to_user_id
+    is_visitor = not actor.is_superuser and any(role.code == "visitor" for role in actor.roles)
+    if is_visitor:
+        if assigned_user_id not in (None, actor.id):
+            raise HTTPException(status_code=403, detail="Visitors can only assign customers to themselves")
+        assigned_user_id = actor.id
+    if assigned_user_id and db.get(User, assigned_user_id) is None:
         raise HTTPException(status_code=422, detail="Assigned user does not exist")
-    customer = Customer(**payload.model_dump())
+    customer_data = payload.model_dump()
+    customer_data["assigned_to_user_id"] = assigned_user_id
+    customer = Customer(**customer_data)
     db.add(customer)
     try:
         db.flush()
@@ -103,7 +111,10 @@ def update_customer(
     customer = db.scalar(_customer_scope(select(Customer).where(Customer.id == customer_id), actor))
     if customer is None:
         raise HTTPException(status_code=404, detail="Customer not found")
-    changes = payload.model_dump(exclude_unset=True)
+    changes = payload.model_dump(exclude_unset=True, exclude_none=True)
+    is_visitor = not actor.is_superuser and any(role.code == "visitor" for role in actor.roles)
+    if is_visitor and "assigned_to_user_id" in changes and changes["assigned_to_user_id"] != actor.id:
+        raise HTTPException(status_code=403, detail="Visitors cannot reassign customer ownership")
     if "assigned_to_user_id" in changes and changes["assigned_to_user_id"] is not None:
         if db.get(User, changes["assigned_to_user_id"]) is None:
             raise HTTPException(status_code=422, detail="Assigned user does not exist")
