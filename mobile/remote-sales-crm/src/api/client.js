@@ -74,6 +74,15 @@ export async function getCustomers({ token, query = "", limit = 50, offset = 0 }
   return request(`/customers?${params.toString()}`, { token });
 }
 
+export async function updateCustomer({ token, customerId, changes } = {}) {
+  if (!customerId) throw new ApiError("شناسه مشتری الزامی است.");
+  return request(`/customers/${encodeURIComponent(customerId)}`, {
+    method: "PATCH",
+    token,
+    body: changes,
+  });
+}
+
 export async function logout() {
   await SecureStore.deleteItemAsync(TOKEN_KEY);
 }
