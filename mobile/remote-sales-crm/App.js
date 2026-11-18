@@ -2,9 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { getCustomers, getMe, getStoredToken, isApiConfigured, login as apiLogin, logout as apiLogout, changePassword as apiChangePassword } from "./src/api/client";
 import { cacheRecord, readCachedRecords } from "./src/offline/database";
 import { queueOfflineChange, synchronize } from "./src/api/sync";
+import { synchronizeCatalog } from "./src/catalog/catalog";
 import {
   I18nManager, KeyboardAvoidingView, Modal, Platform, Pressable,
-  SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View
+  SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View, Image
 } from "react-native";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import * as Network from "expo-network";
@@ -60,6 +61,7 @@ export default function App() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [tab, setTab] = useState("خانه");
   const [customers, setCustomers] = useState(initialCustomers);
+  const [products, setProducts] = useState([]);
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(false);
   const [customerModal, setCustomerModal] = useState(false);
@@ -81,13 +83,15 @@ export default function App() {
     let active = true;
     (async () => {
       try {
-        const [cachedCustomers, cachedTasks] = await Promise.all([
+        const [cachedCustomers, cachedTasks, cachedProducts] = await Promise.all([
           readCachedRecords("customer"),
           readCachedRecords("task"),
+          readCachedRecords("product"),
         ]);
         if (!active) return;
         if (cachedCustomers.length) setCustomers(cachedCustomers);
         if (cachedTasks.length) setTodayTasks(cachedTasks);
+        if (cachedProducts.length) setProducts(cachedProducts);
       } catch {
         // A fresh install may not have created the local database yet.
       }
@@ -151,6 +155,8 @@ export default function App() {
         await synchronize({ token: apiToken });
         const tasks = await readCachedRecords("task");
         if (tasks.length) setTodayTasks(tasks);
+        const latestProducts = await synchronizeCatalog(apiToken);
+        setProducts(latestProducts);
         const serverCustomers = await getCustomers({ token: apiToken });
         const mappedCustomers = serverCustomers.map(c => ({
           id: c.id, name: c.name, city: c.city || c.province || "",
@@ -265,6 +271,25 @@ export default function App() {
       setEntered(true); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
     } catch (e) { setLoginError(e.message || "تغییر رمز عبور انجام نشد."); }
     finally { setLoginBusy(false); }
+  };
+
+  const syncProductCatalog = async () => {
+    if (!apiToken) {
+      showToast("برای دریافت کاتالوگ به حساب سازمانی وارد شوید");
+      return;
+    }
+    setSyncBusy(true);
+    try {
+      const latest = await synchronizeCatalog(apiToken);
+      setProducts(latest);
+      showToast("کاتالوگ و تصاویر محصولات به‌روز شد");
+    } catch (error) {
+      const cached = await readCachedRecords("product").catch(() => []);
+      setProducts(cached);
+      showToast(error.message || "کاتالوگ آفلاین نمایش داده می‌شود");
+    } finally {
+      setSyncBusy(false);
+    }
   };
 
   const syncCustomers = async () => {
@@ -416,6 +441,25 @@ export default function App() {
     return <View style={styles.infoRow}><Text style={styles.infoValue}>{value}</Text><Text style={styles.infoLabel}>{label}</Text></View>;
   }
 
+  const productsScreen = (
+    <>
+      <SectionTitle title="کاتالوگ محصولات پارسیان قطعه" action={syncBusy ? "در حال دریافت..." : "به‌روزرسانی"} onAction={syncProductCatalog} />
+      <Text style={styles.catalogHint}>محصولات و تصاویر دریافت‌شده روی دستگاه ذخیره می‌شوند و بدون اینترنت نیز قابل مشاهده‌اند.</Text>
+      {products.map(product => (
+        <View key={product.id} style={styles.productCard}>
+          {product.image_uri ? <Image source={{ uri: product.image_uri }} style={styles.productImage} resizeMode="contain" /> : <View style={styles.productImagePlaceholder}><Text style={styles.productPlaceholderText}>پارسیان</Text></View>}
+          <View style={styles.productInfo}>
+            <Text style={styles.productName}>{product.name}</Text>
+            <Text style={styles.productMeta}>کد: {product.sku}  •  {product.vehicle_model || product.category}</Text>
+            {product.unit_price != null ? <Text style={styles.productPrice}>{money(product.unit_price)} ریال</Text> : <Text style={styles.productMeta}>قیمت در کاتالوگ ثبت نشده</Text>}
+            {product.description ? <Text style={styles.productDescription}>{product.description}</Text> : null}
+          </View>
+        </View>
+      ))}
+      {products.length === 0 ? <Text style={styles.empty}>هنوز محصولی دریافت نشده است. پس از انتشار کاتالوگ توسط مدیر، این بخش به‌روزرسانی می‌شود.</Text> : null}
+    </>
+  );
+
   const profileScreen = (
     <>
       <View style={styles.detailHero}><View style={styles.bigAvatar}><Text style={styles.bigAvatarText}>و</Text></View><Text style={styles.detailName}>ویزیتور نمونه</Text><Text style={styles.customerMeta}>کد پرسنلی: VIS-001</Text><Pill tone="green">حساب آزمایشی</Pill></View>
@@ -424,7 +468,7 @@ export default function App() {
     </>
   );
 
-  let content = tab === "خانه" ? dashboard : tab === "مشتریان" ? customersScreen : tab === "پیگیری‌ها" ? followupsScreen : tab === "جزئیات مشتری" ? detailScreen : profileScreen;
+  let content = tab === "خانه" ? dashboard : tab === "مشتریان" ? customersScreen : tab === "پیگیری‌ها" ? followupsScreen : tab === "محصولات" ? productsScreen : tab === "جزئیات مشتری" ? detailScreen : profileScreen;
 
   return (
     <SafeAreaView style={styles.app}>
@@ -438,6 +482,7 @@ export default function App() {
         <Tab icon="⌂" label="خانه" active={tab === "خانه"} onPress={() => setTab("خانه")} />
         <Tab icon="♙" label="مشتریان" active={tab === "مشتریان"} onPress={() => setTab("مشتریان")} />
         <Tab icon="◷" label="پیگیری‌ها" active={tab === "پیگیری‌ها"} onPress={() => setTab("پیگیری‌ها")} />
+        <Tab icon="▣" label="محصولات" active={tab === "محصولات"} onPress={() => setTab("محصولات")} />
         <Tab icon="☻" label="حساب من" active={tab === "حساب من"} onPress={() => setTab("حساب من")} />
       </View>
       {toast ? <View style={styles.toast}><Text style={styles.toastText}>{toast}</Text></View> : null}
@@ -551,6 +596,16 @@ const styles = StyleSheet.create({
   tab: { minWidth: 62, minHeight: 45, alignItems: "center", justifyContent: "center" },
   tabIcon: { color: "#8B909B", fontSize: 19 },
   tabLabel: { color: "#8B909B", fontSize: 9, marginTop: 3 },
+  catalogHint: { color: C.muted, fontSize: 11, textAlign: "right", marginBottom: 12 },
+  productCard: { backgroundColor: "#fff", borderRadius: 14, padding: 12, marginBottom: 10, flexDirection: "row-reverse", alignItems: "center", borderWidth: 1, borderColor: C.line },
+  productImage: { width: 82, height: 82, backgroundColor: "#fff", borderRadius: 10 },
+  productImagePlaceholder: { width: 82, height: 82, borderRadius: 10, backgroundColor: C.redSoft, alignItems: "center", justifyContent: "center" },
+  productPlaceholderText: { color: C.red, fontSize: 12, fontWeight: "900" },
+  productInfo: { flex: 1, marginRight: 12 },
+  productName: { color: C.ink, fontSize: 13, fontWeight: "900", textAlign: "right" },
+  productMeta: { color: C.muted, fontSize: 10, textAlign: "right", marginTop: 5 },
+  productPrice: { color: C.red, fontSize: 12, fontWeight: "900", textAlign: "right", marginTop: 5 },
+  productDescription: { color: C.muted, fontSize: 10, textAlign: "right", marginTop: 5 },
   toast: { position: "absolute", bottom: 78, alignSelf: "center", backgroundColor: C.dark, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12 },
   toastText: { color: "#fff", fontSize: 12 },
   modalBackdrop: { flex: 1, backgroundColor: "#0008", justifyContent: "center", padding: 22 },
