@@ -89,3 +89,5 @@ JS;}
 }
 register_activation_hook(__FILE__,array('Parsian_OS_Finance','activate'));
 new Parsian_OS_Finance();
+require_once __DIR__ . '/backend-bridge.php';
+new Parsian_OS_Backend_Bridge();
