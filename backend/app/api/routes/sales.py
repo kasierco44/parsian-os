@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.routes.auth import get_current_user
 from app.db.session import get_db
+from app.models.accounting import AccountingAccount
 from app.models.customer import Customer
 from app.models.identity import User
 from app.models.product import Product
@@ -594,3 +595,67 @@ def customer_ledger(
         })
     return {"customer_id": str(customer_id), "entries": entries, "closing_balance": balance}
 
+
+
+@router.get("/accounting/chart-of-accounts")
+def list_chart_of_accounts(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not _accounting(user):
+        raise HTTPException(status_code=403, detail="مشاهده سرفصل حساب‌ها فقط برای مدیر یا حسابدار مجاز است.")
+    rows = db.scalars(
+        select(AccountingAccount).order_by(AccountingAccount.code)
+    ).all()
+    return [
+        {
+            "code": row.code, "name": row.name, "account_type": row.account_type,
+            "normal_balance": row.normal_balance, "parent_code": row.parent_code,
+            "is_system": row.is_system, "is_active": row.is_active,
+        }
+        for row in rows
+    ]
+
+
+@router.post("/accounting/chart-of-accounts", status_code=status.HTTP_201_CREATED)
+def create_chart_account(
+    payload: dict,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not _manager(user):
+        raise HTTPException(status_code=403, detail="ایجاد سرفصل حساب فقط برای مدیر مجاز است.")
+    code = str(payload.get("code", "")).strip().upper()
+    name = str(payload.get("name", "")).strip()
+    account_type = payload.get("account_type")
+    normal_balance = payload.get("normal_balance")
+    parent_code = payload.get("parent_code")
+    if not code or len(code) > 40 or not name or len(name) > 160:
+        raise HTTPException(status_code=422, detail="کد و نام حساب معتبر و الزامی است.")
+    if account_type not in {"asset", "liability", "equity", "revenue", "expense"}:
+        raise HTTPException(status_code=422, detail="نوع حساب معتبر نیست.")
+    if normal_balance not in {"debit", "credit"}:
+        raise HTTPException(status_code=422, detail="ماهیت حساب باید بدهکار یا بستانکار باشد.")
+    if db.scalar(select(AccountingAccount).where(AccountingAccount.code == code)):
+        raise HTTPException(status_code=409, detail="کد حساب از قبل ثبت شده است.")
+    if parent_code and db.scalar(select(AccountingAccount).where(AccountingAccount.code == parent_code)) is None:
+        raise HTTPException(status_code=422, detail="حساب مادر پیدا نشد.")
+    account = AccountingAccount(
+        code=code, name=name, account_type=account_type,
+        normal_balance=normal_balance, parent_code=parent_code,
+        is_system=False, is_active=True,
+    )
+    db.add(account)
+    record_audit_event(
+        db, action="accounting_account_created", entity_type="accounting_account",
+        actor_user_id=user.id, entity_id=code,
+        details={"name": name, "account_type": account_type, "parent_code": parent_code},
+    )
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="کد حساب تکراری یا حساب مادر نامعتبر است.") from None
+    db.refresh(account)
+    return {
+        "code": account.code, "name": account.name, "account_type": account.account_type,
+        "normal_balance": account.normal_balance, "parent_code": account.parent_code,
+        "is_system": account.is_system, "is_active": account.is_active,
+    }
