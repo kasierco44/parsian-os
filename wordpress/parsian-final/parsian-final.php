@@ -15,9 +15,11 @@ define('PARSIAN_FINAL_URL', plugin_dir_url(__FILE__));
 require_once PARSIAN_FINAL_PATH . 'includes/class-install.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-roles.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-rest.php';
+require_once PARSIAN_FINAL_PATH . 'includes/class-crm.php';
 register_activation_hook(__FILE__, ['Parsian_Final_Install', 'activate']);
 register_deactivation_hook(__FILE__, ['Parsian_Final_Install', 'deactivate']);
 add_action('plugins_loaded', static function (): void {
     Parsian_Final_Roles::register();
     (new Parsian_Final_REST())->register_routes();
+    (new Parsian_Final_CRM())->register_routes();
 });
