@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,7 +30,7 @@ class SupplierBill(Base):
     idempotency_key: Mapped[str] = mapped_column(String(120), unique=True, index=True, nullable=False)
     supplier_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("suppliers.id", ondelete="RESTRICT"), nullable=False, index=True)
     supplier_invoice_number: Mapped[str | None] = mapped_column(String(80))
-    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount: Mapped[int] = mapped_column(BigInteger, nullable=False)
     account_code: Mapped[str] = mapped_column(String(40), ForeignKey("accounting_accounts.code", ondelete="RESTRICT"), nullable=False)
     bill_date: Mapped[date] = mapped_column(Date, nullable=False)
     due_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
