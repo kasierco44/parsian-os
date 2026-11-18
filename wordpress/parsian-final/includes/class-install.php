@@ -52,6 +52,31 @@ final class Parsian_Final_Install {
             ) $charset;"
         ];
         foreach ($tables as $sql) { dbDelta($sql); }
+        $crmTables = [
+            "CREATE TABLE {$p}customers (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                display_name varchar(190) NOT NULL,
+                province varchar(100) NOT NULL DEFAULT '',
+                status varchar(24) NOT NULL DEFAULT 'active',
+                created_at datetime NOT NULL,
+                PRIMARY KEY  (id),
+                KEY status_name (status,display_name)
+            ) $charset;",
+            "CREATE TABLE {$p}leads (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                display_name varchar(190) NOT NULL,
+                phone varchar(40) NOT NULL DEFAULT '',
+                province varchar(100) NOT NULL DEFAULT '',
+                notes text NOT NULL,
+                owner_user_id bigint unsigned NOT NULL,
+                status varchar(24) NOT NULL DEFAULT 'new',
+                created_at datetime NOT NULL,
+                PRIMARY KEY  (id),
+                KEY owner_status (owner_user_id,status),
+                KEY phone (phone)
+            ) $charset;"
+        ];
+        foreach ($crmTables as $sql) { dbDelta($sql); }
         update_option('parsian_final_schema_version', PARSIAN_FINAL_VERSION, false);
         Parsian_Final_Roles::register();
     }
