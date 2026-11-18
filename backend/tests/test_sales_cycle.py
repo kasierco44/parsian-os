@@ -12,7 +12,7 @@ from app.schemas.sales import PaymentCreate, SalesOrderCreate
 
 
 def test_sales_router_is_mounted_in_application():
-    paths = {route.path for route in app.routes}
+    paths = app.openapi()["paths"]
     assert "/api/v1/sales/orders" in paths
     assert "/api/v1/sales/orders/{order_id}/approve" in paths
     assert "/api/v1/sales/orders/{order_id}/invoice" in paths
