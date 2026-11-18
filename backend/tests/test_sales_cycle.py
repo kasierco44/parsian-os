@@ -83,3 +83,19 @@ def test_commission_uses_marginal_progressive_monthly_tiers():
     commission, effective_rate = _calculate_progressive_commission(900000, 200000, tiers)
     assert commission == 3000
     assert effective_rate == 150
+
+
+@pytest.mark.parametrize(
+    ("already", "amount", "expected_commission", "expected_rate"),
+    [
+        (0, 1000, 15, 150),
+        (400, 200, 3, 150),
+        (0, 400, 4, 100),
+    ],
+)
+def test_monthly_commission_tiers_are_progressive(already, amount, expected_commission, expected_rate):
+    tiers = [
+        SimpleNamespace(is_active=True, min_collected_amount=0, rate_bps=100),
+        SimpleNamespace(is_active=True, min_collected_amount=500, rate_bps=200),
+    ]
+    assert _calculate_progressive_commission(already, amount, tiers) == (expected_commission, expected_rate)
