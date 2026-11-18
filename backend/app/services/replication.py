@@ -1,5 +1,6 @@
 import os
 import uuid
+from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy import select
@@ -7,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.customer import Customer
 from app.models.identity import User
-from app.models.product import Product
+from app.models.product import Product, ProductMedia
 from app.models.replication import ReplicationEvent
 from app.models.sync import SyncRecord
 
@@ -17,33 +18,34 @@ def local_node_id() -> str:
 
 
 def record_replication_event(db: Session, *, entity_type: str, entity_id: str, payload: dict, version: int, deleted: bool = False) -> ReplicationEvent:
-    event = ReplicationEvent(
-        event_uuid=uuid.uuid4(),
-        origin_node=local_node_id(),
-        entity_type=entity_type,
-        entity_id=entity_id,
-        payload=payload,
-        version=version,
-        deleted=deleted,
-    )
+    event = ReplicationEvent(event_uuid=uuid.uuid4(), origin_node=local_node_id(), entity_type=entity_type, entity_id=entity_id, payload=payload, version=version, deleted=deleted)
     db.add(event)
     return event
+
+
+def _resolve_user_id(db: Session, user_id: str, username: str | None) -> UUID:
+    user = db.get(User, UUID(user_id))
+    if user is None and username:
+        user = db.scalar(select(User).where(User.username == username))
+    if user is None:
+        raise ValueError("The referenced user must exist on both replication nodes.")
+    return user.id
 
 
 def apply_remote_event(db: Session, event: ReplicationEvent) -> None:
     if event.entity_type == "customer":
         entity_id = UUID(event.entity_id)
         data = event.payload
-        assigned_id = UUID(data["assigned_to_user_id"])
-        created_by_id = UUID(data["created_by_user_id"])
-        if db.get(User, assigned_id) is None or db.get(User, created_by_id) is None:
-            raise ValueError("Customer owner identities must exist on both replication nodes.")
+        assigned_id = _resolve_user_id(db, data["assigned_to_user_id"], data.get("assigned_to_username"))
+        created_by_id = _resolve_user_id(db, data["created_by_user_id"], data.get("created_by_username"))
         record = db.get(Customer, entity_id)
         if record is not None and record.replication_version >= event.version:
             return
         if record is None:
             record = Customer(id=entity_id, assigned_to_user_id=assigned_id, created_by_user_id=created_by_id, name=data.get("name", ""))
             db.add(record)
+        record.assigned_to_user_id = assigned_id
+        record.created_by_user_id = created_by_id
         if event.deleted:
             record.is_active = False
             record.status = "inactive"
@@ -69,10 +71,40 @@ def apply_remote_event(db: Session, event: ReplicationEvent) -> None:
         record.replication_version = event.version
         return
 
+    if event.entity_type == "product_media":
+        data = event.payload
+        product_id = UUID(data["product_id"])
+        if db.get(Product, product_id) is None:
+            raise ValueError("Product metadata must replicate before its media.")
+        media_id = UUID(event.entity_id)
+        media = db.get(ProductMedia, media_id)
+        if media is not None:
+            return
+        content_hex = data.get("content_hex")
+        if not content_hex:
+            raise ValueError("Product media binary content is missing from replication.")
+        raw = bytes.fromhex(content_hex)
+        import hashlib
+        if hashlib.sha256(raw).hexdigest() != data["checksum_sha256"]:
+            raise ValueError("Replicated product media checksum mismatch.")
+        root = Path(os.getenv("CATALOG_MEDIA_ROOT", "/var/lib/parsian/catalog")).resolve()
+        target = (root / data["storage_key"]).resolve()
+        if root not in target.parents:
+            raise ValueError("Invalid replicated media storage path.")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_suffix(".replica")
+        temporary.write_bytes(raw)
+        temporary.replace(target)
+        db.add(ProductMedia(
+            id=media_id, product_id=product_id, storage_key=data["storage_key"],
+            file_name=data["file_name"], mime_type=data["mime_type"],
+            size_bytes=len(raw), checksum_sha256=data["checksum_sha256"],
+            media_version=data["media_version"], catalog_version=data["catalog_version"],
+        ))
+        return
+
     if event.entity_type in {"task", "followup", "visit", "customer_note", "order_draft", "proforma_draft", "product_favorite"}:
-        owner_id = UUID(event.payload["owner_user_id"])
-        if db.get(User, owner_id) is None:
-            raise ValueError("Sync owner identity must exist on both replication nodes.")
+        owner_id = _resolve_user_id(db, event.payload["owner_user_id"], event.payload.get("owner_username"))
         latest = db.scalar(select(SyncRecord).where(
             SyncRecord.owner_user_id == owner_id,
             SyncRecord.entity_type == event.entity_type,
@@ -81,12 +113,9 @@ def apply_remote_event(db: Session, event: ReplicationEvent) -> None:
         if latest is not None and latest.version >= event.version:
             return
         db.add(SyncRecord(
-            owner_user_id=owner_id,
-            entity_type=event.entity_type,
-            entity_id=event.entity_id,
+            owner_user_id=owner_id, entity_type=event.entity_type, entity_id=event.entity_id,
             payload=event.payload.get("record", {}) if not event.deleted else {},
-            version=event.version,
-            deleted=event.deleted,
+            version=event.version, deleted=event.deleted,
         ))
         return
 
