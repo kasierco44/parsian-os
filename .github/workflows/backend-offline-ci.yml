@@ -1,9 +1,7 @@
 name: PARSIAN OS Backend CI
 
 on:
-  push:
-    branches:
-      - feat/remote-sales-offline-first
+  workflow_dispatch:
   pull_request:
     branches:
       - main
