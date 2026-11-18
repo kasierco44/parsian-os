@@ -315,8 +315,11 @@ export default function App() {
       setSyncConflictCount((await getConflictedOperations()).length);
       const rows = await getCustomers({ token: apiToken, query: search });
       const mapped = rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" }));
-      setCustomers(mapped);
       await saveCustomerCache(mapped);
+      const cached = await readCachedRecords("customer");
+      const serverIds = new Set(mapped.map(item => String(item.id)));
+      const merged = [...mapped, ...cached.filter(item => !serverIds.has(String(item.id)))];
+      setCustomers(merged);
       showToast("همگام‌سازی و دریافت مشتریان انجام شد");
     } catch (e) {
       try {
