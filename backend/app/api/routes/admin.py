@@ -193,3 +193,31 @@ def set_role_permissions(
     )
     db.commit()
     return {"role_code": role.code, "permission_codes": sorted(found_codes)}
+
+
+@router.get("/audit-events", summary="List audit events (requires audit.read)")
+def list_audit_events(
+    _: User = Depends(require_permission("audit.read")),
+    db: Session = Depends(get_db),
+    limit: int = 100,
+    offset: int = 0,
+) -> list[dict[str, object]]:
+    from app.models.audit_event import AuditEvent
+
+    if limit < 1 or limit > 500 or offset < 0:
+        raise HTTPException(status_code=422, detail="Invalid pagination parameters")
+    events = db.scalars(
+        select(AuditEvent).order_by(AuditEvent.created_at.desc()).limit(limit).offset(offset)
+    ).all()
+    return [
+        {
+            "id": str(event.id),
+            "actor_user_id": str(event.actor_user_id) if event.actor_user_id else None,
+            "action": event.action,
+            "entity_type": event.entity_type,
+            "entity_id": event.entity_id,
+            "details": event.details,
+            "created_at": event.created_at.isoformat(),
+        }
+        for event in events
+    ]
