@@ -142,7 +142,7 @@ class JournalLine(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     entry_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("journal_entries.id", ondelete="CASCADE"), nullable=False, index=True)
-    account_code: Mapped[str] = mapped_column(String(40), nullable=False)
+    account_code: Mapped[str] = mapped_column(String(40), ForeignKey("accounting_accounts.code", ondelete="RESTRICT"), nullable=False, index=True)
     debit: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     credit: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     customer_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id", ondelete="RESTRICT"))
