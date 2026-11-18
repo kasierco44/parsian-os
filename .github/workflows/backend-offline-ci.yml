@@ -14,6 +14,24 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: parsian_test
+          POSTGRES_USER: parsian
+          POSTGRES_PASSWORD: test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U parsian -d parsian_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://parsian:test-password@localhost:5432/parsian_test
+      JWT_SECRET: ci-only-test-secret-not-for-production
+      APP_ENV: test
     defaults:
       run:
         working-directory: backend
@@ -26,4 +44,6 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - run: pip install -r requirements.txt
       - run: python -m compileall -q app migrations
+      - run: alembic upgrade head
+      - run: alembic current
       - run: pytest -q
