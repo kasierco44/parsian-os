@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feat/wordpress-finance-plugin
+      - feat/wordpress-backend-auth-bridge
   pull_request:
     paths:
       - 'wordpress/parsian-finance/**'
@@ -13,7 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: PHP syntax check
-        run: |\n          php -l wordpress/parsian-finance/parsian-finance.php\n          php -l wordpress/parsian-finance/backend-bridge.php
+        run: |
+          php -l wordpress/parsian-finance/parsian-finance.php
+          php -l wordpress/parsian-finance/backend-bridge.php
       - name: Build plugin ZIP
         run: |
           cd wordpress
