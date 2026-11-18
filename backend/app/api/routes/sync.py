@@ -84,7 +84,7 @@ def push_operations(payload: SyncPushIn, user: User = Depends(get_current_user),
                     results.append(SyncOperationResult(id=item.id, status="rejected", message="اطلاعات مشتری معتبر نیست."))
                     continue
                 if customer is None:
-                    customer = Customer(id=customer_id, assigned_to_user_id=user.id, created_by_user_id=user.id, **data)
+                    customer = Customer(id=customer_id, assigned_to_user_id=user.id, created_by_user_id=user.id, assigned_to=user, created_by=user, **data)
                     db.add(customer)
                 else:
                     for key, value in data.items():
