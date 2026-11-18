@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.api.routes.auth import get_current_user
 from app.db.session import get_db
 from app.models.sync import SyncOperation, SyncRecord
+from app.models.customer import Customer
+from app.schemas.customer import CustomerCreate
 from app.models.identity import User
 from app.schemas.sync import SyncChangeOut, SyncOperationResult, SyncPullOut, SyncPushIn, SyncPushOut
 from app.services.audit import record_audit_event
@@ -24,7 +26,41 @@ def push_operations(payload: SyncPushIn, user: User = Depends(get_current_user),
             SyncOperation.operation_id == item.id,
         ))
         if prior is not None:
-            record = db.scalar(select(SyncRecord).where(
+            if item.entity_type == "customer":
+            try:
+                customer_id = UUID(item.entity_id)
+            except ValueError:
+                results.append(SyncOperationResult(id=item.id, status="rejected", message="شناسه مشتری معتبر نیست."))
+                continue
+            customer = db.get(Customer, customer_id)
+            if customer is not None and customer.assigned_to_user_id != user.id and not user.is_superuser:
+                results.append(SyncOperationResult(id=item.id, status="rejected", message="به این مشتری دسترسی ندارید."))
+                continue
+            if item.operation == "delete":
+                if customer is not None:
+                    customer.is_active = False
+                    customer.status = "inactive"
+            else:
+                try:
+                    customer_data = CustomerCreate.model_validate(item.payload).model_dump()
+                except Exception:
+                    results.append(SyncOperationResult(id=item.id, status="rejected", message="اطلاعات مشتری معتبر نیست."))
+                    continue
+                if customer is None:
+                    customer = Customer(id=customer_id, assigned_to_user_id=user.id, created_by_user_id=user.id, **customer_data)
+                    db.add(customer)
+                else:
+                    for key, value in customer_data.items():
+                        setattr(customer, key, value)
+            db.add(SyncOperation(owner_user_id=user.id, operation_id=item.id, entity_type=item.entity_type, entity_id=item.entity_id, outcome="accepted"))
+            record_audit_event(db, action="offline_customer_" + item.operation, entity_type="customer", actor_user_id=user.id, entity_id=item.entity_id, details={"operation_id": str(item.id)})
+            previous = db.scalar(select(SyncRecord).where(SyncRecord.owner_user_id == user.id, SyncRecord.entity_type == "customer", SyncRecord.entity_id == item.entity_id).order_by(SyncRecord.id.desc()).limit(1))
+            version = (previous.version if previous else 0) + 1
+            db.add(SyncRecord(owner_user_id=user.id, entity_type="customer", entity_id=item.entity_id, payload=item.payload if item.operation == "upsert" else {}, version=version, deleted=item.operation == "delete"))
+            results.append(SyncOperationResult(id=item.id, status="accepted", version=version))
+            continue
+
+        record = db.scalar(select(SyncRecord).where(
                 SyncRecord.owner_user_id == user.id,
                 SyncRecord.entity_type == item.entity_type,
                 SyncRecord.entity_id == item.entity_id,
