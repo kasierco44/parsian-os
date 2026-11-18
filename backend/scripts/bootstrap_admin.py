@@ -77,6 +77,14 @@ def main() -> int:
                 permissions[code] = permission
 
             db.flush()
+            role_permission_codes = {
+                "accountant": {"customers.read", "accounting.read", "accounting.write", "warehouse.read", "warehouse.write"},
+                "seller": {"customers.read", "customers.write", "sales.read", "sales.write"},
+                "visitor": {"customers.read", "customers.write", "sales.read", "sales.write"},
+                "customer": {"customers.read"},
+            }
+            for role_code, permission_codes in role_permission_codes.items():
+                roles[role_code].permissions = [permissions[code] for code in sorted(permission_codes)]
             roles["admin"].permissions = list(permissions.values())
             admin = User(
                 username=username,
