@@ -64,6 +64,13 @@ def catalog_manifest(since_version: int = Query(default=0, ge=0), user: User = D
     return CatalogManifest(version=current_version, products=products, media=[_media_read(item) for item in media])
 
 
+@router.get("/products", response_model=list[ProductAdminRead])
+def list_admin_products(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not _is_manager(user):
+        raise HTTPException(status_code=403, detail="مشاهده تنظیمات داخلی کاتالوگ فقط برای مدیر مجاز است.")
+    return db.scalars(select(Product).order_by(Product.name).limit(1000)).all()
+
+
 @router.post("/products", response_model=ProductAdminRead, status_code=status.HTTP_201_CREATED)
 def create_product(payload: ProductCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not _is_manager(user):
