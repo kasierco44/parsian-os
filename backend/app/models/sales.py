@@ -147,4 +147,5 @@ class JournalLine(Base):
     credit: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     customer_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id", ondelete="RESTRICT"))
     seller_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("suppliers.id", ondelete="RESTRICT"), index=True)
     entry: Mapped[JournalEntry] = relationship(back_populates="lines")
