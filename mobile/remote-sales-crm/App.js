@@ -586,7 +586,7 @@ export default function App() {
           <View style={styles.productInfo}>
             <Text style={styles.productName}>{product.name}</Text>
             <Text style={styles.productMeta}>کد: {product.sku}  •  {product.vehicle_model || product.category}</Text>
-            {product.unit_price != null ? <Text style={styles.productPrice}>{money(product.unit_price)} ریال</Text> : <Text style={styles.productMeta}>قیمت در کاتالوگ ثبت نشده</Text>}
+            {product.unit_price != null ? <Text style={styles.productPrice}>{money(product.unit_price)}</Text> : <Text style={styles.productMeta}>قیمت در کاتالوگ ثبت نشده</Text>}
             {product.description ? <Text style={styles.productDescription}>{product.description}</Text> : null}
           </View>
         </View>
