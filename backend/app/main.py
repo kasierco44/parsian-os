@@ -8,6 +8,7 @@ from app.api.routes.admin import router as admin_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.customers import router as customers_router
 from app.api.routes.health import router as system_router
+from app.api.routes.products import router as products_router
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -50,7 +51,7 @@ app.include_router(system_router, prefix=settings.api_v1_prefix)
 app.include_router(auth_router, prefix=settings.api_v1_prefix)
 app.include_router(admin_router, prefix=settings.api_v1_prefix)
 app.include_router(customers_router, prefix=settings.api_v1_prefix)
-
+app.include_router(products_router, prefix=settings.api_v1_prefix)
 
 import logging
 from uuid import uuid4
@@ -58,6 +59,7 @@ from uuid import uuid4
 from fastapi import Request
 from app.db.session import get_session_factory
 from app.models.audit_event import AuditEvent
+
 
 @app.middleware("http")
 async def audit_mutating_requests(request: Request, call_next):
@@ -86,6 +88,7 @@ async def audit_mutating_requests(request: Request, call_next):
         except Exception:
             logging.getLogger(__name__).exception("Failed to persist request audit event")
     return response
+
 
 @app.get("/", include_in_schema=False)
 def root() -> dict[str, str]:
