@@ -572,7 +572,10 @@ def customer_ledger(
         raise HTTPException(status_code=404, detail="مشتری پیدا نشد.")
     statement = select(JournalLine, JournalEntry).join(
         JournalEntry, JournalEntry.id == JournalLine.entry_id
-    ).where(JournalLine.customer_id == customer_id).order_by(
+    ).where(
+        JournalLine.customer_id == customer_id,
+        JournalLine.account_code == "ACCOUNTS_RECEIVABLE",
+    ).order_by(
         JournalEntry.posted_at.asc(), JournalEntry.entry_number.asc()
     )
     if from_date:
