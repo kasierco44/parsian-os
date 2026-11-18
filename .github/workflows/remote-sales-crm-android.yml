@@ -1,0 +1,79 @@
+name: Remote Sales CRM Android APK
+
+on:
+  push:
+    branches:
+      - feat/remote-sales-crm-android
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build Android debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EXPO_PUBLIC_API_BASE_URL: ${{ vars.PARSIAN_API_BASE_URL }}
+    defaults:
+      run:
+        working-directory: mobile/remote-sales-crm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Install JavaScript dependencies
+        run: |
+          npm install
+          npx expo install --check
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Inspect Expo native modules
+        run: |
+          npx expo-modules-autolinking resolve --platform android --json > autolinking.json
+          node -e "const d=require('./autolinking.json'); const m=Array.isArray(d)?d:(d.modules||[]); console.log(JSON.stringify(m.map((x,i)=>({index:i,name:x.name,packageName:x.packageName,projects:(x.projects||[]).map(p=>({name:p.name,publication:p.publication}))})),null,2))"
+
+      - name: Upload native module diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: parsian-crm-autolinking-diagnostics
+          path: mobile/remote-sales-crm/autolinking.json
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: parsian-remote-sales-crm-debug-apk
+          path: mobile/remote-sales-crm/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
