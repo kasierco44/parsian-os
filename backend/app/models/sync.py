@@ -10,8 +10,6 @@ from app.db.base import Base
 
 class SyncRecord(Base):
     __tablename__ = "sync_records"
-    __table_args__ = (UniqueConstraint("owner_user_id", "entity_type", "entity_id", name="uq_sync_record_owner_entity"),)
-
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     owner_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     entity_type: Mapped[str] = mapped_column(String(40), nullable=False)
