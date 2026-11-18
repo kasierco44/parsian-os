@@ -22,6 +22,9 @@ services:
       APP_ENV: development
       DATABASE_URL: postgresql+psycopg://parsian:${POSTGRES_PASSWORD:-local-dev-only-change-this}@db:5432/parsian_os
       CORS_ORIGINS: http://localhost:3000,http://localhost:8000
+      CATALOG_MEDIA_ROOT: /var/lib/parsian/catalog
+    volumes:
+      - ./private-media:/var/lib/parsian/catalog
     ports:
       - "8000:8000"
     depends_on:
