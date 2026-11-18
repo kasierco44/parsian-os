@@ -15,6 +15,10 @@ on:
       - 'backend/**'
       - '.github/workflows/backend-offline-ci.yml'
 
+concurrency:
+  group: parsian-backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
