@@ -1,9 +1,9 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.exc import IntegrityError\nfrom sqlalchemy.orm import Session, selectinload
 
 from app.api.routes.auth import get_current_user
 from app.db.session import get_db
@@ -78,8 +78,10 @@ def _record_collection(db: Session, *, receipt: PaymentReceipt, invoice: SalesIn
 
 
 def _accrue_commission(db: Session, *, receipt: PaymentReceipt, invoice: SalesInvoice) -> None:
+    month_start = receipt.received_at.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     already = db.scalar(select(func.coalesce(func.sum(CommissionAccrual.collected_amount), 0)).where(
-        CommissionAccrual.seller_user_id == invoice.seller_user_id
+        CommissionAccrual.seller_user_id == invoice.seller_user_id,
+        CommissionAccrual.created_at >= month_start,
     )) or 0
     tiers = db.scalars(select(CommissionTier).where(CommissionTier.is_active.is_(True)).order_by(CommissionTier.min_collected_amount)).all()
     rate = 0
@@ -117,6 +119,8 @@ def create_order(payload: SalesOrderCreate, user: User = Depends(get_current_use
         if product is None or not product.is_active:
             raise HTTPException(status_code=422, detail="یکی از محصولات وجود ندارد یا غیرفعال است.")
         price = product.unit_price if item.unit_price is None else item.unit_price
+        if price is None:
+            raise HTTPException(status_code=422, detail=f"برای محصول {product.name} قیمت فروش تعریف نشده است.")
         gross = item.quantity * price
         if item.discount_amount > gross:
             raise HTTPException(status_code=422, detail="تخفیف قلم نمی‌تواند از مبلغ ناخالص بیشتر باشد.")
@@ -130,6 +134,8 @@ def create_order(payload: SalesOrderCreate, user: User = Depends(get_current_use
     order.subtotal = subtotal
     order.discount_amount = sum(line.discount_amount for line in order.lines)
     order.total_amount = subtotal - order.discount_amount
+    if order.total_amount <= 0:
+        raise HTTPException(status_code=422, detail="مبلغ نهایی سفارش باید بیشتر از صفر باشد.")
     db.add(order)
     db.flush()
     record_audit_event(db, action="sales_order_created", entity_type="sales_order", actor_user_id=user.id, entity_id=str(order.id), details={"total_amount": order.total_amount, "line_count": len(order.lines)})
@@ -243,19 +249,24 @@ def issue_invoice(order_id: UUID, user: User = Depends(get_current_user), db: Se
 
 
 @router.post("/invoices/{invoice_id}/receipts", response_model=PaymentRead, status_code=status.HTTP_201_CREATED)
-def create_receipt(invoice_id: UUID, payload: PaymentCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_receipt(invoice_id: UUID, payload: PaymentCreate, idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=12, max_length=120), user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     invoice = db.scalar(select(SalesInvoice).where(SalesInvoice.id == invoice_id).with_for_update())
     if invoice is None:
         raise HTTPException(status_code=404, detail="فاکتور پیدا نشد.")
     if not _manager(user) and invoice.seller_user_id != user.id and "accountant" not in _roles(user):
         raise HTTPException(status_code=403, detail="به این فاکتور دسترسی ندارید.")
+    existing = db.scalar(select(PaymentReceipt).where(PaymentReceipt.idempotency_key == idempotency_key))
+    if existing is not None:
+        if existing.invoice_id != invoice.id or existing.amount != payload.amount or existing.method != payload.method:
+            raise HTTPException(status_code=409, detail="این کلید تکرار برای یک درخواست دیگر استفاده شده است.")
+        return existing
     pending_total = db.scalar(select(func.coalesce(func.sum(PaymentReceipt.amount), 0)).where(PaymentReceipt.invoice_id == invoice.id, PaymentReceipt.status.in_({"pending", "cleared"}))) or 0
     if payload.amount > invoice.total_amount - pending_total:
         raise HTTPException(status_code=409, detail="مبلغ دریافت از مانده فاکتور بیشتر است.")
     if payload.method == "cheque" and not all([payload.bank_name, payload.cheque_number, payload.due_date, payload.drawer_name]):
         raise HTTPException(status_code=422, detail="برای ثبت چک، بانک، شماره، تاریخ سررسید و صادرکننده الزامی است.")
     receipt = PaymentReceipt(
-        receipt_number=_number("RCPT"), invoice_id=invoice.id, amount=payload.amount,
+        receipt_number=_number("RCPT"), idempotency_key=idempotency_key, invoice_id=invoice.id, amount=payload.amount,
         method=payload.method, status="pending" if payload.method == "cheque" else "cleared",
         reference=payload.reference, received_by_user_id=user.id,
     )
@@ -266,7 +277,14 @@ def create_receipt(invoice_id: UUID, payload: PaymentCreate, user: User = Depend
     else:
         _record_collection(db, receipt=receipt, invoice=invoice, actor=user, payment_account="CASH" if payload.method == "cash" else "BANK")
     record_audit_event(db, action="payment_receipt_created", entity_type="payment_receipt", actor_user_id=user.id, entity_id=str(receipt.id), details={"invoice_id": str(invoice.id), "amount": receipt.amount, "method": receipt.method, "status": receipt.status})
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        duplicate = db.scalar(select(PaymentReceipt).where(PaymentReceipt.idempotency_key == idempotency_key))
+        if duplicate is not None and duplicate.invoice_id == invoice.id and duplicate.amount == payload.amount and duplicate.method == payload.method:
+            return duplicate
+        raise HTTPException(status_code=409, detail="درخواست دریافت تکراری یا متعارض است.") from None
     db.refresh(receipt)
     return receipt
 
