@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
@@ -486,8 +486,8 @@ def list_commission_accruals(seller_user_id: UUID | None = None, user: User = De
 
 @router.get("/accounting/trial-balance")
 def trial_balance(
-    from_date: datetime | None = None,
-    to_date: datetime | None = None,
+    from_date: date | None = Query(default=None, description="ابتدای بازه، شامل روز انتخاب‌شده"),
+    to_date: date | None = Query(default=None, description="انتهای بازه، شامل روز انتخاب‌شده"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -691,12 +691,11 @@ def post_opening_balance(
         raise HTTPException(status_code=422, detail="ثبت مستقیم روی حساب گروه مجاز نیست؛ از حساب معین استفاده کنید.")
     for line in payload.lines:
         account = account_map[line.account_code]
-        if line.debit and line.credit:
-            raise HTTPException(status_code=422, detail="هر ردیف فقط می‌تواند بدهکار یا بستانکار باشد.")
-        if account.normal_balance == "debit" and line.credit:
-            raise HTTPException(status_code=422, detail=f"ماهیت حساب {account.name} بدهکار است.")
-        if account.normal_balance == "credit" and line.debit:
-            raise HTTPException(status_code=422, detail=f"ماهیت حساب {account.name} بستانکار است.")
+        if (line.debit > 0) == (line.credit > 0):
+            raise HTTPException(status_code=422, detail="هر ردیف باید دقیقاً یک مبلغ غیرصفر در ستون بدهکار یا بستانکار داشته باشد.")
+        # Contra balances are valid in double-entry accounting (for example,
+        # a customer credit balance or an overdrawn bank account). Do not
+        # reject a line solely because it opposes the account's normal balance.
     entry = _journal(
         db, source_type="opening_balance", source_id="initial",
         description=payload.description,
@@ -741,18 +740,25 @@ def get_account_ledger(
         raise HTTPException(status_code=404, detail="سرفصل فعال پیدا نشد.")
     if db.scalar(select(AccountingAccount.code).where(AccountingAccount.parent_code == account.code)):
         raise HTTPException(status_code=422, detail="برای مشاهده گردش، حساب معین را انتخاب کنید نه حساب گروه.")
+    if from_date and to_date and from_date > to_date:
+        raise HTTPException(status_code=422, detail="تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.")
     base = select(JournalLine, JournalEntry).join(
         JournalEntry, JournalEntry.id == JournalLine.entry_id
     ).where(JournalLine.account_code == account.code)
+    start_at = datetime.combine(from_date, time.min, tzinfo=timezone.utc) if from_date else None
+    end_exclusive = (
+        datetime.combine(to_date + timedelta(days=1), time.min, tzinfo=timezone.utc)
+        if to_date else None
+    )
     opening = 0
-    if from_date:
-        prior = db.execute(base.where(JournalEntry.posted_at < from_date)).all()
+    if start_at:
+        prior = db.execute(base.where(JournalEntry.posted_at < start_at)).all()
         opening = sum(line.debit - line.credit for line, _entry in prior)
     statement = base
-    if from_date:
-        statement = statement.where(JournalEntry.posted_at >= from_date)
-    if to_date:
-        statement = statement.where(JournalEntry.posted_at <= to_date)
+    if start_at:
+        statement = statement.where(JournalEntry.posted_at >= start_at)
+    if end_exclusive:
+        statement = statement.where(JournalEntry.posted_at < end_exclusive)
     rows = db.execute(statement.order_by(
         JournalEntry.posted_at.asc(), JournalEntry.entry_number.asc()
     )).all()
