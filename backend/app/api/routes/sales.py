@@ -94,6 +94,12 @@ def _calculate_progressive_commission(already_collected: int, amount: int, tiers
 
 
 def _accrue_commission(db: Session, *, receipt: PaymentReceipt, invoice: SalesInvoice) -> None:
+    # Serialize monthly tier calculations per seller. Without this row lock,
+    # two concurrent receipts on different invoices could read the same
+    # monthly total and both calculate commission from the same tier range.
+    seller = db.scalar(select(User).where(User.id == invoice.seller_user_id).with_for_update())
+    if seller is None:
+        raise HTTPException(status_code=409, detail="فروشنده فاکتور دیگر معتبر نیست.")
     collected_at = datetime.now(timezone.utc)
     month_start = collected_at.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     already = db.scalar(select(func.coalesce(func.sum(CommissionAccrual.collected_amount), 0)).where(
