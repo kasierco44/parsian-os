@@ -55,3 +55,14 @@ jobs:
           pip install -r requirements.txt
       - name: Run unit and PostgreSQL migration tests
         run: pytest -q
+
+      - name: Validate production Docker image
+        run: docker build --tag parsian-os-api:ci .
+      - name: Validate production Compose configuration
+        env:
+          POSTGRES_DB: parsian_test
+          POSTGRES_USER: parsian
+          POSTGRES_PASSWORD: ci-only-url-safe-password
+          JWT_SECRET: ci-only-secret-not-for-production-at-least-32-chars
+          CORS_ORIGINS: https://admin.example.test
+        run: docker compose -f compose.production.yml config --quiet
