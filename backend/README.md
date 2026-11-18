@@ -96,3 +96,17 @@ Before production deployment:
 6. Confirm the GitHub Actions checks are green before merging.
 
 This backend change is not a production deployment. Configure TLS, secrets management, backups, monitoring, trusted proxy settings, and operational access controls in the hosting environment before exposing the API publicly.
+
+
+## Customer CRM foundation
+
+Customer endpoints are mounted under `/api/v1/customers`:
+
+- `GET /customers` — paginated search by customer name/code/phone/mobile; optional province, city and active filters.
+- `POST /customers` — create a customer with a unique customer code.
+- `GET /customers/{customer_id}` — read one customer.
+- `PATCH /customers/{customer_id}` — update explicitly supplied fields.
+
+All endpoints require the corresponding `customers.read` or `customers.write` permission. Visitor-role accounts are restricted to customer records assigned to their own user ID; visitor accounts cannot assign or transfer customer ownership to another user. The customer master record includes type, contact information, province/city/address, identifiers, lead source, assigned user, credit limit and payment-term days. Financial transactions and balances are not part of this first CRM migration.
+
+Apply migration `0003_customers` after the authentication migrations. The bootstrap command now seeds role-specific permissions for accountant, seller, visitor and customer roles. Review these defaults against the company's access policy before issuing staff accounts.
