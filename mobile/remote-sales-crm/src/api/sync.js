@@ -21,8 +21,16 @@ async function syncRequest(path, { token, method = "GET", body } = {}) {
   return data;
 }
 
+function newOperationId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = Math.floor(Math.random() * 16);
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 export async function queueOfflineChange(change) {
-  return enqueueOperation(change);
+  return enqueueOperation({ ...change, id: change.id || newOperationId() });
 }
 
 export async function synchronize({ token, batchSize = 50 } = {}) {
