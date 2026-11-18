@@ -18,8 +18,11 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    if settings.app_env == "production" and settings.jwt_secret == "development-only-change-this-secret":
-        raise RuntimeError("JWT_SECRET must be configured outside development")
+    if settings.app_env == "production":
+        if settings.jwt_secret == "development-only-change-this-secret" or len(settings.jwt_secret) < 32:
+            raise RuntimeError("Production JWT_SECRET must be a unique secret of at least 32 characters")
+        if not settings.cors_origin_list or "*" in settings.cors_origin_list:
+            raise RuntimeError("Production CORS_ORIGINS must be an explicit allowlist; wildcard is forbidden")
     logging.getLogger(__name__).info("Starting %s (%s)", settings.app_name, settings.app_env)
     yield
     logging.getLogger(__name__).info("Shutting down %s", settings.app_name)
