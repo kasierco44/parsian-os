@@ -25,7 +25,7 @@ jobs:
           source = Path("wordpress/parsian-finance/parsian-finance.php").read_text(encoding="utf-8")
           start_marker = "return <<<'JS'"
           start = source.index(start_marker) + len(start_marker)
-          end = source.index("\\nJS;}", start)
+          end = source.index("JS;}", start) - 1
           Path("/tmp/parsian-finance.js").write_text(source[start:end], encoding="utf-8")
           PY
           node --check /tmp/parsian-finance.js
