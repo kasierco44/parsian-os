@@ -24,7 +24,6 @@ def upgrade() -> None:
         sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
         sa.Column("deleted", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.UniqueConstraint("owner_user_id", "entity_type", "entity_id", name="uq_sync_record_owner_entity"),
     )
     op.create_index("ix_sync_records_owner_user_id", "sync_records", ["owner_user_id"])
     op.create_table(
