@@ -25,11 +25,11 @@ def test_product_update_supports_catalog_deactivation() -> None:
 
 
 def test_customer_and_catalog_routes_are_registered() -> None:
-    paths = {route.path for route in app.routes}
+    paths = app.openapi()["paths"]
     assert "/api/v1/customers" in paths
     assert "/api/v1/catalog/manifest" in paths
     assert "/api/v1/catalog/products" in paths
-    assert any(route.path == "/api/v1/catalog/products" and "GET" in route.methods for route in app.routes)
+    assert "get" in paths["/api/v1/catalog/products"]
     assert "/api/v1/users" in paths
     assert "/api/v1/replication/push" in paths
     assert "/api/v1/sales/orders" in paths
