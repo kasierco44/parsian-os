@@ -39,6 +39,11 @@ final class Parsian_OS_Backend_Bridge {
             'callback' => array($this, 'logout'),
             'permission_callback' => array($this, 'can_view'),
         ));
+        register_rest_route(self::REST_NAMESPACE, '/backend/proxy', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'proxy'),
+            'permission_callback' => array($this, 'can_view'),
+        ));
     }
 
     public function can_view() {
@@ -107,7 +112,7 @@ final class Parsian_OS_Backend_Bridge {
             : '';
     }
 
-    private function request($path, $method, $payload = null, $token = '') {
+    private function request($path, $method, $payload = null, $token = '', $extra_headers = array()) {
         $base = $this->api_base();
         if (is_wp_error($base)) {
             return $base;
@@ -121,6 +126,11 @@ final class Parsian_OS_Backend_Bridge {
         );
         if ($token !== '') {
             $args['headers']['Authorization'] = 'Bearer ' . $token;
+        }
+        foreach ($extra_headers as $header_name => $header_value) {
+            if (is_string($header_name) && is_scalar($header_value)) {
+                $args['headers'][$header_name] = (string) $header_value;
+            }
         }
         if ($payload !== null) {
             $args['headers']['Content-Type'] = 'application/json';
@@ -250,6 +260,108 @@ final class Parsian_OS_Backend_Bridge {
             return new WP_Error('finance_role_required', 'حساب شما مجوز مالی ندارد.', array('status' => 403));
         }
         return rest_ensure_response(array('changed' => true, 'identity' => $result));
+    }
+
+    /**
+     * Allowlisted proxy to the canonical supplier-accounting API.
+     * The caller cannot choose an arbitrary upstream URL or API path.
+     */
+    private function allowed_finance_route($method, $path) {
+        $uuid = '[0-9a-fA-F-]{36}';
+        $rules = array(
+            'GET' => array(
+                '#^suppliers$#',
+                '#^suppliers/bills$#',
+                '#^suppliers/payments$#',
+                '#^suppliers/reports/cash-flow$#',
+                '#^suppliers/' . $uuid . '/ledger$#',
+            ),
+            'POST' => array(
+                '#^suppliers$#',
+                '#^suppliers/opening-balance$#',
+                '#^suppliers/bills$#',
+                '#^suppliers/payments$#',
+                '#^suppliers/payments/' . $uuid . '/clear$#',
+                '#^suppliers/payments/' . $uuid . '/bounce$#',
+            ),
+        );
+        if (!isset($rules[$method])) {
+            return false;
+        }
+        foreach ($rules[$method] as $pattern) {
+            if (preg_match($pattern, $path)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function proxy(WP_REST_Request $request) {
+        $token = $this->token();
+        if (!$token) {
+            return new WP_Error('backend_session_missing', 'ابتدا با حساب Backend وارد شوید.', array('status' => 401));
+        }
+
+        // Revalidate the Backend identity on every proxied operation. Backend
+        // endpoints independently enforce their own authorization as well.
+        $identity = $this->request('auth/me', 'GET', null, $token);
+        if (is_wp_error($identity)) {
+            delete_transient($this->session_key());
+            return new WP_Error('backend_session_invalid', 'نشست Backend معتبر نیست؛ دوباره وارد شوید.', array('status' => 401));
+        }
+        if (!$this->permitted_finance_identity($identity)) {
+            delete_transient($this->session_key());
+            return new WP_Error('finance_role_required', 'این حساب Backend مجوز مالی ندارد.', array('status' => 403));
+        }
+
+        $method = strtoupper((string) $request->get_param('method'));
+        $path = trim((string) $request->get_param('path'), '/');
+        if (strlen($path) > 180 || strpos($path, '..') !== false || strpos($path, '?') !== false
+            || strpos($path, '#') !== false || strpos($path, ':') !== false
+            || !$this->allowed_finance_route($method, $path)) {
+            return new WP_Error('finance_route_not_allowed', 'مسیر درخواستی در فهرست API مالی مجاز نیست.', array('status' => 403));
+        }
+
+        $query = $request->get_param('query');
+        if ($method === 'GET' && is_array($query) && $query) {
+            $allowed_query = array('active_only', 'supplier_id', 'status', 'forecast_days', 'from_date', 'to_date');
+            $safe_query = array();
+            foreach ($query as $key => $value) {
+                if (in_array($key, $allowed_query, true) && is_scalar($value)) {
+                    $safe_query[$key] = sanitize_text_field((string) $value);
+                }
+            }
+            if ($safe_query) {
+                $path .= '?' . http_build_query($safe_query, '', '&', PHP_QUERY_RFC3986);
+            }
+        }
+
+        $payload = null;
+        if ($method === 'POST') {
+            $payload = $request->get_param('payload');
+            if (!is_array($payload)) {
+                return new WP_Error('invalid_finance_payload', 'بدنهٔ درخواست مالی باید یک شیء JSON معتبر باشد.', array('status' => 400));
+            }
+        }
+
+        $headers = array();
+        $idempotency_key = sanitize_text_field((string) $request->get_param('idempotency_key'));
+        if ($idempotency_key !== '') {
+            if (strlen($idempotency_key) < 12 || strlen($idempotency_key) > 120
+                || !preg_match('/^[A-Za-z0-9._:-]+$/', $idempotency_key)) {
+                return new WP_Error('invalid_idempotency_key', 'کلید جلوگیری از ثبت تکراری معتبر نیست.', array('status' => 400));
+            }
+            $headers['Idempotency-Key'] = $idempotency_key;
+        }
+        if ($method === 'POST' && in_array($path, array('suppliers/bills', 'suppliers/payments'), true) && !$idempotency_key) {
+            return new WP_Error('idempotency_key_required', 'برای ثبت بدهی یا پرداخت، کلید یکتای جلوگیری از ثبت تکراری الزامی است.', array('status' => 400));
+        }
+
+        $result = $this->request($path, $method, $payload, $token, $headers);
+        if (is_wp_error($result)) {
+            return $result;
+        }
+        return rest_ensure_response(array('ok' => true, 'data' => $result));
     }
 
     public function logout() {
