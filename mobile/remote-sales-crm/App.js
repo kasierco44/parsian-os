@@ -524,7 +524,7 @@ export default function App() {
     <>
       <View style={styles.metricStrip}><Text style={styles.metricStripBig}>{money(todayTasks.filter(t => !t.done).length)}</Text><Text style={styles.metricStripText}>پیگیری باقی‌مانده</Text><Pressable style={styles.smallRedBtn} onPress={() => setModal(true)}><Text style={styles.smallRedText}>+ جدید</Text></Pressable></View>
       {todayTasks.map((task, i) => <Pressable key={task.id} style={styles.followCard} onPress={() => toggleTask(task.id)}><View style={[styles.check, task.done && styles.checked]}>{task.done ? <Text style={styles.checkMark}>✓</Text> : null}</View><View style={styles.taskBody}><Text style={styles.taskTitle}>{task.title}</Text><Text style={styles.taskTime}>{task.time}</Text></View><Pill tone={task.done ? "green" : "amber"}>{task.done ? "انجام شد" : "باز"}</Pill></Pressable>)}
-      <SectionTitle title="گزارش‌های ویزیت" action="ثبت گزارش" onAction={() => { if (!selected && customers.length) setSelected(customers[0]); setVisitModal(true); }} />
+      <SectionTitle title="گزارش‌های ویزیت" action="ثبت گزارش" onAction={() => { if (selected) setVisitModal(true); else { setTab("مشتریان"); showToast("ابتدا مشتری را انتخاب کنید"); } }} />
       {visits.map(visit => (
         <View key={visit.id} style={styles.proformaCard}>
           <Text style={styles.productName}>{visit.customer_name}</Text>
