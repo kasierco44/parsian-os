@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "پارسیان‌یار ویزیتور",
+    "slug": "parsian-remote-sales-crm",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#111318"
+    },
+    "android": {
+      "package": "ir.pgtparts.parsianremotecrm",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#111318"
+      },
+      "softwareKeyboardLayoutMode": "pan",
+      "supportsRTL": true
+    }
+  }
+}
