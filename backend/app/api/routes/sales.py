@@ -446,14 +446,6 @@ def list_invoice_receipts(invoice_id: UUID, user: User = Depends(get_current_use
     return db.scalars(select(PaymentReceipt).where(PaymentReceipt.invoice_id == invoice.id).order_by(PaymentReceipt.received_at)).all()
 
 
-@router.get("/invoices", response_model=list[InvoiceRead])
-def list_invoices(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    statement = select(SalesInvoice).order_by(SalesInvoice.issued_at.desc()).limit(300)
-    if not _accounting(user):
-        statement = statement.where(SalesInvoice.seller_user_id == user.id)
-    return db.scalars(statement).all()
-
-
 @router.get("/cheques", response_model=list[ChequeRead])
 def list_cheques(status_filter: str | None = Query(default=None, alias="status"), user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     statement = (
