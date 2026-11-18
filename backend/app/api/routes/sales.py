@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -138,7 +138,7 @@ def create_order(payload: SalesOrderCreate, user: User = Depends(get_current_use
 
 
 @router.post("/orders/{order_id}/submit", response_model=SalesOrderRead)
-def submit_order(order_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def submit_order(order_id: UUID, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     order = db.scalar(select(SalesOrder).options(selectinload(SalesOrder.lines)).where(SalesOrder.id == order_id).with_for_update())
     if order is None or not _can_view_order(user, order):
         raise HTTPException(status_code=404, detail="سفارش پیدا نشد.")
@@ -161,7 +161,7 @@ def list_orders(status_filter: str | None = Query(default=None, alias="status"),
 
 
 @router.post("/orders/{order_id}/approve", response_model=SalesOrderRead)
-def approve_order(order_id: str, payload: OrderDecision, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def approve_order(order_id: UUID, payload: OrderDecision, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not _manager(user):
         raise HTTPException(status_code=403, detail="تأیید سفارش فقط برای مدیر مجاز است.")
     order = db.scalar(select(SalesOrder).options(selectinload(SalesOrder.lines)).where(SalesOrder.id == order_id).with_for_update())
@@ -180,7 +180,7 @@ def approve_order(order_id: str, payload: OrderDecision, user: User = Depends(ge
 
 
 @router.post("/orders/{order_id}/reject", response_model=SalesOrderRead)
-def reject_order(order_id: str, payload: OrderDecision, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def reject_order(order_id: UUID, payload: OrderDecision, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not _manager(user):
         raise HTTPException(status_code=403, detail="رد سفارش فقط برای مدیر مجاز است.")
     order = db.scalar(select(SalesOrder).options(selectinload(SalesOrder.lines)).where(SalesOrder.id == order_id).with_for_update())
@@ -196,7 +196,7 @@ def reject_order(order_id: str, payload: OrderDecision, user: User = Depends(get
 
 
 @router.post("/orders/{order_id}/invoice", response_model=InvoiceRead, status_code=status.HTTP_201_CREATED)
-def issue_invoice(order_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def issue_invoice(order_id: UUID, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not _manager(user):
         raise HTTPException(status_code=403, detail="صدور فاکتور قطعی فقط برای مدیر مجاز است.")
     order = db.scalar(select(SalesOrder).options(selectinload(SalesOrder.lines)).where(SalesOrder.id == order_id).with_for_update())
@@ -243,13 +243,13 @@ def issue_invoice(order_id: str, user: User = Depends(get_current_user), db: Ses
 
 
 @router.post("/invoices/{invoice_id}/receipts", response_model=PaymentRead, status_code=status.HTTP_201_CREATED)
-def create_receipt(invoice_id: str, payload: PaymentCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_receipt(invoice_id: UUID, payload: PaymentCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     invoice = db.scalar(select(SalesInvoice).where(SalesInvoice.id == invoice_id).with_for_update())
     if invoice is None:
         raise HTTPException(status_code=404, detail="فاکتور پیدا نشد.")
     if not _manager(user) and invoice.seller_user_id != user.id and "accountant" not in _roles(user):
         raise HTTPException(status_code=403, detail="به این فاکتور دسترسی ندارید.")
-    pending_total = db.scalar(select(func.coalesce(func.sum(PaymentReceipt.amount), 0)).where(PaymentReceipt.invoice_id == invoice.id)) or 0
+    pending_total = db.scalar(select(func.coalesce(func.sum(PaymentReceipt.amount), 0)).where(PaymentReceipt.invoice_id == invoice.id, PaymentReceipt.status.in_({"pending", "cleared"}))) or 0
     if payload.amount > invoice.total_amount - pending_total:
         raise HTTPException(status_code=409, detail="مبلغ دریافت از مانده فاکتور بیشتر است.")
     if payload.method == "cheque" and not all([payload.bank_name, payload.cheque_number, payload.due_date, payload.drawer_name]):
@@ -272,7 +272,7 @@ def create_receipt(invoice_id: str, payload: PaymentCreate, user: User = Depends
 
 
 @router.post("/cheques/{cheque_id}/clear", response_model=PaymentRead)
-def clear_cheque(cheque_id: str, payload: ChequeDecision, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def clear_cheque(cheque_id: UUID, payload: ChequeDecision, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not _accounting(user):
         raise HTTPException(status_code=403, detail="تأیید وصول چک فقط برای مدیر یا حسابدار مجاز است.")
     cheque = db.scalar(select(Cheque).where(Cheque.id == cheque_id).with_for_update())
@@ -293,7 +293,7 @@ def clear_cheque(cheque_id: str, payload: ChequeDecision, user: User = Depends(g
 
 
 @router.post("/cheques/{cheque_id}/bounce", response_model=PaymentRead)
-def bounce_cheque(cheque_id: str, payload: ChequeDecision, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def bounce_cheque(cheque_id: UUID, payload: ChequeDecision, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not _accounting(user):
         raise HTTPException(status_code=403, detail="ثبت برگشت چک فقط برای مدیر یا حسابدار مجاز است.")
     cheque = db.scalar(select(Cheque).where(Cheque.id == cheque_id).with_for_update())
@@ -364,7 +364,7 @@ def list_inventory(user: User = Depends(get_current_user), db: Session = Depends
 
 
 @router.get("/invoices/{invoice_id}/receipts", response_model=list[PaymentRead])
-def list_invoice_receipts(invoice_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_invoice_receipts(invoice_id: UUID, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     invoice = db.get(SalesInvoice, invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail="فاکتور پیدا نشد.")
