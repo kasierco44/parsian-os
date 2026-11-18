@@ -463,7 +463,7 @@ export default function App() {
         <Pressable style={styles.outlineBtn} onPress={() => { setApiMode(false); setEntered(true); }}><Text style={styles.outlineBtnText}>ورود نمایشی برای بررسی محیط</Text></Pressable>
         <Text style={styles.demoHint}>{isApiConfigured() ? "اتصال API تنظیم شده است؛ برای ورود واقعی از حساب ایجادشده توسط مدیر استفاده کنید." : "اتصال API هنوز روی سرور/نسخه نصب‌شده تنظیم نشده است. ورود نمایشی فقط برای بررسی ظاهر است."}</Text>
       </View>
-      <Text style={styles.version}>نسخه آزمایشی ۰.۱.۰</Text>
+      <Text style={styles.version}>نسخه ۰.۲.۰ • CRM آفلاین</Text>
     </SafeAreaView>
   );
 
@@ -480,15 +480,15 @@ export default function App() {
   const dashboard = (
     <>
       <View style={styles.targetCard}>
-        <View style={styles.targetTop}><View><Text style={styles.targetCaption}>هدف فروش ماه جاری</Text><Text style={styles.targetValue}>{money(10000)} <Text style={styles.targetUnit}>دست</Text></Text></View><Pill tone="green">عملکرد رو به رشد</Pill></View>
-        <View style={styles.progressTrack}><View style={styles.progressFill} /></View>
-        <View style={styles.progressMeta}><Text style={styles.targetSmall}>۱٬۸۵۰ دست فروش ثبت‌شده</Text><Text style={styles.targetSmall}>۱۸.۵٪ تحقق هدف</Text></View>
+        <Text style={styles.targetCaption}>هدف فروش ماه جاری</Text>
+        <Text style={styles.targetValue}>{apiMode ? "در انتظار تنظیم مدیر" : "۱۰٬۰۰۰ دست (نمایشی)"}</Text>
+        <Text style={styles.targetSmall}>هدف و مبلغ فروش پس از اتصال ماژول فروش و تنظیم مدیر نمایش داده می‌شود.</Text>
       </View>
       <View style={styles.metricGrid}>
-        <View style={styles.metricCard}><Text style={styles.metricIcon}>▣</Text><Text style={styles.metricValue}>{money(24)}</Text><Text style={styles.metricLabel}>مشتری فعال</Text></View>
-        <View style={styles.metricCard}><Text style={styles.metricIcon}>↗</Text><Text style={styles.metricValue}>{money(8)}</Text><Text style={styles.metricLabel}>سفارش این ماه</Text></View>
-        <View style={styles.metricCard}><Text style={styles.metricIcon}>◷</Text><Text style={styles.metricValue}>{money(6)}</Text><Text style={styles.metricLabel}>پیگیری باز</Text></View>
-        <View style={styles.metricCard}><Text style={styles.metricIcon}>٪</Text><Text style={styles.metricValue}>{money(12.4)}٪</Text><Text style={styles.metricLabel}>پورسانت تخمینی</Text></View>
+        <View style={styles.metricCard}><Text style={styles.metricIcon}>▣</Text><Text style={styles.metricValue}>{money(customers.length)}</Text><Text style={styles.metricLabel}>مشتری ذخیره‌شده</Text></View>
+        <View style={styles.metricCard}><Text style={styles.metricIcon}>↗</Text><Text style={styles.metricValue}>{money(proformas.length)}</Text><Text style={styles.metricLabel}>پیش‌نویس سفارش</Text></View>
+        <View style={styles.metricCard}><Text style={styles.metricIcon}>◷</Text><Text style={styles.metricValue}>{money(todayTasks.filter(task => !task.done).length)}</Text><Text style={styles.metricLabel}>وظیفه باز</Text></View>
+        <View style={styles.metricCard}><Text style={styles.metricIcon}>✓</Text><Text style={styles.metricValue}>{money(visits.length)}</Text><Text style={styles.metricLabel}>گزارش ویزیت</Text></View>
       </View>
       <SectionTitle title="برنامه امروز" action="افزودن پیگیری" onAction={() => setModal(true)} />
       <View style={styles.card}>
@@ -589,8 +589,8 @@ export default function App() {
 
   const profileScreen = (
     <>
-      <View style={styles.detailHero}><View style={styles.bigAvatar}><Text style={styles.bigAvatarText}>و</Text></View><Text style={styles.detailName}>ویزیتور نمونه</Text><Text style={styles.customerMeta}>کد پرسنلی: VIS-001</Text><Pill tone="green">حساب آزمایشی</Pill></View>
-      <View style={styles.card}><Info label="هدف ماهانه" value="۱۰٬۰۰۰ دست" /><Info label="فروش ثبت‌شده" value="۱٬۸۵۰ دست" /><Info label="پورسانت تخمینی" value="۱۲.۴٪" /><Info label="وضعیت اتصال" value="آفلاین / داده نمونه" /></View>
+      <View style={styles.detailHero}><View style={styles.bigAvatar}><Text style={styles.bigAvatarText}>و</Text></View><Text style={styles.detailName}>{apiUser?.full_name || "ویزیتور نمایشی"}</Text><Text style={styles.customerMeta}>{apiUser?.username || "بدون حساب سازمانی"}</Text><Pill tone={apiMode ? "green" : "amber"}>{apiMode ? "حساب سازمانی" : "حساب نمایشی"}</Pill></View>
+      <View style={styles.card}><Info label="مشتریان ذخیره‌شده" value={String(customers.length)} /><Info label="پیش‌نویس‌ها" value={String(proformas.length)} /><Info label="گزارش ویزیت" value={String(visits.length)} /><Info label="وضعیت اتصال" value={apiMode ? "حساب سازمانی" : "محیط نمایشی"} /></View>
       <Pressable style={styles.outlineBtn} onPress={async () => { if (apiMode) await apiLogout(); setApiToken(null); setApiUser(null); setApiMode(false); setEntered(false); setTab("خانه"); }}><Text style={styles.outlineBtnText}>خروج از حساب</Text></Pressable>
     </>
   );
