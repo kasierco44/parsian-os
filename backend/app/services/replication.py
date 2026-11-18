@@ -12,6 +12,7 @@ from app.models.identity import User
 from app.models.product import CatalogState, Product, ProductMedia
 from app.models.replication import ReplicationEvent
 from app.models.sync import SyncRecord
+from app.models.sales import SalesOrder, SalesOrderLine
 
 
 def local_node_id() -> str:
@@ -112,6 +113,56 @@ def apply_remote_event(db: Session, event: ReplicationEvent) -> None:
             state = CatalogState(id=1, version=0)
             db.add(state)
         state.version = max(state.version, data["catalog_version"])
+        return
+
+    if event.entity_type == "order_draft":
+        owner_id = _resolve_user_id(db, event.payload["owner_user_id"], event.payload.get("owner_username"))
+        data = event.payload.get("record", {})
+        order_id = UUID(event.entity_id)
+        order = db.get(SalesOrder, order_id)
+        if event.deleted:
+            if order is not None and order.status == "draft":
+                order.status = "cancelled"
+        else:
+            customer_id = UUID(data["customer_id"])
+            customer = db.get(Customer, customer_id)
+            if customer is None:
+                raise ValueError("Customer must replicate before its sales order.")
+            if order is not None and order.status != "draft":
+                raise ValueError("A non-draft sales order cannot be overwritten by replication.")
+            if order is None:
+                order = SalesOrder(
+                    id=order_id, order_number=f"SO-REP-{order_id.hex[:12].upper()}",
+                    customer_id=customer_id, seller_user_id=owner_id, status="draft",
+                )
+                db.add(order)
+            else:
+                order.lines.clear()
+            order.customer_id = customer_id
+            order.seller_user_id = owner_id
+            order.note = data.get("note", "")
+            order.subtotal = int(data["subtotal"])
+            order.discount_amount = int(data["discount_amount"])
+            order.total_amount = int(data["total_amount"])
+            for line in data.get("lines", []):
+                product_id = UUID(line["product_id"])
+                if db.get(Product, product_id) is None:
+                    raise ValueError("Product must replicate before its sales order.")
+                order.lines.append(SalesOrderLine(
+                    product_id=product_id, sku_snapshot=line["sku"], name_snapshot=line["name"],
+                    quantity=int(line["quantity"]), unit_price=int(line["unit_price"]),
+                    discount_amount=int(line["discount_amount"]), line_total=int(line["line_total"]),
+                ))
+        latest = db.scalar(select(SyncRecord).where(
+            SyncRecord.owner_user_id == owner_id,
+            SyncRecord.entity_type == "order_draft",
+            SyncRecord.entity_id == event.entity_id,
+        ).order_by(SyncRecord.id.desc()).limit(1))
+        if latest is None or latest.version < event.version:
+            db.add(SyncRecord(
+                owner_user_id=owner_id, entity_type="order_draft", entity_id=event.entity_id,
+                payload=data if not event.deleted else {}, version=event.version, deleted=event.deleted,
+            ))
         return
 
     if event.entity_type in {"task", "followup", "visit", "customer_note", "order_draft", "proforma_draft", "product_favorite"}:
