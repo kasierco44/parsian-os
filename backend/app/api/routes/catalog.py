@@ -36,6 +36,15 @@ def _next_catalog_version(db: Session) -> int:
     return state.version
 
 
+def _product_payload(product: Product) -> dict:
+    return {
+        "sku": product.sku, "name": product.name, "category": product.category,
+        "vehicle_model": product.vehicle_model, "description": product.description,
+        "unit_price": product.unit_price, "is_active": product.is_active,
+        "catalog_version": product.catalog_version,
+    }
+
+
 def _media_read(media: ProductMedia) -> ProductMediaRead:
     return ProductMediaRead(
         id=media.id, product_id=media.product_id, file_name=media.file_name,
@@ -50,9 +59,8 @@ def catalog_manifest(since_version: int = Query(default=0, ge=0), user: User = D
     state = db.get(CatalogState, 1)
     current_version = state.version if state else 0
     products = db.scalars(select(Product).where(Product.catalog_version > since_version).order_by(Product.name)).all()
-    product_ids = [p.id for p in products]
-    media = db.scalars(select(ProductMedia).where(ProductMedia.is_active.is_(True), ProductMedia.catalog_version > since_version).order_by(ProductMedia.created_at)).all() if since_version == 0 else db.scalars(select(ProductMedia).where(ProductMedia.is_active.is_(True), ProductMedia.catalog_version > since_version).order_by(ProductMedia.created_at)).all()
-    return CatalogManifest(version=current_version, products=products, media=[_media_read(item) for item in media if item.product_id in product_ids or item.catalog_version > since_version])
+    media = db.scalars(select(ProductMedia).where(ProductMedia.is_active.is_(True), ProductMedia.catalog_version > since_version).order_by(ProductMedia.created_at)).all()
+    return CatalogManifest(version=current_version, products=products, media=[_media_read(item) for item in media])
 
 
 @router.post("/products", response_model=ProductRead, status_code=status.HTTP_201_CREATED)
@@ -60,8 +68,10 @@ def create_product(payload: ProductCreate, user: User = Depends(get_current_user
     if not _is_manager(user):
         raise HTTPException(status_code=403, detail="فقط مدیر مجاز به مدیریت کاتالوگ است.")
     version = _next_catalog_version(db)
-    product = Product(**payload.model_dump(), catalog_version=version)
+    product = Product(**payload.model_dump(), catalog_version=version, replication_version=1)
     db.add(product)
+    db.flush()
+    record_replication_event(db, entity_type="product", entity_id=str(product.id), version=product.replication_version, payload=_product_payload(product))
     record_audit_event(db, action="catalog_product_created", entity_type="product", actor_user_id=user.id, entity_id=str(product.id), details={"sku": product.sku, "catalog_version": version})
     db.commit()
     db.refresh(product)
@@ -81,12 +91,7 @@ def update_product(product_id: UUID, payload: ProductUpdate, user: User = Depend
         setattr(product, key, value)
     product.catalog_version = version
     product.replication_version += 1
-    record_replication_event(db, entity_type="product", entity_id=str(product.id), version=product.replication_version, payload={
-        "sku": product.sku, "name": product.name, "category": product.category,
-        "vehicle_model": product.vehicle_model, "description": product.description,
-        "unit_price": product.unit_price, "is_active": product.is_active,
-        "catalog_version": product.catalog_version,
-    }, deleted=not product.is_active)
+    record_replication_event(db, entity_type="product", entity_id=str(product.id), version=product.replication_version, payload=_product_payload(product), deleted=not product.is_active)
     record_audit_event(db, action="catalog_product_updated", entity_type="product", actor_user_id=user.id, entity_id=str(product.id), details={"catalog_version": version, "fields": sorted(changes)})
     db.commit()
     db.refresh(product)
@@ -112,17 +117,26 @@ async def upload_product_media(product_id: UUID, request: Request, user: User = 
     root = Path(os.getenv("CATALOG_MEDIA_ROOT", "/var/lib/parsian/catalog")).resolve()
     root.mkdir(parents=True, exist_ok=True)
     storage_key = f"{product_id}/{media_id}"
-    target = (root / str(product_id) / str(media_id)).resolve()
+    target = (root / storage_key).resolve()
     if root not in target.parents:
         raise HTTPException(status_code=400, detail="مسیر فایل نامعتبر است.")
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix(".upload")
     temporary.write_bytes(body)
     temporary.replace(target)
+
     version = _next_catalog_version(db)
     product.catalog_version = version
+    product.replication_version += 1
     media = ProductMedia(id=media_id, product_id=product.id, storage_key=storage_key, file_name=safe_name, mime_type=mime_type, size_bytes=len(body), checksum_sha256=checksum, media_version=1, catalog_version=version)
     db.add(media)
+    db.flush()
+    record_replication_event(db, entity_type="product", entity_id=str(product.id), version=product.replication_version, payload=_product_payload(product))
+    record_replication_event(db, entity_type="product_media", entity_id=str(media.id), version=media.media_version, payload={
+        "product_id": str(product.id), "storage_key": storage_key, "file_name": safe_name,
+        "mime_type": mime_type, "size_bytes": len(body), "checksum_sha256": checksum,
+        "media_version": media.media_version, "catalog_version": version,
+    })
     record_audit_event(db, action="catalog_media_uploaded", entity_type="product_media", actor_user_id=user.id, entity_id=str(media.id), details={"product_id": str(product.id), "sha256": checksum, "bytes": len(body)})
     db.commit()
     return _media_read(media)
