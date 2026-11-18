@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, Date, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,6 +24,7 @@ class Supplier(Base):
 
 class SupplierBill(Base):
     __tablename__ = "supplier_bills"
+    __table_args__ = (CheckConstraint("amount > 0", name="ck_supplier_bills_amount_positive"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     bill_number: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
@@ -41,6 +42,11 @@ class SupplierBill(Base):
 
 class SupplierPayment(Base):
     __tablename__ = "supplier_payments"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_supplier_payments_amount_positive"),
+        CheckConstraint("method IN ('cash', 'bank_transfer', 'cheque')", name="ck_supplier_payments_method"),
+        CheckConstraint("status IN ('issued', 'cleared', 'bounced')", name="ck_supplier_payments_status"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     payment_number: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
