@@ -19,7 +19,12 @@
       "supportsRTL": true
     },
     "plugins": [
-      "expo-sqlite",
+      [
+        "expo-sqlite",
+        {
+          "useSQLCipher": true
+        }
+      ],
       "expo-file-system"
     ]
   }
