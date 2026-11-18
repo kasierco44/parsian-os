@@ -64,6 +64,10 @@ export default function App() {
   const [customers, setCustomers] = useState(initialCustomers);
   const [products, setProducts] = useState([]);
   const [proformas, setProformas] = useState([]);
+  const [visits, setVisits] = useState([]);
+  const [visitModal, setVisitModal] = useState(false);
+  const [visitNote, setVisitNote] = useState("");
+  const [visitOutcome, setVisitOutcome] = useState("مذاکره و معرفی محصول");
   const [proformaModal, setProformaModal] = useState(false);
   const [proformaProductId, setProformaProductId] = useState("");
   const [proformaQuantity, setProformaQuantity] = useState("1");
@@ -88,11 +92,12 @@ export default function App() {
     let active = true;
     (async () => {
       try {
-        const [cachedCustomers, cachedTasks, cachedProducts, cachedProformas, conflicts] = await Promise.all([
+        const [cachedCustomers, cachedTasks, cachedProducts, cachedProformas, cachedVisits, conflicts] = await Promise.all([
           readCachedRecords("customer"),
           readCachedRecords("task"),
           readCachedRecords("product"),
           readCachedRecords("proforma_draft"),
+          readCachedRecords("visit"),
           getConflictedOperations(),
         ]);
         if (!active) return;
@@ -100,6 +105,7 @@ export default function App() {
         if (cachedTasks.length) setTodayTasks(cachedTasks);
         if (cachedProducts.length) setProducts(cachedProducts);
         if (cachedProformas.length) setProformas(cachedProformas);
+        if (cachedVisits.length) setVisits(cachedVisits);
         setSyncConflictCount(conflicts.length);
       } catch {
         // A fresh install may not have created the local database yet.
@@ -166,6 +172,8 @@ export default function App() {
         if (tasks.length) setTodayTasks(tasks);
         const localProformas = await readCachedRecords("proforma_draft");
         if (localProformas.length) setProformas(localProformas);
+        const localVisits = await readCachedRecords("visit");
+        if (localVisits.length) setVisits(localVisits);
         const latestProducts = await synchronizeCatalog(apiToken);
         setProducts(latestProducts);
         const serverCustomers = await getCustomers({ token: apiToken });
@@ -324,6 +332,37 @@ export default function App() {
     finally { setSyncBusy(false); }
   };
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2200); };
+  const addVisitReport = async () => {
+    if (!selected) {
+      showToast("ابتدا مشتری را انتخاب کنید");
+      return;
+    }
+    if (visitNote.trim().length < 3) {
+      showToast("شرح ویزیت را وارد کنید");
+      return;
+    }
+    const id = makeUuid();
+    const payload = {
+      customer_id: String(selected.id),
+      customer_name: selected.name,
+      outcome: visitOutcome,
+      note: visitNote.trim(),
+      visited_at: new Date().toISOString(),
+    };
+    const visit = { id, ...payload, sync_status: apiToken ? "در صف همگام‌سازی" : "فقط روی دستگاه" };
+    try {
+      await cacheRecord("visit", id, visit);
+      if (apiToken) await queueOfflineChange({ entityType: "visit", entityId: id, operation: "upsert", payload });
+      setVisits(previous => [visit, ...previous]);
+      setVisitModal(false);
+      setVisitNote("");
+      showToast("گزارش ویزیت ذخیره شد");
+      setTab("پیگیری‌ها");
+    } catch (error) {
+      showToast(error.message || "ذخیره گزارش ویزیت ناموفق بود");
+    }
+  };
+
   const addProformaDraft = async () => {
     const product = products.find(item => String(item.id) === String(proformaProductId));
     const quantity = Math.max(1, Math.min(100000, Number.parseInt(proformaQuantity, 10) || 1));
@@ -485,6 +524,15 @@ export default function App() {
     <>
       <View style={styles.metricStrip}><Text style={styles.metricStripBig}>{money(todayTasks.filter(t => !t.done).length)}</Text><Text style={styles.metricStripText}>پیگیری باقی‌مانده</Text><Pressable style={styles.smallRedBtn} onPress={() => setModal(true)}><Text style={styles.smallRedText}>+ جدید</Text></Pressable></View>
       {todayTasks.map((task, i) => <Pressable key={task.id} style={styles.followCard} onPress={() => toggleTask(task.id)}><View style={[styles.check, task.done && styles.checked]}>{task.done ? <Text style={styles.checkMark}>✓</Text> : null}</View><View style={styles.taskBody}><Text style={styles.taskTitle}>{task.title}</Text><Text style={styles.taskTime}>{task.time}</Text></View><Pill tone={task.done ? "green" : "amber"}>{task.done ? "انجام شد" : "باز"}</Pill></Pressable>)}
+      <SectionTitle title="گزارش‌های ویزیت" action="ثبت گزارش" onAction={() => { if (!selected && customers.length) setSelected(customers[0]); setVisitModal(true); }} />
+      {visits.map(visit => (
+        <View key={visit.id} style={styles.proformaCard}>
+          <Text style={styles.productName}>{visit.customer_name}</Text>
+          <Text style={styles.productMeta}>{visit.outcome} • {new Date(visit.visited_at).toLocaleDateString("fa-IR")}</Text>
+          <Text style={styles.productDescription}>{visit.note}</Text>
+        </View>
+      ))}
+      {visits.length === 0 ? <Text style={styles.empty}>گزارش ویزیتی ثبت نشده است.</Text> : null}
     </>
   );
 
@@ -496,6 +544,7 @@ export default function App() {
       <SectionTitle title="اقدامات سریع" />
       <Pressable style={styles.primaryBtn} onPress={() => setModal(true)}><Text style={styles.primaryBtnText}>＋ ثبت پیگیری</Text></Pressable>
       <Pressable style={styles.outlineBtn} onPress={() => { setProformaProductId(products[0]?.id ? String(products[0].id) : ""); setProformaModal(true); }}><Text style={styles.outlineBtnText}>ثبت پیش‌فاکتور (پیش‌نویس)</Text></Pressable>
+      <Pressable style={styles.outlineBtn} onPress={() => setVisitModal(true)}><Text style={styles.outlineBtnText}>ثبت گزارش ویزیت</Text></Pressable>
     </>
   ) : null;
 
@@ -569,6 +618,21 @@ export default function App() {
       <Modal visible={modal} transparent animationType="fade" onRequestClose={() => setModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.modalBackdrop}>
           <View style={styles.modalCard}><Text style={styles.modalTitle}>ثبت پیگیری جدید</Text><Text style={styles.fieldLabel}>شرح پیگیری</Text><TextInput value={note} onChangeText={setNote} placeholder="مثلاً تماس برای پیگیری سفارش..." textAlign="right" multiline style={[styles.input, styles.noteInput]} /><Pressable style={styles.primaryBtn} onPress={addFollowup}><Text style={styles.primaryBtnText}>ثبت پیگیری</Text></Pressable><Pressable style={styles.cancelBtn} onPress={() => setModal(false)}><Text style={styles.cancelText}>انصراف</Text></Pressable></View>
+        </KeyboardAvoidingView>
+      </Modal>
+      <Modal visible={visitModal} transparent animationType="fade" onRequestClose={() => setVisitModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>گزارش ویزیت مشتری</Text>
+            <Text style={styles.fieldLabel}>مشتری</Text>
+            <Text style={styles.input}>{selected?.name || "مشتری انتخاب نشده"}</Text>
+            <Text style={styles.fieldLabel}>نتیجه ویزیت</Text>
+            <TextInput value={visitOutcome} onChangeText={setVisitOutcome} textAlign="right" style={styles.input} />
+            <Text style={styles.fieldLabel}>شرح ویزیت</Text>
+            <TextInput value={visitNote} onChangeText={setVisitNote} placeholder="مذاکرات، نیاز مشتری، اقدام بعدی..." textAlign="right" multiline style={[styles.input, styles.noteInput]} />
+            <Pressable style={styles.primaryBtn} onPress={addVisitReport}><Text style={styles.primaryBtnText}>ذخیره گزارش</Text></Pressable>
+            <Pressable style={styles.cancelBtn} onPress={() => setVisitModal(false)}><Text style={styles.cancelText}>انصراف</Text></Pressable>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
       <Modal visible={proformaModal} transparent animationType="fade" onRequestClose={() => setProformaModal(false)}>
