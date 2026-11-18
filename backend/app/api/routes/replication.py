@@ -83,7 +83,7 @@ async def pull_replication_events(request: Request, cursor: int = Query(default=
     _verify_signature(request, b"")
     rows = db.scalars(select(ReplicationEvent).where(
         ReplicationEvent.id > cursor,
-        ReplicationEvent.origin_node != local_node_id(),
+        ReplicationEvent.origin_node == local_node_id(),
     ).order_by(ReplicationEvent.id).limit(limit)).all()
     max_id = db.scalar(select(func.max(ReplicationEvent.id))) or cursor
     events = [ReplicationEventOut(
