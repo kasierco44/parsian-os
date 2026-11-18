@@ -82,7 +82,15 @@ export default function App() {
         setApiToken(token); setApiUser(me); setApiMode(true); setEntered(true);
         const rows = await getCustomers({ token });
         if (active && Array.isArray(rows)) setCustomers(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
-      } catch (e) {\n        if (e.status === 403 && String(e.detail || "").toLowerCase().includes("password change required")) {\n          if (active) { setApiToken(token); setPasswordChangeRequired(true); }\n        } else { await apiLogout(); }\n      }
+      } catch (e) {
+        if (e.status === 403 && String(e.detail || "").toLowerCase().includes("password change required")) {
+          if (active) { setApiToken(token); setPasswordChangeRequired(true); }
+        } else if (e.status === 0) {
+          if (active) { setApiToken(token); setApiMode(true); setEntered(true); }
+        } else {
+          await apiLogout();
+        }
+      }
     })();
     return () => { active = false; };
   }, []);
@@ -193,7 +201,7 @@ export default function App() {
     <View style={styles.header}>
       <View>
         <Text style={styles.headerEyebrow}>پارسیان‌یار | پنل ویزیتور</Text>
-        <Text style={styles.headerTitle}>{tab === "خانه" ? "سلام، {apiUser?.full_name || "ویزیتور عزیز"}" : tab}</Text>
+        <Text style={styles.headerTitle}>{tab === "خانه" ? `سلام، ${apiUser?.full_name || "ویزیتور عزیز"}` : tab}</Text>
       </View>
       <View style={styles.avatar}><Text style={styles.avatarText}>و</Text></View>
     </View>
