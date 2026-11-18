@@ -1,18 +1,107 @@
 import * as SQLite from "expo-sqlite";
+import * as SecureStore from "expo-secure-store";
+import * as Crypto from "expo-crypto";
 
-const DB_NAME = "parsian-sales.db";
+const DB_NAME = "parsian-sales-secure.db";
+const LEGACY_DB_NAME = "parsian-sales.db";
+const DB_KEY_NAME = "parsian.sales.sqlite.key.v1";
 let databasePromise;
+
+async function getOrCreateDatabaseKey() {
+  let key = await SecureStore.getItemAsync(DB_KEY_NAME);
+  if (!key) {
+    const bytes = await Crypto.getRandomBytesAsync(32);
+    key = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+    await SecureStore.setItemAsync(DB_KEY_NAME, key, {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+  }
+  if (!/^[a-f0-9]{64}$/.test(key)) throw new Error("کلید رمزنگاری پایگاه داده معتبر نیست.");
+  return key;
+}
+
+async function migrateLegacyPlaintextDatabase(targetDb) {
+  const marker = await targetDb.getFirstAsync("SELECT value FROM sync_state WHERE key = 'legacy_plaintext_migrated'");
+  if (marker) return;
+  let legacyDb;
+  try {
+    legacyDb = await SQLite.openDatabaseAsync(LEGACY_DB_NAME);
+    const tables = await legacyDb.getAllAsync("SELECT name FROM sqlite_master WHERE type='table'");
+    const names = new Set(tables.map(row => row.name));
+    if (names.has("outbox")) {
+      const columns = await legacyDb.getAllAsync("PRAGMA table_info(outbox)");
+      const hasEntityId = columns.some(column => column.name === "entity_id");
+      const rows = await legacyDb.getAllAsync("SELECT * FROM outbox");
+      for (const row of rows) {
+        await targetDb.runAsync(
+          "INSERT OR IGNORE INTO outbox(id,entity_type,entity_id,operation,payload,base_version,created_at,state,attempts,last_error) VALUES(?,?,?,?,?,?,?,?,?,?)",
+          row.id, row.entity_type, hasEntityId ? row.entity_id ?? null : null, row.operation,
+          row.payload, row.base_version ?? null, row.created_at, row.state || "pending",
+          row.attempts || 0, row.last_error ?? null
+        );
+      }
+    }
+    if (names.has("cache_records")) {
+      const rows = await legacyDb.getAllAsync("SELECT * FROM cache_records");
+      for (const row of rows) {
+        await targetDb.runAsync(
+          "INSERT OR IGNORE INTO cache_records(entity_type,entity_id,payload,server_version,updated_at,deleted) VALUES(?,?,?,?,?,?)",
+          row.entity_type, row.entity_id, row.payload, row.server_version ?? null,
+          row.updated_at, row.deleted || 0
+        );
+      }
+    }
+    if (names.has("sync_state")) {
+      const rows = await legacyDb.getAllAsync("SELECT * FROM sync_state");
+      for (const row of rows) {
+        if (row.key !== "legacy_plaintext_migrated") {
+          await targetDb.runAsync(
+            "INSERT OR IGNORE INTO sync_state(key,value) VALUES(?,?)",
+            row.key, row.value
+          );
+        }
+      }
+    }
+    if (names.has("media_cache")) {
+      const rows = await legacyDb.getAllAsync("SELECT * FROM media_cache");
+      for (const row of rows) {
+        await targetDb.runAsync(
+          "INSERT OR IGNORE INTO media_cache(media_id,version,local_uri,checksum,updated_at) VALUES(?,?,?,?,?)",
+          row.media_id, row.version, row.local_uri, row.checksum ?? null, row.updated_at
+        );
+      }
+    }
+    await targetDb.runAsync(
+      "INSERT INTO sync_state(key,value) VALUES('legacy_plaintext_migrated','1') ON CONFLICT(key) DO UPDATE SET value='1'"
+    );
+    await legacyDb.closeAsync();
+    legacyDb = null;
+    if (names.size) await SQLite.deleteDatabaseAsync(LEGACY_DB_NAME);
+  } catch (error) {
+    if (legacyDb) await legacyDb.closeAsync().catch(() => {});
+    throw new Error("انتقال امن داده‌های آفلاین قبلی انجام نشد؛ فایل قدیمی دست‌نخورده باقی مانده است. " + error.message);
+  }
+}
 
 export async function getOfflineDb() {
   if (!databasePromise) {
     databasePromise = (async () => {
       const db = await SQLite.openDatabaseAsync(DB_NAME);
+      const cipher = await db.getFirstAsync("PRAGMA cipher_version");
+      if (!cipher?.cipher_version) {
+        await db.closeAsync();
+        throw new Error("رمزنگاری SQLCipher در این نسخه فعال نیست؛ برنامه را با بیلد بومی جدید نصب کنید.");
+      }
+      const key = await getOrCreateDatabaseKey();
+      await db.execAsync(`PRAGMA key = "x'${key}'";`);
+      await db.getFirstAsync("SELECT count(*) AS count FROM sqlite_master");
       await db.execAsync(`
         PRAGMA journal_mode = WAL;
         PRAGMA foreign_keys = ON;
         CREATE TABLE IF NOT EXISTS outbox (
           id TEXT PRIMARY KEY NOT NULL,
           entity_type TEXT NOT NULL,
+          entity_id TEXT,
           operation TEXT NOT NULL,
           payload TEXT NOT NULL,
           base_version TEXT,
@@ -43,12 +132,12 @@ export async function getOfflineDb() {
           updated_at TEXT NOT NULL
         );
       `);
-      const columns = await db.getAllAsync("PRAGMA table_info(outbox)");
-      if (!columns.some(column => column.name === "entity_id")) {
-        await db.execAsync("ALTER TABLE outbox ADD COLUMN entity_id TEXT");
-      }
+      await migrateLegacyPlaintextDatabase(db);
       return db;
-    })();
+    })().catch(error => {
+      databasePromise = undefined;
+      throw error;
+    });
   }
   return databasePromise;
 }
@@ -66,18 +155,12 @@ export async function enqueueOperation({ id, entityType, entityId, operation, pa
 
 export async function getPendingOperations(limit = 100) {
   const db = await getOfflineDb();
-  return db.getAllAsync(
-    "SELECT * FROM outbox WHERE state IN ('pending','failed') ORDER BY created_at LIMIT ?",
-    limit
-  );
+  return db.getAllAsync("SELECT * FROM outbox WHERE state IN ('pending','failed') ORDER BY created_at LIMIT ?", limit);
 }
 
 export async function markOperation(id, state, error = null) {
   const db = await getOfflineDb();
-  await db.runAsync(
-    "UPDATE outbox SET state = ?, attempts = attempts + 1, last_error = ? WHERE id = ?",
-    state, error, id
-  );
+  await db.runAsync("UPDATE outbox SET state = ?, attempts = attempts + 1, last_error = ? WHERE id = ?", state, error, id);
 }
 
 export async function acknowledgeOperation(id) {
@@ -98,10 +181,7 @@ export async function cacheRecord(entityType, entityId, payload, serverVersion =
 
 export async function readCachedRecords(entityType) {
   const db = await getOfflineDb();
-  const rows = await db.getAllAsync(
-    "SELECT payload FROM cache_records WHERE entity_type = ? AND deleted = 0 ORDER BY updated_at DESC",
-    entityType
-  );
+  const rows = await db.getAllAsync("SELECT payload FROM cache_records WHERE entity_type = ? AND deleted = 0 ORDER BY updated_at DESC", entityType);
   return rows.map(row => JSON.parse(row.payload));
 }
 
@@ -113,10 +193,7 @@ export async function getSyncCursor() {
 
 export async function setSyncCursor(cursor) {
   const db = await getOfflineDb();
-  await db.runAsync(
-    "INSERT INTO sync_state(key,value) VALUES('server_cursor',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-    String(cursor)
-  );
+  await db.runAsync("INSERT INTO sync_state(key,value) VALUES('server_cursor',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", String(cursor));
 }
 
 export async function getCatalogVersion() {
@@ -127,8 +204,5 @@ export async function getCatalogVersion() {
 
 export async function setCatalogVersion(version) {
   const db = await getOfflineDb();
-  await db.runAsync(
-    "INSERT INTO sync_state(key,value) VALUES('catalog_version',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-    String(version)
-  );
+  await db.runAsync("INSERT INTO sync_state(key,value) VALUES('catalog_version',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", String(version));
 }
