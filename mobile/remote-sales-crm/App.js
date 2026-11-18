@@ -80,9 +80,11 @@ export default function App() {
         if (!token || !active) return;
         const me = await getMe(token);
         if (!active) return;
-        setApiToken(token); setApiUser(me); setApiMode(true); setEntered(true);
         const rows = await getCustomers({ token });
-        if (active && Array.isArray(rows)) setCustomers(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
+        if (!Array.isArray(rows)) throw new Error("ساختار فهرست مشتریان دریافتی از سرور معتبر نیست.");
+        if (!active) return;
+        setCustomers(rows.map(c => ({ id: c.id, name: c.name, city: c.city || c.province || "", phone: c.mobile || c.phone || "", status: c.is_active ? "فعال" : "غیرفعال", last: "از سرور", due: "—" })));
+        setApiToken(token); setApiUser(me); setApiMode(true); setEntered(true);
       } catch (e) {
         if (e.status === 403 && String(e.detail || "").toLowerCase().includes("password change required")) {
           if (active) { setApiToken(token); setPasswordChangeRequired(true); }
