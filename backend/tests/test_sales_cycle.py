@@ -196,3 +196,30 @@ def test_opening_balance_validation_and_ledger_use_calendar_dates():
     assert "from_date > to_date" in source
     assert "end_exclusive" in source
     assert "normal_balance == \"debit\"" not in source
+
+
+def test_manual_cash_entry_schema_and_accounting_routes():
+    from app.schemas.sales import ManualCashEntryCreate
+    from datetime import date
+
+    payload = ManualCashEntryCreate(
+        amount=2500000,
+        account_code="EXPENSE_RENT",
+        payment_account="BANK",
+        description="اجاره دفتر",
+        entry_date=date(2026, 11, 18),
+        reference="رسید اجاره",
+    )
+    assert payload.amount == 2500000
+    paths = {route.path for route in app.routes}
+    assert "/api/v1/sales/accounting/expenses" in paths
+    assert "/api/v1/sales/accounting/other-income" in paths
+
+
+def test_profit_loss_aggregates_all_chart_revenue_and_expense_types():
+    from pathlib import Path
+
+    source = Path("app/api/routes/sales.py").read_text()
+    assert 'AccountingAccount.account_type.in_({"revenue", "expense"})' in source
+    assert 'if item["account_type"] == "revenue"' in source
+    assert 'if item["account_type"] == "expense"' in source
