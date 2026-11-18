@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.api.routes.sales import _invoice_status, _journal, router as sales_router
+from app.api.routes.sales import _calculate_progressive_commission, _invoice_status, _journal, router as sales_router
 from app.main import app
 from app.models.product import Product
 from app.models.sales import PaymentReceipt, SalesInvoice
@@ -72,3 +72,14 @@ def test_payment_receipt_has_unique_idempotency_key():
 def test_product_inventory_fields_are_mapped():
     assert "track_inventory" in Product.__table__.c
     assert "cost_price" in Product.__table__.c
+
+
+
+def test_commission_uses_marginal_progressive_monthly_tiers():
+    tiers = [
+        SimpleNamespace(min_collected_amount=0, rate_bps=100, is_active=True),
+        SimpleNamespace(min_collected_amount=1000000, rate_bps=200, is_active=True),
+    ]
+    commission, effective_rate = _calculate_progressive_commission(900000, 200000, tiers)
+    assert commission == 3000
+    assert effective_rate == 150
