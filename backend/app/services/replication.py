@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models.customer import Customer
 from app.models.identity import User
-from app.models.product import Product, ProductMedia
+from app.models.product import CatalogState, Product, ProductMedia
 from app.models.replication import ReplicationEvent
 from app.models.sync import SyncRecord
 
@@ -70,6 +70,11 @@ def apply_remote_event(db: Session, event: ReplicationEvent) -> None:
             if key in data:
                 setattr(record, key, data[key])
         record.replication_version = event.version
+        state = db.get(CatalogState, 1)
+        if state is None:
+            state = CatalogState(id=1, version=0)
+            db.add(state)
+        state.version = max(state.version, record.catalog_version)
         return
 
     if event.entity_type == "product_media":
@@ -102,6 +107,11 @@ def apply_remote_event(db: Session, event: ReplicationEvent) -> None:
             size_bytes=len(raw), checksum_sha256=data["checksum_sha256"],
             media_version=data["media_version"], catalog_version=data["catalog_version"],
         ))
+        state = db.get(CatalogState, 1)
+        if state is None:
+            state = CatalogState(id=1, version=0)
+            db.add(state)
+        state.version = max(state.version, data["catalog_version"])
         return
 
     if event.entity_type in {"task", "followup", "visit", "customer_note", "order_draft", "proforma_draft", "product_favorite"}:
