@@ -62,6 +62,11 @@ export default function App() {
   const [customers, setCustomers] = useState(initialCustomers);
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(false);
+  const [customerModal, setCustomerModal] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [newCustomerCity, setNewCustomerCity] = useState("");
+  const [newCustomerProvince, setNewCustomerProvince] = useState("");
   const [selected, setSelected] = useState(null);
   const [note, setNote] = useState("");
   const [toast, setToast] = useState("");
@@ -94,6 +99,48 @@ export default function App() {
     await Promise.all(rows.map(customer => cacheRecord("customer", String(customer.id), customer)));
   };
 
+  const makeUuid = () => {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+      const r = Math.floor(Math.random() * 16);
+      return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+    });
+  };
+
+  const addCustomer = async () => {
+    const name = newCustomerName.trim();
+    if (name.length < 2) {
+      showToast("نام مشتری را حداقل با دو نویسه وارد کنید");
+      return;
+    }
+    const id = makeUuid();
+    const payload = {
+      name,
+      phone: newCustomerPhone.trim() || null,
+      city: newCustomerCity.trim() || null,
+      province: newCustomerProvince.trim() || null,
+      customer_type: "wholesaler",
+      notes: null,
+    };
+    const localCustomer = {
+      id, ...payload, status: "فعال", is_active: true,
+      last: "ثبت روی دستگاه", due: "نیازمند پیگیری",
+    };
+    try {
+      await cacheRecord("customer", id, localCustomer);
+      if (apiToken) {
+        await queueOfflineChange({ entityType: "customer", entityId: id, operation: "upsert", payload });
+      }
+      setCustomers(previous => [localCustomer, ...previous.filter(item => String(item.id) !== id)]);
+      setCustomerModal(false);
+      setNewCustomerName(""); setNewCustomerPhone(""); setNewCustomerCity(""); setNewCustomerProvince("");
+      showToast(apiToken ? "مشتری ذخیره شد؛ با اتصال اینترنت همگام می‌شود" : "مشتری به‌صورت محلی ذخیره شد");
+    } catch (error) {
+      showToast(error.message || "ذخیره مشتری ناموفق بود");
+    }
+  };
+
+
   useEffect(() => {
     if (!apiToken) return undefined;
     let syncing = false;
@@ -104,6 +151,17 @@ export default function App() {
         await synchronize({ token: apiToken });
         const tasks = await readCachedRecords("task");
         if (tasks.length) setTodayTasks(tasks);
+        const serverCustomers = await getCustomers({ token: apiToken });
+        const mappedCustomers = serverCustomers.map(c => ({
+          id: c.id, name: c.name, city: c.city || c.province || "",
+          phone: c.phone || "", status: c.is_active ? "فعال" : "غیرفعال",
+          last: "از سرور", due: "—",
+        }));
+        await saveCustomerCache(mappedCustomers);
+        setCustomers(previous => {
+          const serverIds = new Set(mappedCustomers.map(c => String(c.id)));
+          return [...mappedCustomers, ...previous.filter(c => !serverIds.has(String(c.id)) && String(c.id).length === 36)];
+        });
       } catch {
         // Keep the outbox and cached records intact; the next network event retries.
       } finally {
@@ -330,7 +388,7 @@ export default function App() {
     <>
       <View style={styles.searchBox}><Text style={styles.searchIcon}>⌕</Text><TextInput placeholder="جست‌وجوی نام، شهر یا شماره تماس" placeholderTextColor="#9A9EAA" value={search} onChangeText={setSearch} style={styles.searchInput} textAlign="right" /></View>
       <View style={styles.filterRow}><Pill tone="red">همه ({money(customers.length)})</Pill><Pill>فعال</Pill><Pill tone="amber">نیازمند پیگیری</Pill></View>
-      <SectionTitle title="فهرست مشتریان" action={apiMode ? (syncBusy ? "در حال همگام‌سازی" : "همگام‌سازی") : "مشتری جدید"} onAction={apiMode ? syncCustomers : () => showToast("ثبت مشتری جدید در نسخه بعد فعال می‌شود")} />
+      <SectionTitle title="فهرست مشتریان" action="＋ مشتری جدید" onAction={() => setCustomerModal(true)} />
       {filtered.map(c => <CustomerCard key={c.id} item={c} onPress={() => { setSelected(c); setTab("جزئیات مشتری"); }} />)}
       {filtered.length === 0 && <Text style={styles.empty}>مشتری‌ای با این مشخصات پیدا نشد.</Text>}
     </>
@@ -386,6 +444,23 @@ export default function App() {
       <Modal visible={modal} transparent animationType="fade" onRequestClose={() => setModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.modalBackdrop}>
           <View style={styles.modalCard}><Text style={styles.modalTitle}>ثبت پیگیری جدید</Text><Text style={styles.fieldLabel}>شرح پیگیری</Text><TextInput value={note} onChangeText={setNote} placeholder="مثلاً تماس برای پیگیری سفارش..." textAlign="right" multiline style={[styles.input, styles.noteInput]} /><Pressable style={styles.primaryBtn} onPress={addFollowup}><Text style={styles.primaryBtnText}>ثبت پیگیری</Text></Pressable><Pressable style={styles.cancelBtn} onPress={() => setModal(false)}><Text style={styles.cancelText}>انصراف</Text></Pressable></View>
+        </KeyboardAvoidingView>
+      </Modal>
+      <Modal visible={customerModal} transparent animationType="fade" onRequestClose={() => setCustomerModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>ثبت مشتری جدید</Text>
+            <Text style={styles.fieldLabel}>نام فروشگاه / مشتری *</Text>
+            <TextInput value={newCustomerName} onChangeText={setNewCustomerName} placeholder="مثلاً پخش قطعات..." textAlign="right" style={styles.input} />
+            <Text style={styles.fieldLabel}>شماره تماس</Text>
+            <TextInput value={newCustomerPhone} onChangeText={setNewCustomerPhone} keyboardType="phone-pad" placeholder="شماره تماس" textAlign="right" style={styles.input} />
+            <Text style={styles.fieldLabel}>شهر</Text>
+            <TextInput value={newCustomerCity} onChangeText={setNewCustomerCity} placeholder="شهر" textAlign="right" style={styles.input} />
+            <Text style={styles.fieldLabel}>استان</Text>
+            <TextInput value={newCustomerProvince} onChangeText={setNewCustomerProvince} placeholder="استان" textAlign="right" style={styles.input} />
+            <Pressable style={styles.primaryBtn} onPress={addCustomer}><Text style={styles.primaryBtnText}>ذخیره مشتری</Text></Pressable>
+            <Pressable style={styles.cancelBtn} onPress={() => setCustomerModal(false)}><Text style={styles.cancelText}>انصراف</Text></Pressable>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
