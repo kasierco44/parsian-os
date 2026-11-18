@@ -11,6 +11,8 @@ class ProductCreate(BaseModel):
     vehicle_model: str | None = Field(default=None, max_length=120)
     description: str | None = None
     unit_price: int | None = Field(default=None, ge=0)
+    cost_price: int | None = Field(default=None, ge=0)
+    track_inventory: bool = False
 
 
 class ProductUpdate(BaseModel):
@@ -19,6 +21,8 @@ class ProductUpdate(BaseModel):
     vehicle_model: str | None = Field(default=None, max_length=120)
     description: str | None = None
     unit_price: int | None = Field(default=None, ge=0)
+    cost_price: int | None = Field(default=None, ge=0)
+    track_inventory: bool | None = None
     is_active: bool | None = None
 
 
@@ -32,6 +36,8 @@ class ProductRead(BaseModel):
     vehicle_model: str | None
     description: str | None
     unit_price: int | None
+    cost_price: int | None
+    track_inventory: bool
     is_active: bool
     catalog_version: int
     updated_at: datetime
