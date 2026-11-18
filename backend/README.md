@@ -83,3 +83,8 @@ pytest -q
 ```
 
 Automated tests cover password/token utilities, schema validation, sales route registration, invoice collection states, balanced journal validation, payment idempotency mapping, and migration revision continuity. Database-backed integration tests, real PostgreSQL migration/rollback tests, concurrency/idempotency tests, role-isolation tests, and end-to-end offline recovery tests remain release gates.
+
+
+## Chart of accounts
+
+Migration `0008_chart_of_accounts` creates a hierarchical chart of accounts and seeds the system account codes used by the sales journal. The chart is available to managers and accountants at `GET /api/v1/sales/accounting/chart-of-accounts`. Managers can add a non-system account with `POST` to the same path using `code`, `name`, `account_type` (`asset`, `liability`, `equity`, `revenue`, `expense`), `normal_balance` (`debit` or `credit`), and optional `parent_code`. System account codes are seeded and cannot be duplicated. This establishes the account catalog; opening balances, journal posting validation against the catalog, and period closing remain separate work.
