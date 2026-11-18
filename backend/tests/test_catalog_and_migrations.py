@@ -31,6 +31,9 @@ def test_customer_and_catalog_routes_are_registered() -> None:
     assert "/api/v1/catalog/products" in paths
     assert "/api/v1/users" in paths
     assert "/api/v1/replication/push" in paths
+    assert "/api/v1/sales/orders" in paths
+    assert "/api/v1/sales/orders/{order_id}/invoice" in paths
+    assert "/api/v1/sales/invoices/{invoice_id}/receipts" in paths
 
 
 def test_alembic_revision_chain_is_contiguous() -> None:
@@ -41,6 +44,8 @@ def test_alembic_revision_chain_is_contiguous() -> None:
         "0003_customers.py": ("0002_offline_sync", "0003_customers"),
         "0004_product_catalog.py": ("0003_customers", "0004_product_catalog"),
         "0005_replication.py": ("0004_product_catalog", "0005_replication"),
+        "0006_sales_cycle.py": ("0005_replication", "0006_sales_cycle"),
+        "0007_payment_idempotency.py": ("0006_sales_cycle", "0007_payment_idempotency"),
     }
     for filename, (parent, revision) in expected.items():
         spec = spec_from_file_location(f"migration_{revision}", versions / filename)
