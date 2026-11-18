@@ -6,4 +6,4 @@ from app.models.identity import Permission, Role, User, role_permissions, user_r
 from app.models.sync import SyncOperation, SyncRecord
 from app.models.sales import (SalesOrder, SalesOrderLine, SalesInvoice, PaymentReceipt, Cheque, CommissionTier, CommissionAccrual, InventoryBalance, InventoryMovement, JournalEntry, JournalLine)
 
-__all__ = ["AuditEvent", "Customer", "Permission", "Role", "User", "role_permissions", "user_roles", "SyncOperation", "SyncRecord", "CatalogState", "Product", "ProductMedia", "ReplicationEvent", "ReplicationState"]
+__all__ = ["AuditEvent", "Customer", "Permission", "Role", "User", "role_permissions", "user_roles", "SyncOperation", "SyncRecord", "CatalogState", "Product", "ProductMedia", "ReplicationEvent", "ReplicationState", "SalesOrder", "SalesOrderLine", "SalesInvoice", "PaymentReceipt", "Cheque", "CommissionTier", "CommissionAccrual", "InventoryBalance", "InventoryMovement", "JournalEntry", "JournalLine"]
