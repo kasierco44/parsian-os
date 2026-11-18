@@ -117,6 +117,13 @@ def apply_remote_event(db: Session, event: ReplicationEvent) -> None:
 
     if event.entity_type == "order_draft":
         owner_id = _resolve_user_id(db, event.payload["owner_user_id"], event.payload.get("owner_username"))
+        latest = db.scalar(select(SyncRecord).where(
+            SyncRecord.owner_user_id == owner_id,
+            SyncRecord.entity_type == "order_draft",
+            SyncRecord.entity_id == event.entity_id,
+        ).order_by(SyncRecord.id.desc()).limit(1))
+        if latest is not None and latest.version >= event.version:
+            return
         data = event.payload.get("record", {})
         order_id = UUID(event.entity_id)
         order = db.get(SalesOrder, order_id)
@@ -153,16 +160,10 @@ def apply_remote_event(db: Session, event: ReplicationEvent) -> None:
                     quantity=int(line["quantity"]), unit_price=int(line["unit_price"]),
                     discount_amount=int(line["discount_amount"]), line_total=int(line["line_total"]),
                 ))
-        latest = db.scalar(select(SyncRecord).where(
-            SyncRecord.owner_user_id == owner_id,
-            SyncRecord.entity_type == "order_draft",
-            SyncRecord.entity_id == event.entity_id,
-        ).order_by(SyncRecord.id.desc()).limit(1))
-        if latest is None or latest.version < event.version:
-            db.add(SyncRecord(
-                owner_user_id=owner_id, entity_type="order_draft", entity_id=event.entity_id,
-                payload=data if not event.deleted else {}, version=event.version, deleted=event.deleted,
-            ))
+        db.add(SyncRecord(
+            owner_user_id=owner_id, entity_type="order_draft", entity_id=event.entity_id,
+            payload=data if not event.deleted else {}, version=event.version, deleted=event.deleted,
+        ))
         return
 
     if event.entity_type in {"task", "followup", "visit", "customer_note", "order_draft", "proforma_draft", "product_favorite"}:
