@@ -22,6 +22,8 @@ services:
       APP_ENV: ${APP_ENV:-production}
       DATABASE_URL: postgresql+psycopg://parsian:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/parsian_os
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in the root .env file}
+      PARSIAN_NODE_ID: ${PARSIAN_NODE_ID:?Set a unique PARSIAN_NODE_ID for this server}
+      REPLICATION_SHARED_SECRET: ${REPLICATION_SHARED_SECRET:?Set REPLICATION_SHARED_SECRET in the root .env file}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       CATALOG_MEDIA_ROOT: /var/lib/parsian/catalog
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
@@ -40,6 +42,25 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  replicator:
+    build:
+      context: ./backend
+    profiles: ["replication"]
+    restart: unless-stopped
+    command: ["python", "-m", "app.replication_worker"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://parsian:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/parsian_os
+      CATALOG_MEDIA_ROOT: /var/lib/parsian/catalog
+      PARSIAN_NODE_ID: ${PARSIAN_NODE_ID:?Set a unique PARSIAN_NODE_ID}
+      REPLICATION_PEER_NODE_ID: ${REPLICATION_PEER_NODE_ID:?Set REPLICATION_PEER_NODE_ID}
+      REPLICATION_PEER_URL: ${REPLICATION_PEER_URL:?Set REPLICATION_PEER_URL}
+      REPLICATION_SHARED_SECRET: ${REPLICATION_SHARED_SECRET:?Set REPLICATION_SHARED_SECRET}
+    volumes:
+      - catalog_media:/var/lib/parsian/catalog
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   postgres_data:
