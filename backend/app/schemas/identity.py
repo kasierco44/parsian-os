@@ -19,6 +19,8 @@ class UserRead(BaseModel):
     full_name: str
     is_active: bool
     must_change_password: bool
+    is_superuser: bool = False
+    role_codes: list[str] = Field(default_factory=list)
 
 
 class UserProvisionRequest(BaseModel):
