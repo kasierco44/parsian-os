@@ -1,0 +1,50 @@
+import { enqueueOperation, getPendingOperations, markOperation, acknowledgeOperation, getSyncCursor, setSyncCursor, cacheRecord } from "../offline/database";
+import { ApiError } from "./client";
+
+const API_PREFIX = "/sync";
+
+async function syncRequest(path, { token, method = "GET", body } = {}) {
+  const base = (process.env.EXPO_PUBLIC_API_BASE_URL || "").replace(/\\/+$/, "");
+  if (!base) throw new ApiError("نشانی API تنظیم نشده است.");
+  let response;
+  try {
+    response = await fetch(`${base}${API_PREFIX}${path}`, {
+      method,
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+  } catch {
+    throw new ApiError("آفلاین هستید؛ عملیات در صف محلی باقی می‌ماند.");
+  }
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(data?.detail || "همگام‌سازی ناموفق بود.", response.status, data?.detail);
+  return data;
+}
+
+export async function queueOfflineChange(change) {
+  return enqueueOperation(change);
+}
+
+export async function synchronize({ token, batchSize = 50 } = {}) {
+  const pending = (await getPendingOperations(batchSize)).map(row => ({
+    id: row.id, entity_type: row.entity_type, operation: row.operation,
+    payload: JSON.parse(row.payload), base_version: row.base_version, client_created_at: row.created_at,
+  }));
+  let pushed = { results: [] };
+  if (pending.length) {
+    pushed = await syncRequest("/push", { token, method: "POST", body: { operations: pending } });
+    for (const result of pushed.results || []) {
+      if (result.status === "accepted" || result.status === "duplicate") await acknowledgeOperation(result.id);
+      else if (result.status === "conflict") await markOperation(result.id, "conflict", result.message || "تعارض نسخه");
+      else await markOperation(result.id, "failed", result.message || "رد توسط سرور");
+    }
+  }
+
+  const cursor = await getSyncCursor();
+  const pulled = await syncRequest(`/pull${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, { token });
+  for (const change of pulled.changes || []) {
+    await cacheRecord(change.entity_type, change.entity_id, change.payload, change.version, change.deleted);
+  }
+  if (pulled.next_cursor != null) await setSyncCursor(pulled.next_cursor);
+  return { pushed: (pushed.results || []).length, pulled: (pulled.changes || []).length, conflicts: (pushed.results || []).filter(x => x.status === "conflict").length };
+}
