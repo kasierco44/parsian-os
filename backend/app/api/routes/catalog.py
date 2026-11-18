@@ -13,7 +13,7 @@ from app.api.routes.auth import get_current_user
 from app.db.session import get_db
 from app.models.identity import User
 from app.models.product import CatalogState, Product, ProductMedia
-from app.schemas.product import CatalogManifest, ProductCreate, ProductMediaRead, ProductRead, ProductUpdate
+from app.schemas.product import CatalogManifest, ProductAdminRead, ProductCreate, ProductMediaRead, ProductRead, ProductUpdate
 from app.services.audit import record_audit_event
 from app.services.replication import record_replication_event
 
@@ -64,7 +64,7 @@ def catalog_manifest(since_version: int = Query(default=0, ge=0), user: User = D
     return CatalogManifest(version=current_version, products=products, media=[_media_read(item) for item in media])
 
 
-@router.post("/products", response_model=ProductRead, status_code=status.HTTP_201_CREATED)
+@router.post("/products", response_model=ProductAdminRead, status_code=status.HTTP_201_CREATED)
 def create_product(payload: ProductCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not _is_manager(user):
         raise HTTPException(status_code=403, detail="فقط مدیر مجاز به مدیریت کاتالوگ است.")
@@ -79,7 +79,7 @@ def create_product(payload: ProductCreate, user: User = Depends(get_current_user
     return product
 
 
-@router.patch("/products/{product_id}", response_model=ProductRead)
+@router.patch("/products/{product_id}", response_model=ProductAdminRead)
 def update_product(product_id: UUID, payload: ProductUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not _is_manager(user):
         raise HTTPException(status_code=403, detail="فقط مدیر مجاز به مدیریت کاتالوگ است.")
