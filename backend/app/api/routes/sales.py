@@ -261,6 +261,14 @@ def issue_invoice(order_id: UUID, user: User = Depends(get_current_user), db: Se
     return invoice
 
 
+@router.get("/invoices", response_model=list[InvoiceRead])
+def list_invoices(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    statement = select(SalesInvoice).order_by(SalesInvoice.issued_at.desc())
+    if not _accounting(user):
+        statement = statement.where(SalesInvoice.seller_user_id == user.id)
+    return db.scalars(statement.limit(300)).all()
+
+
 @router.post("/invoices/{invoice_id}/receipts", response_model=PaymentRead, status_code=status.HTTP_201_CREATED)
 def create_receipt(invoice_id: UUID, payload: PaymentCreate, idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=12, max_length=120), user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     invoice = db.scalar(select(SalesInvoice).where(SalesInvoice.id == invoice_id).with_for_update())
