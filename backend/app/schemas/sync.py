@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
-EntityType = Literal["customer_note", "followup", "visit", "order_draft", "proforma_draft", "product_favorite", "task"]
+EntityType = Literal["customer", "customer_note", "followup", "visit", "order_draft", "proforma_draft", "product_favorite", "task"]
 
 
 class SyncOperationIn(BaseModel):
