@@ -36,8 +36,6 @@ class ProductRead(BaseModel):
     vehicle_model: str | None
     description: str | None
     unit_price: int | None
-    cost_price: int | None
-    track_inventory: bool
     is_active: bool
     catalog_version: int
     updated_at: datetime
@@ -58,3 +56,8 @@ class CatalogManifest(BaseModel):
     version: int
     products: list[ProductRead]
     media: list[ProductMediaRead]
+
+
+class ProductAdminRead(ProductRead):
+    cost_price: int | None
+    track_inventory: bool
