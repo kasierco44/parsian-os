@@ -43,18 +43,23 @@ export async function getOfflineDb() {
           updated_at TEXT NOT NULL
         );
       `);
+      const columns = await db.getAllAsync("PRAGMA table_info(outbox)");
+      if (!columns.some(column => column.name === "entity_id")) {
+        await db.execAsync("ALTER TABLE outbox ADD COLUMN entity_id TEXT");
+      }
       return db;
     })();
   }
   return databasePromise;
 }
 
-export async function enqueueOperation({ id, entityType, operation, payload, baseVersion = null }) {
+export async function enqueueOperation({ id, entityType, entityId, operation, payload, baseVersion = null }) {
+  if (!id || !entityType || !entityId || !operation) throw new Error("شناسه عملیات، نوع و شناسه رکورد و عملیات الزامی است.");
   const db = await getOfflineDb();
   const createdAt = new Date().toISOString();
   await db.runAsync(
-    "INSERT OR IGNORE INTO outbox (id, entity_type, operation, payload, base_version, created_at, state) VALUES (?, ?, ?, ?, ?, ?, 'pending')",
-    id, entityType, operation, JSON.stringify(payload), baseVersion, createdAt
+    "INSERT OR IGNORE INTO outbox (id, entity_type, entity_id, operation, payload, base_version, created_at, state) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')",
+    id, entityType, String(entityId), operation, JSON.stringify(payload), baseVersion, createdAt
   );
   return id;
 }
