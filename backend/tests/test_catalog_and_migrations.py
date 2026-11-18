@@ -29,7 +29,7 @@ def test_customer_and_catalog_routes_are_registered() -> None:
     assert "/api/v1/customers" in paths
     assert "/api/v1/catalog/manifest" in paths
     assert "/api/v1/catalog/products" in paths
-    assert "/api/v1/catalog/products" in paths
+    assert any(route.path == "/api/v1/catalog/products" and "GET" in route.methods for route in app.routes)
     assert "/api/v1/users" in paths
     assert "/api/v1/replication/push" in paths
     assert "/api/v1/sales/orders" in paths
