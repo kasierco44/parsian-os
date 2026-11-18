@@ -12,7 +12,7 @@ from app.models.accounting import AccountingAccount
 from app.models.identity import User
 from app.models.sales import JournalEntry, JournalLine
 from app.models.suppliers import Supplier, SupplierBill, SupplierPayment
-from app.schemas.suppliers import SupplierBillCreate, SupplierCreate, SupplierPaymentCreate
+from app.schemas.suppliers import SupplierBillCreate, SupplierCreate, SupplierPaymentCreate, SupplierOpeningBalanceCreate
 from app.services.audit import record_audit_event
 
 router = APIRouter(prefix="/suppliers", tags=["supplier accounting"])
@@ -117,18 +117,65 @@ def list_suppliers(
     rows = db.scalars(statement.limit(1000)).all()
     result = []
     for supplier in rows:
-        bills = db.scalars(select(SupplierBill).where(SupplierBill.supplier_id == supplier.id)).all()
-        outstanding = sum(max(0, bill.amount - _bill_paid(db, bill.id)) for bill in bills)
+        payable_balance = int(db.scalar(select(func.coalesce(func.sum(JournalLine.credit - JournalLine.debit), 0)).where(
+            JournalLine.supplier_id == supplier.id,
+            JournalLine.account_code.in_({"ACCOUNTS_PAYABLE", "CHEQUES_PAYABLE"}),
+        )) or 0)
+        open_bills = db.scalars(select(SupplierBill).where(SupplierBill.supplier_id == supplier.id)).all()
+        bill_outstanding = sum(max(0, bill.amount - _bill_paid(db, bill.id)) for bill in open_bills)
         cheque_due = int(db.scalar(select(func.coalesce(func.sum(SupplierPayment.amount), 0)).where(
             SupplierPayment.supplier_id == supplier.id, SupplierPayment.status == "issued",
         )) or 0)
         result.append({
             "id": str(supplier.id), "code": supplier.code, "name": supplier.name,
             "phone": supplier.phone, "is_active": supplier.is_active,
-            "bill_outstanding": outstanding, "issued_cheques": cheque_due,
-            "total_payable_exposure": outstanding + cheque_due,
+            "payable_balance": payable_balance, "open_bills_amount": bill_outstanding,
+            "issued_cheques": cheque_due, "total_payable_exposure": payable_balance,
         })
     return result
+
+
+@router.post("/opening-balance", status_code=status.HTTP_201_CREATED)
+def create_supplier_opening_balance(
+    payload: SupplierOpeningBalanceCreate,
+    user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    if not _manager(user):
+        raise HTTPException(status_code=403, detail="ثبت مانده افتتاحیه تأمین‌کننده فقط برای مدیر مجاز است.")
+    supplier = db.scalar(select(Supplier).where(
+        Supplier.id == payload.supplier_id, Supplier.is_active.is_(True)
+    ).with_for_update())
+    if supplier is None:
+        raise HTTPException(status_code=404, detail="تأمین‌کننده فعال پیدا نشد.")
+    existing = db.scalar(select(JournalEntry).where(
+        JournalEntry.source_type == "supplier_opening_balance",
+        JournalEntry.source_id == str(supplier.id),
+    ))
+    if existing:
+        existing_amount = int(db.scalar(select(func.coalesce(func.sum(JournalLine.credit), 0)).where(
+            JournalLine.entry_id == existing.id,
+            JournalLine.account_code == "ACCOUNTS_PAYABLE",
+            JournalLine.supplier_id == supplier.id,
+        )) or 0)
+        if existing_amount == payload.amount:
+            return {"supplier_id": str(supplier.id), "amount": existing_amount,
+                    "entry_number": existing.entry_number, "status": "already_posted"}
+        raise HTTPException(status_code=409, detail="مانده افتتاحیه این تأمین‌کننده قبلاً ثبت شده است؛ اصلاح را با سند تعدیلی انجام دهید.")
+    equity = _leaf_account(db, "EQUITY", {"equity"})
+    payable = _leaf_account(db, "ACCOUNTS_PAYABLE", {"liability"})
+    entry = _journal(db, source_type="supplier_opening_balance", source_id=str(supplier.id),
+        description=f"{payload.description.strip()} - {supplier.name}",
+        lines=[
+            {"account_code": equity.code, "debit": payload.amount, "credit": 0},
+            {"account_code": payable.code, "debit": 0, "credit": payload.amount, "supplier_id": supplier.id},
+        ])
+    entry.posted_at = datetime.combine(payload.opening_date, time.min, tzinfo=timezone.utc)
+    record_audit_event(db, action="supplier_opening_balance_posted", entity_type="supplier",
+        actor_user_id=user.id, entity_id=str(supplier.id),
+        details={"amount": payload.amount, "opening_date": payload.opening_date.isoformat()})
+    db.commit()
+    return {"supplier_id": str(supplier.id), "amount": payload.amount,
+            "entry_number": entry.entry_number, "status": "posted"}
 
 
 @router.post("/bills", status_code=status.HTTP_201_CREATED)
