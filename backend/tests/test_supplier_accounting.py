@@ -10,7 +10,7 @@ from app.schemas.suppliers import SupplierBillCreate, SupplierCreate, SupplierPa
 
 
 def test_supplier_accounting_routes_are_mounted():
-    paths = {route.path for route in app.routes}
+    paths = app.openapi()["paths"]
     assert "/api/v1/suppliers" in paths
     assert "/api/v1/suppliers/opening-balance" in paths
     assert "/api/v1/suppliers/bills" in paths
@@ -19,8 +19,9 @@ def test_supplier_accounting_routes_are_mounted():
     assert "/api/v1/suppliers/payments/{payment_id}/bounce" in paths
     assert "/api/v1/suppliers/{supplier_id}/ledger" in paths
     assert "/api/v1/suppliers/reports/cash-flow" in paths
-    route_paths = [route.path for route in app.routes]
-    assert route_paths.index("/api/v1/suppliers/reports/cash-flow") < route_paths.index("/api/v1/suppliers/{supplier_id}/ledger")
+    from app.api.routes.suppliers import router as suppliers_router
+    route_paths = [route.path for route in suppliers_router.routes]
+    assert route_paths.index("/reports/cash-flow") < route_paths.index("/{supplier_id}/ledger")
 
 
 def test_supplier_models_include_unique_idempotency_and_due_dates():
