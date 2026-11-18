@@ -1,3 +1,4 @@
+import base64
 import os
 import uuid
 from pathlib import Path
@@ -80,10 +81,10 @@ def apply_remote_event(db: Session, event: ReplicationEvent) -> None:
         media = db.get(ProductMedia, media_id)
         if media is not None:
             return
-        content_hex = data.get("content_hex")
-        if not content_hex:
+        content_b64 = data.get("content_b64")
+        if not content_b64:
             raise ValueError("Product media binary content is missing from replication.")
-        raw = bytes.fromhex(content_hex)
+        raw = base64.b64decode(content_b64, validate=True)
         import hashlib
         if hashlib.sha256(raw).hexdigest() != data["checksum_sha256"]:
             raise ValueError("Replicated product media checksum mismatch.")
