@@ -1,0 +1,45 @@
+name: PARSIAN FINAL PHP lint
+
+on:
+  push:
+    branches:
+      - feature/parsian-final-core-platform
+  pull_request:
+    branches:
+      - main
+      - feature/parsian-final-core-platform
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  php-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: none
+          coverage: none
+      - name: Lint plugin PHP files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find wordpress/parsian-final -type f -name '*.php' -print | sort)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No plugin PHP files found" >&2
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            echo "Linting $file"
+            php -l "$file"
+          done
+      - name: Verify plugin metadata
+        run: |
+          grep -q '^ \* Plugin Name: PARSIAN FINAL Core$' wordpress/parsian-final/parsian-final.php
+          grep -q "register_activation_hook" wordpress/parsian-final/parsian-final.php
