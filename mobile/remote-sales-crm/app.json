@@ -17,9 +17,6 @@
       },
       "softwareKeyboardLayoutMode": "pan",
       "supportsRTL": true
-    },
-    "plugins": [
-      "expo"
-    ]
+    }
   }
 }
