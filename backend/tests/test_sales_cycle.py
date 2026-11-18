@@ -164,3 +164,11 @@ def test_opening_balance_schema_requires_balanced_lines_at_api_layer():
 def test_opening_balance_route_is_mounted():
     paths = {route.path for route in app.routes}
     assert "/api/v1/sales/accounting/opening-balance" in paths
+
+
+def test_journal_line_account_code_references_chart_of_accounts():
+    from app.models.sales import JournalLine
+
+    foreign_keys = list(JournalLine.__table__.c.account_code.foreign_keys)
+    assert len(foreign_keys) == 1
+    assert foreign_keys[0].target_fullname == "accounting_accounts.code"
