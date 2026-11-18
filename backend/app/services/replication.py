@@ -66,7 +66,7 @@ def apply_remote_event(db: Session, event: ReplicationEvent) -> None:
         if record is None:
             record = Product(id=entity_id, sku=data["sku"], name=data["name"])
             db.add(record)
-        for key in ("sku", "name", "category", "vehicle_model", "description", "unit_price", "is_active", "catalog_version"):
+        for key in ("sku", "name", "category", "vehicle_model", "description", "unit_price", "cost_price", "track_inventory", "is_active", "catalog_version"):
             if key in data:
                 setattr(record, key, data[key])
         record.replication_version = event.version
