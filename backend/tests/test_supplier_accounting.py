@@ -6,12 +6,13 @@ from pydantic import ValidationError
 from app.main import app
 from app.models.sales import JournalLine
 from app.models.suppliers import Supplier, SupplierBill, SupplierPayment
-from app.schemas.suppliers import SupplierBillCreate, SupplierCreate, SupplierPaymentCreate
+from app.schemas.suppliers import SupplierBillCreate, SupplierCreate, SupplierPaymentCreate, SupplierOpeningBalanceCreate
 
 
 def test_supplier_accounting_routes_are_mounted():
     paths = {route.path for route in app.routes}
     assert "/api/v1/suppliers" in paths
+    assert "/api/v1/suppliers/opening-balance" in paths
     assert "/api/v1/suppliers/bills" in paths
     assert "/api/v1/suppliers/payments" in paths
     assert "/api/v1/suppliers/payments/{payment_id}/clear" in paths
@@ -68,3 +69,16 @@ def test_supplier_payables_migration_adds_subledger_and_cheque_account():
     assert "supplier_id" in source
     assert "CHEQUES_PAYABLE" in source
     assert "supplier_payments" in source
+
+
+def test_supplier_opening_balance_schema_requires_positive_amount():
+    payload = SupplierOpeningBalanceCreate(
+        supplier_id="00000000-0000-0000-0000-000000000001",
+        amount=4500000000, opening_date=date(2026, 11, 1),
+    )
+    assert payload.amount == 4500000000
+    with pytest.raises(ValidationError):
+        SupplierOpeningBalanceCreate(
+            supplier_id="00000000-0000-0000-0000-000000000001",
+            amount=0, opening_date=date(2026, 11, 1),
+        )
