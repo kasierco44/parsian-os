@@ -18,6 +18,17 @@ jobs:
         run: |
           php -l wordpress/parsian-finance/parsian-finance.php
           php -l wordpress/parsian-finance/backend-bridge.php
+      - name: JavaScript syntax check
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("wordpress/parsian-finance/parsian-finance.php").read_text(encoding="utf-8")
+          start_marker = "return <<<'JS'"
+          start = source.index(start_marker) + len(start_marker)
+          end = source.index("\\nJS;}", start)
+          Path("/tmp/parsian-finance.js").write_text(source[start:end], encoding="utf-8")
+          PY
+          node --check /tmp/parsian-finance.js
       - name: Build plugin ZIP
         run: |
           cd wordpress
