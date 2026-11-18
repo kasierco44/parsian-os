@@ -8,7 +8,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = "0002_offline_sync"
-down_revision = "0001_identity_and_audit"
+down_revision = "0001_identity_audit"
 branch_labels = None
 depends_on = None
 
