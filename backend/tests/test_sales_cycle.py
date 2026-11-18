@@ -126,3 +126,9 @@ def test_commission_accrual_serializes_monthly_calculation_per_seller():
     assert len(statements) == 2
     assert statements[0]._for_update_arg is not None
 
+def test_accounting_reports_are_mounted():
+    paths = {route.path for route in app.routes}
+    assert "/api/v1/sales/accounting/trial-balance" in paths
+    assert "/api/v1/sales/accounting/profit-loss" in paths
+    assert "/api/v1/sales/accounting/customer-ledger/{customer_id}" in paths
+
