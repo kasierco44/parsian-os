@@ -135,6 +135,38 @@ def list_suppliers(
     return result
 
 
+@router.get("/charge-accounts")
+def list_supplier_charge_accounts(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    """Return selectable active posting accounts for supplier bills."""
+    if not _accounting(user):
+        raise HTTPException(status_code=403, detail="مشاهده سرفصل‌های ثبت بدهی فقط برای مدیر یا حسابدار مجاز است.")
+    accounts = db.scalars(
+        select(AccountingAccount)
+        .where(
+            AccountingAccount.is_active.is_(True),
+            AccountingAccount.account_type.in_({"asset", "expense"}),
+        )
+        .order_by(AccountingAccount.code)
+        .limit(1000)
+    ).all()
+    parent_codes = set(db.scalars(
+        select(AccountingAccount.parent_code)
+        .where(AccountingAccount.parent_code.is_not(None))
+    ).all())
+    return [
+        {
+            "code": account.code,
+            "name": account.name,
+            "account_type": account.account_type,
+            "normal_balance": account.normal_balance,
+        }
+        for account in accounts
+        if account.code not in parent_codes
+    ]
+
+
 @router.post("/opening-balance", status_code=status.HTTP_201_CREATED)
 def create_supplier_opening_balance(
     payload: SupplierOpeningBalanceCreate,
