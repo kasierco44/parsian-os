@@ -164,7 +164,7 @@ def create_supplier_bill(
     entry = _journal(db, source_type="supplier_bill", source_id=str(bill.id),
         description=f"ثبت بدهی تأمین‌کننده {supplier.name} - {bill.bill_number}",
         lines=[
-            {"account_code": charge.code, "debit": bill.amount, "credit": 0, "supplier_id": supplier.id},
+            {"account_code": charge.code, "debit": bill.amount, "credit": 0},
             {"account_code": payable.code, "debit": 0, "credit": bill.amount, "supplier_id": supplier.id},
         ])
     entry.posted_at = datetime.combine(payload.bill_date, time.min, tzinfo=timezone.utc)
@@ -249,7 +249,7 @@ def pay_supplier(
         description=f"پرداخت بدهی {supplier.name} - {payment.payment_number}",
         lines=[
             {"account_code": payable.code, "debit": payment.amount, "credit": 0, "supplier_id": supplier.id},
-            {"account_code": payment_account.code, "debit": 0, "credit": payment.amount, "supplier_id": supplier.id},
+            {"account_code": payment_account.code, "debit": 0, "credit": payment.amount, **({"supplier_id": supplier.id} if payment.method == "cheque" else {})},
         ])
     entry.posted_at = datetime.combine(payload.payment_date, time.min, tzinfo=timezone.utc)
     record_audit_event(db, action="supplier_payment_posted", entity_type="supplier_payment",
@@ -288,7 +288,7 @@ def clear_supplier_cheque(
         description=f"پاس‌شدن چک تأمین‌کننده {supplier.name} - {payment.cheque_number}",
         lines=[
             {"account_code": cheque_liability.code, "debit": payment.amount, "credit": 0, "supplier_id": supplier.id},
-            {"account_code": bank.code, "debit": 0, "credit": payment.amount, "supplier_id": supplier.id},
+            {"account_code": bank.code, "debit": 0, "credit": payment.amount},
         ])
     payment.status = "cleared"
     payment.cleared_at = datetime.now(timezone.utc)
@@ -345,7 +345,7 @@ def supplier_ledger(
     if from_date:
         statement = statement.where(JournalEntry.posted_at >= datetime.combine(from_date, time.min, tzinfo=timezone.utc))
     if to_date:
-        statement = statement.where(JournalEntry.posted_at < datetime.combine(to_date, time.max, tzinfo=timezone.utc))
+        statement = statement.where(JournalEntry.posted_at < datetime.combine(date.fromordinal(to_date.toordinal() + 1), time.min, tzinfo=timezone.utc))
     rows = db.execute(statement).all()
     balance = 0
     entries = []
@@ -383,7 +383,7 @@ def supplier_cash_flow(
         history = history.where(JournalEntry.posted_at < datetime.combine(to_date, time.max, tzinfo=timezone.utc))
     history_rows = db.execute(history.group_by(func.date(JournalEntry.posted_at)).order_by(func.date(JournalEntry.posted_at))).all()
     horizon = date.fromordinal(today.toordinal() + forecast_days)
-    bills = db.scalars(select(SupplierBill).where(SupplierBill.due_date <= horizon).order_by(SupplierBill.due_date)).all()
+    bills = db.scalars(select(SupplierBill).where(SupplierBill.due_date >= today, SupplierBill.due_date <= horizon).order_by(SupplierBill.due_date)).all()
     forecast = {}
     for bill in bills:
         remaining = max(0, bill.amount - _bill_paid(db, bill.id))
@@ -392,7 +392,7 @@ def supplier_cash_flow(
             forecast[key] = forecast.get(key, 0) + remaining
     cheques = db.scalars(select(SupplierPayment).where(
         SupplierPayment.method == "cheque", SupplierPayment.status == "issued",
-        SupplierPayment.due_date <= horizon,
+        SupplierPayment.due_date >= today, SupplierPayment.due_date <= horizon,
     ).order_by(SupplierPayment.due_date)).all()
     for cheque in cheques:
         key = cheque.due_date.isoformat()
