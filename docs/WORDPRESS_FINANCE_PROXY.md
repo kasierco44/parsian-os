@@ -45,6 +45,7 @@ The UUID above is illustrative only. The API proxy never invents or resolves sup
 ## Allowlisted upstream routes
 
 - `GET suppliers`
+- `GET suppliers/charge-accounts` (active leaf asset/expense accounts selectable for supplier bills)
 - `POST suppliers`
 - `POST suppliers/opening-balance`
 - `GET|POST suppliers/bills`
