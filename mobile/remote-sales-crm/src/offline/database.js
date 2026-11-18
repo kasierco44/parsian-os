@@ -22,7 +22,10 @@ async function getOrCreateDatabaseKey() {
 
 async function migrateLegacyPlaintextDatabase(targetDb) {
   const marker = await targetDb.getFirstAsync("SELECT value FROM sync_state WHERE key = 'legacy_plaintext_migrated'");
-  if (marker) return;
+  if (marker) {
+    await SQLite.deleteDatabaseAsync(LEGACY_DB_NAME).catch(() => {});
+    return;
+  }
   let legacyDb;
   try {
     legacyDb = await SQLite.openDatabaseAsync(LEGACY_DB_NAME);
