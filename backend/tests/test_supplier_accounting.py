@@ -21,7 +21,7 @@ def test_supplier_accounting_routes_are_mounted():
     assert "/api/v1/suppliers/reports/cash-flow" in paths
     from app.api.routes.suppliers import router as suppliers_router
     route_paths = [route.path for route in suppliers_router.routes]
-    assert route_paths.index("/reports/cash-flow") < route_paths.index("/{supplier_id}/ledger")
+    assert route_paths.index("/suppliers/reports/cash-flow") < route_paths.index("/suppliers/{supplier_id}/ledger")
 
 
 def test_supplier_models_include_unique_idempotency_and_due_dates():
