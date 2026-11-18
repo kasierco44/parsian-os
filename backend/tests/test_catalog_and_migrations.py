@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.main import app
-from app.schemas.product import ProductCreate, ProductUpdate
+from app.schemas.product import ProductAdminRead, ProductCreate, ProductRead, ProductUpdate
 
 
 def test_product_create_validates_sku_and_price() -> None:
@@ -54,3 +54,10 @@ def test_alembic_revision_chain_is_contiguous() -> None:
         spec.loader.exec_module(module)
         assert module.down_revision == parent
         assert module.revision == revision
+
+
+def test_seller_catalog_schema_does_not_expose_cost_or_inventory_controls() -> None:
+    assert "cost_price" not in ProductRead.model_fields
+    assert "track_inventory" not in ProductRead.model_fields
+    assert "cost_price" in ProductAdminRead.model_fields
+    assert "track_inventory" in ProductAdminRead.model_fields
