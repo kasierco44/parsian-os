@@ -40,6 +40,7 @@ def test_alembic_revision_chain_is_contiguous() -> None:
         "0002_offline_sync.py": ("0001_identity_audit", "0002_offline_sync"),
         "0003_customers.py": ("0002_offline_sync", "0003_customers"),
         "0004_product_catalog.py": ("0003_customers", "0004_product_catalog"),
+        "0005_replication.py": ("0004_product_catalog", "0005_replication"),
     }
     for filename, (parent, revision) in expected.items():
         spec = spec_from_file_location(f"migration_{revision}", versions / filename)
