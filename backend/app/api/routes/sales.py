@@ -399,19 +399,6 @@ def adjust_inventory(payload: InventoryAdjustment, user: User = Depends(get_curr
         raise HTTPException(status_code=409, detail="موجودی نمی‌تواند منفی شود.")
     if product.cost_price is None:
         raise HTTPException(status_code=409, detail="پیش از اصلاح انبار، بهای تمام‌شده محصول را در کاتالوگ ثبت کنید.")
-    adjustment_value = abs(payload.quantity_delta) * product.cost_price
-    if adjustment_value:
-        if payload.quantity_delta > 0:
-            journal_lines = [
-                {"account_code": "INVENTORY_ASSET", "debit": adjustment_value, "credit": 0},
-                {"account_code": "INVENTORY_ADJUSTMENT_GAIN", "debit": 0, "credit": adjustment_value},
-            ]
-        else:
-            journal_lines = [
-                {"account_code": "INVENTORY_ADJUSTMENT_LOSS", "debit": adjustment_value, "credit": 0},
-                {"account_code": "INVENTORY_ASSET", "debit": 0, "credit": adjustment_value},
-            ]
-        _journal(db, source_type="inventory_adjustment", source_id=str(uuid4()), description=payload.reason, lines=journal_lines)
     balance.quantity_on_hand += payload.quantity_delta
     db.add(InventoryMovement(product_id=product.id, movement_type="adjustment", quantity_delta=payload.quantity_delta, reference=payload.reason))
     if product.cost_price is not None:
