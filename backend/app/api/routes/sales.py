@@ -482,3 +482,112 @@ def list_commission_accruals(seller_user_id: UUID | None = None, user: User = De
             raise HTTPException(status_code=403, detail="مشاهده پورسانت سایر فروشندگان مجاز نیست.")
         statement = statement.where(CommissionAccrual.seller_user_id == user.id)
     return db.scalars(statement).all()
+
+@router.get("/accounting/trial-balance")
+def trial_balance(
+    from_date: datetime | None = None,
+    to_date: datetime | None = None,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not _accounting(user):
+        raise HTTPException(status_code=403, detail="گزارش تراز آزمایشی فقط برای مدیر یا حسابدار مجاز است.")
+    statement = select(
+        JournalLine.account_code,
+        func.coalesce(func.sum(JournalLine.debit), 0).label("debit"),
+        func.coalesce(func.sum(JournalLine.credit), 0).label("credit"),
+    ).join(JournalEntry, JournalEntry.id == JournalLine.entry_id)
+    if from_date:
+        statement = statement.where(JournalEntry.posted_at >= from_date)
+    if to_date:
+        statement = statement.where(JournalEntry.posted_at <= to_date)
+    statement = statement.group_by(JournalLine.account_code).order_by(JournalLine.account_code)
+    rows = db.execute(statement).all()
+    result = [
+        {"account_code": row.account_code, "debit": int(row.debit), "credit": int(row.credit),
+         "net_debit": int(row.debit) - int(row.credit)}
+        for row in rows
+    ]
+    return {
+        "accounts": result,
+        "total_debit": sum(item["debit"] for item in result),
+        "total_credit": sum(item["credit"] for item in result),
+        "is_balanced": sum(item["debit"] for item in result) == sum(item["credit"] for item in result),
+    }
+
+
+@router.get("/accounting/profit-loss")
+def profit_loss(
+    from_date: datetime | None = None,
+    to_date: datetime | None = None,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not _accounting(user):
+        raise HTTPException(status_code=403, detail="گزارش سود و زیان فقط برای مدیر یا حسابدار مجاز است.")
+    statement = select(
+        JournalLine.account_code,
+        func.coalesce(func.sum(JournalLine.debit), 0).label("debit"),
+        func.coalesce(func.sum(JournalLine.credit), 0).label("credit"),
+    ).join(JournalEntry, JournalEntry.id == JournalLine.entry_id).where(
+        JournalLine.account_code.in_({
+            "SALES_REVENUE", "COST_OF_GOODS_SOLD", "SALES_COMMISSION_EXPENSE",
+            "INVENTORY_SHRINKAGE", "INVENTORY_ADJUSTMENT",
+        })
+    )
+    if from_date:
+        statement = statement.where(JournalEntry.posted_at >= from_date)
+    if to_date:
+        statement = statement.where(JournalEntry.posted_at <= to_date)
+    rows = db.execute(statement.group_by(JournalLine.account_code)).all()
+    accounts = {row.account_code: {"debit": int(row.debit), "credit": int(row.credit)} for row in rows}
+    revenue = accounts.get("SALES_REVENUE", {}).get("credit", 0) - accounts.get("SALES_REVENUE", {}).get("debit", 0)
+    expenses = sum(
+        values["debit"] - values["credit"]
+        for code, values in accounts.items() if code != "SALES_REVENUE"
+    )
+    return {
+        "revenue": revenue,
+        "expenses": expenses,
+        "net_profit": revenue - expenses,
+        "currency_unit": "configured_company_base_unit",
+        "accounts": accounts,
+        "note": "گزارش بر مبنای اسناد ثبت‌شده در دفتر روزنامه است؛ هزینه‌های ثبت‌نشده در آن منعکس نمی‌شوند.",
+    }
+
+
+@router.get("/accounting/customer-ledger/{customer_id}")
+def customer_ledger(
+    customer_id: UUID,
+    from_date: datetime | None = None,
+    to_date: datetime | None = None,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not _accounting(user):
+        customer = db.get(Customer, customer_id)
+        if customer is None or customer.assigned_to_user_id != user.id:
+            raise HTTPException(status_code=403, detail="مشاهده گردش حساب این مشتری مجاز نیست.")
+    elif db.get(Customer, customer_id) is None:
+        raise HTTPException(status_code=404, detail="مشتری پیدا نشد.")
+    statement = select(JournalLine, JournalEntry).join(
+        JournalEntry, JournalEntry.id == JournalLine.entry_id
+    ).where(JournalLine.customer_id == customer_id).order_by(
+        JournalEntry.posted_at.asc(), JournalEntry.entry_number.asc()
+    )
+    if from_date:
+        statement = statement.where(JournalEntry.posted_at >= from_date)
+    if to_date:
+        statement = statement.where(JournalEntry.posted_at <= to_date)
+    rows = db.execute(statement).all()
+    balance = 0
+    entries = []
+    for line, entry in rows:
+        balance += line.debit - line.credit
+        entries.append({
+            "entry_number": entry.entry_number, "date": entry.posted_at,
+            "description": entry.description, "account_code": line.account_code,
+            "debit": line.debit, "credit": line.credit, "running_balance": balance,
+        })
+    return {"customer_id": str(customer_id), "entries": entries, "closing_balance": balance}
+
