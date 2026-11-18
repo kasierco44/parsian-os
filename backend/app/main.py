@@ -53,7 +53,8 @@ app.include_router(customers_router, prefix=settings.api_v1_prefix)
 app.include_router(catalog_router, prefix=settings.api_v1_prefix)
 app.include_router(replication_router, prefix=settings.api_v1_prefix)
 app.include_router(sync_router, prefix=settings.api_v1_prefix)
-app.include_router(users_router, prefix=settings.api_v1_prefix)\napp.include_router(sales_router, prefix=settings.api_v1_prefix)
+app.include_router(users_router, prefix=settings.api_v1_prefix)
+app.include_router(sales_router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/", include_in_schema=False)
