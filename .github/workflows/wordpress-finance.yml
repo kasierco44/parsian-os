@@ -4,6 +4,7 @@ on:
     branches:
       - feat/wordpress-finance-plugin
       - feat/wordpress-backend-auth-bridge
+      - feat/wordpress-finance-api-proxy
   pull_request:
     paths:
       - 'wordpress/parsian-finance/**'
