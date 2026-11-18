@@ -77,3 +77,11 @@ export async function getCustomers({ token, query = "", limit = 50, offset = 0 }
 export async function logout() {
   await SecureStore.deleteItemAsync(TOKEN_KEY);
 }
+
+export async function changePassword({ token, currentPassword, newPassword }) {
+  return request("/auth/password/change", {
+    method: "POST",
+    token,
+    body: { current_password: currentPassword, new_password: newPassword },
+  });
+}
