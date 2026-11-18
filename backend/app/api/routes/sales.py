@@ -328,6 +328,23 @@ def bounce_cheque(cheque_id: UUID, payload: ChequeDecision, user: User = Depends
     return receipt
 
 
+@router.get("/commission/summary")
+def commission_summary(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    statement = select(
+        CommissionAccrual.seller_user_id,
+        func.coalesce(func.sum(CommissionAccrual.collected_amount), 0).label("collected_amount"),
+        func.coalesce(func.sum(CommissionAccrual.commission_amount), 0).label("commission_amount"),
+    ).group_by(CommissionAccrual.seller_user_id)
+    if not _accounting(user):
+        statement = statement.where(CommissionAccrual.seller_user_id == user.id)
+    rows = db.execute(statement).all()
+    return [
+        {"seller_user_id": str(row.seller_user_id), "collected_amount": int(row.collected_amount),
+         "commission_amount": int(row.commission_amount)}
+        for row in rows
+    ]
+
+
 @router.get("/commission/tiers", response_model=list[CommissionTierRead])
 def list_commission_tiers(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not _accounting(user):
@@ -368,6 +385,20 @@ def adjust_inventory(payload: InventoryAdjustment, user: User = Depends(get_curr
         raise HTTPException(status_code=409, detail="موجودی نمی‌تواند منفی شود.")
     balance.quantity_on_hand += payload.quantity_delta
     db.add(InventoryMovement(product_id=product.id, movement_type="adjustment", quantity_delta=payload.quantity_delta, reference=payload.reason))
+    if product.cost_price is not None:
+        valuation = abs(payload.quantity_delta) * product.cost_price
+        if valuation:
+            if payload.quantity_delta > 0:
+                lines = [
+                    {"account_code": "INVENTORY_ASSET", "debit": valuation, "credit": 0, "customer_id": None, "seller_user_id": None},
+                    {"account_code": "INVENTORY_ADJUSTMENT", "debit": 0, "credit": valuation, "customer_id": None, "seller_user_id": None},
+                ]
+            else:
+                lines = [
+                    {"account_code": "INVENTORY_SHRINKAGE", "debit": valuation, "credit": 0, "customer_id": None, "seller_user_id": None},
+                    {"account_code": "INVENTORY_ASSET", "debit": 0, "credit": valuation, "customer_id": None, "seller_user_id": None},
+                ]
+            _journal(db, source_type="inventory_adjustment", source_id=str(product.id) + ":" + uuid4().hex[:8], description="اصلاح موجودی: " + payload.reason, lines=lines)
     record_audit_event(db, action="inventory_adjusted", entity_type="product", actor_user_id=user.id, entity_id=str(product.id), details={"delta": payload.quantity_delta, "reason": payload.reason})
     db.commit()
     db.refresh(balance)
