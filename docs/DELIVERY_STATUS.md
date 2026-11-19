@@ -9,7 +9,18 @@ Pull request: #21 (draft; not merged)
 
 This repository state is a development baseline, not a production release. No production WordPress site has been modified. Do not install this branch on the live site or treat it as accounting, inventory, or offline-sync production software until the release gates below pass.
 
-## Latest engineering updates (2026-11-19)\n\n- Sync pull now scopes non-manager/non-accountant event streams to the authenticated actor; operation payload size and cross-user duplicate UUID handling are checked, and device last-seen is updated. This is an initial mitigation, not a complete tenant/assignment-aware sync model.\n- Inventory movement requests now require an active product and positive bounded quantity, use pagination for item lists, and emit an audit event. They remain pending and do not change stock balances.\n- Added GitHub Actions workflows for PHP syntax lint and development ZIP packaging. Their runs have not yet been observed; no successful lint or artifact is claimed.\n\n## Implemented in this branch
+## Latest engineering updates (2026-11-19)\n\n- Sync pull now scopes non-manager/non-accountant event streams to the authenticated actor; operation payload size and cross-user duplicate UUID handling are checked, and device last-seen is updated. This is an initial mitigation, not a complete tenant/assignment-aware sync model.\n- Inventory movement requests now require an active product and positive bounded quantity, use pagination for item lists, and emit an audit event. They remain pending and do not change stock balances.\n- Added GitHub Actions workflows for PHP syntax lint and development ZIP packaging. Their runs have not yet been observed; no successful lint or artifact is claimed.\n\n## Sales and ledger implementation update (2026-11-19)
+
+- Added persisted proforma and line-item tables, invoice and invoice-line tables, chart of accounts, journal headers and journal lines.
+- Added seller-scoped draft creation/list/detail and manager-only approval. Approval locks the proforma, creates exactly one invoice, posts balanced debit receivables / credit sales journal lines, records audit events, and changes document state within one database transaction.
+- Added finance-authorized payment approval for customer receipts and supplier payments, with balanced journal posting and idempotent posted-state response.
+- Added journal register and trial-balance read endpoints.
+- Added version-gated schema upgrade and baseline chart-of-account seeding.
+- PHP lint passed and a development ZIP package was built by GitHub Actions for the prior code head; rerun workflows for this latest schema-upgrade commit before distributing.
+
+Accounting limitations remain: tax, discounts, cost-of-goods-sold, stock decrement/valuation, returns/credit notes, reconciliation and period close are not implemented.
+
+## Implemented in this branch
 
 - WordPress plugin bootstrap and activation-time schema creation.
 - Initial roles and capability definitions for manager, accountant, seller, and customer.
