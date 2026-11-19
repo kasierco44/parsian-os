@@ -254,6 +254,11 @@ final class Parsian_Final_Install {
         update_option('parsian_final_schema_version', PARSIAN_FINAL_VERSION, false);
         Parsian_Final_Roles::register();
     }
+    public static function maybe_upgrade(): void {
+        if (get_option('parsian_final_schema_version', 'not-installed') !== PARSIAN_FINAL_VERSION) {
+            self::activate();
+        }
+    }
     public static function deactivate(): void {
         // Intentionally retain business data, roles and schema on deactivation.
     }
