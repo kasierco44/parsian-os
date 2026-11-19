@@ -150,3 +150,10 @@ No Android APK, Windows installer, production deployment, or end-to-end offline-
 - The initial Gradle project uses separate seller/customer product flavors and role-specific Compose launch screens.
 - Room, WorkManager, Retrofit and OkHttp dependencies are declared, but encrypted local persistence, token vault, API repositories, durable outbox/inbox, retry worker, and business workflows remain to be implemented.
 - A GitHub Actions workflow attempts both debug APK variants. Until its run succeeds and artifacts are inspected, no APK is considered built or delivered.
+
+
+### Android offline foundation update (2026-11-19)
+- Room outbox is now backed by SQLCipher; its random database key is retained in AndroidX encrypted preferences protected by Android Keystore.
+- Native login calls the WordPress token endpoint over HTTPS and stores access/refresh tokens and device UUID in encrypted preferences.
+- A WorkManager worker registers the device, pushes the server-allowlisted queued operations, rotates refresh tokens after 401, and leaves server-accepted commands in pending-review state.
+- Pull/inbox persistence, version-based conflict handling, full domain workflows, logout/revocation UX and device-level tests remain incomplete. This source has not yet passed a verified Android build.
