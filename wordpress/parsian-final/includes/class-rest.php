@@ -1,6 +1,30 @@
 <?php
 if (!defined('ABSPATH')) { exit; }
 final class Parsian_Final_REST {
+    public function __construct() {
+        add_filter('rest_pre_serve_request', [$this, 'desktop_cors'], 15, 4);
+    }
+
+    /**
+     * Allow only configured desktop WebView origins. The API still requires
+     * a valid bearer token and performs capability checks per route.
+     */
+    public function desktop_cors($served, $result, $request, $server) {
+        $origin = isset($_SERVER['HTTP_ORIGIN']) ? trim((string) $_SERVER['HTTP_ORIGIN']) : '';
+        $allowed = get_option('parsian_desktop_allowed_origins', [
+            'http://tauri.localhost',
+            'https://tauri.localhost',
+            'tauri://localhost',
+        ]);
+        if ($origin !== '' && is_array($allowed) && in_array($origin, $allowed, true)) {
+            header('Access-Control-Allow-Origin: ' . $origin);
+            header('Vary: Origin', false);
+            header('Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, PATCH, DELETE');
+            header('Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce');
+        }
+        return $served;
+    }
+
     public function register_routes(): void {
         register_rest_route('parsian-final/v1', '/health', [
             'methods' => WP_REST_Server::READABLE,
