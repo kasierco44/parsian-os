@@ -1,6 +1,44 @@
 <?php
 if (!defined('ABSPATH')) { exit; }
 final class Parsian_Final_Ledger {
+    public function register_routes(): void {
+        register_rest_route('parsian-final/v1','/ledger/journals',[
+            'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'journals'],
+            'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_finance_read');}
+        ]);
+        register_rest_route('parsian-final/v1','/ledger/trial-balance',[
+            'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'trial_balance'],
+            'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_finance_read');}
+        ]);
+    }
+    public function journals(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $page=max(1,absint($request->get_param('page')?:1));
+        $perPage=min(100,max(1,absint($request->get_param('per_page')?:30)));
+        $rows=$wpdb->get_results($wpdb->prepare(
+            "SELECT id,entry_number,source_type,source_id,memo,debit_total_toman,credit_total_toman,created_by,created_at
+             FROM {$wpdb->prefix}parsian_journal_entries ORDER BY id DESC LIMIT %d OFFSET %d",
+            $perPage,($page-1)*$perPage
+        ),ARRAY_A);
+        return new WP_REST_Response(['items'=>$rows?:[],'page'=>$page,'per_page'=>$perPage],200);
+    }
+    public function trial_balance(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $rows=$wpdb->get_results(
+            "SELECT a.account_code,a.account_name,a.account_type,
+                    COALESCE(SUM(l.debit_toman),0) AS debit_toman,
+                    COALESCE(SUM(l.credit_toman),0) AS credit_toman
+             FROM {$wpdb->prefix}parsian_ledger_accounts a
+             LEFT JOIN {$wpdb->prefix}parsian_journal_lines l ON l.account_id=a.id
+             LEFT JOIN {$wpdb->prefix}parsian_journal_entries e ON e.id=l.journal_entry_id AND e.status='posted'
+             WHERE a.is_active=1
+             GROUP BY a.id,a.account_code,a.account_name,a.account_type
+             ORDER BY a.account_code ASC",ARRAY_A
+        );
+        $debit=0;$credit=0;
+        foreach((array)$rows as $row){$debit+=(int)$row['debit_toman'];$credit+=(int)$row['credit_toman'];}
+        return new WP_REST_Response(['accounts'=>$rows?:[],'total_debit_toman'=>$debit,'total_credit_toman'=>$credit,'balanced'=>$debit===$credit],200);
+    }
     public static function account_id(string $code): int {
         global $wpdb;
         return (int) $wpdb->get_var($wpdb->prepare(
