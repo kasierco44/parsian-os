@@ -40,3 +40,5 @@ Development UI scaffold only; not production-ready.
 - Web tables use Persian digits, Jalali dates and Persian labels for common workflow states.
 
 - Accountant and manager roles also have a paginated payment register with a server-authorized approval action and a cheque register. Payment posting still occurs only in the WordPress finance endpoint and creates the balanced journal there.
+
+- Accountant and manager roles can upload CSV/XLSX bank statements to a selected bank account. Import records are normalized and deduplicated; reconciliation remains a separate workflow and is not performed automatically by upload.
