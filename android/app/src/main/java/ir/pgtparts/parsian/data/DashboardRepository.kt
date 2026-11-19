@@ -79,6 +79,29 @@ object DashboardRepository {
         }
     }
 
+    private suspend fun staleResourceNames(dao: SyncOperationDao): JSONArray {
+        val resources = if (BuildConfig.APP_ROLE == "customer") {
+            listOf("invoices", "proformas", "payments")
+        } else {
+            listOf("customers", "leads", "proformas", "tasks")
+        }
+        val stale = JSONArray()
+        for (resource in resources) {
+            if (dao.metadata("offline_stale_" + resource) != null) stale.put(resource)
+        }
+        return stale
+    }
+
+    suspend fun isOfflineResourceStale(context: Context, resourceType: String): Boolean {
+        val allowed = if (BuildConfig.APP_ROLE == "customer") {
+            setOf("invoices", "proformas", "payments")
+        } else {
+            setOf("customers", "leads", "proformas", "tasks")
+        }
+        require(resourceType in allowed) { "Unsupported offline resource" }
+        return ParsianDatabase.get(context).syncOperations().metadata("offline_stale_" + resourceType) != null
+    }
+
     suspend fun loadOfflineResource(context: Context, resourceType: String): JSONArray {
         val allowed = if (BuildConfig.APP_ROLE == "customer") {
             setOf("invoices", "proformas", "payments")
@@ -110,6 +133,7 @@ object DashboardRepository {
             persistOfflineCollections(dao, result)
             dao.saveDashboardSnapshot(DashboardSnapshotEntity("dashboard", result.toString()))
             result.put("_offline", false)
+            result.put("_stale_resources", staleResourceNames(dao))
             result
         } catch (error: IOException) {
             val cached = dao.dashboardSnapshot("dashboard")
@@ -117,6 +141,7 @@ object DashboardRepository {
             JSONObject(cached.payloadJson)
                 .put("_offline", true)
                 .put("_cached_at_epoch_ms", cached.updatedAtEpochMs)
+                .put("_stale_resources", staleResourceNames(dao))
         }
     }
 
