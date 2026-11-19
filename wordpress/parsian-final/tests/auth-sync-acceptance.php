@@ -87,13 +87,34 @@ try {
     $conflict=$sync->push($push)->get_data();
     $assert(($conflict['results'][0]['code']??'')==='operation_uuid_conflict','same operation UUID with changed payload is rejected');
 
+    $customerOk = $wpdb->insert($wpdb->prefix.'parsian_customers',[
+        'display_name'=>'Offline QA Customer','phone'=>'09121111111','province'=>'QA','city'=>'QA',
+        'credit_limit_toman'=>0,'notes'=>'','status'=>'active','created_by'=>$userId,'created_at'=>current_time('mysql',true)
+    ],['%s','%s','%s','%s','%d','%s','%s','%d','%s']);
+    $assert($customerOk===1,'offline proforma customer fixture is created');
+    $customerId = (int)$wpdb->insert_id;
+    update_user_meta($userId,'parsian_customer_'.$customerId,'1');
+    $productOk = $wpdb->insert($wpdb->prefix.'parsian_products',[
+        'sku'=>'QA-OFFLINE-'.wp_generate_password(5,false,false),'name'=>'Offline QA Product',
+        'unit'=>'عدد','unit_price_toman'=>1000,'status'=>'active','created_by'=>$userId,'created_at'=>current_time('mysql',true)
+    ],['%s','%s','%s','%d','%s','%d','%s']);
+    $assert($productOk===1,'offline proforma product fixture is created');
+    $productId = (int)$wpdb->insert_id;
     $proformaOperation = wp_generate_uuid4();
     $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
         'operation_uuid'=>$proformaOperation,'type'=>'sales.proforma.draft',
-        'payload'=>['customer_id'=>123,'items'=>[['product_id'=>1,'quantity'=>1,'unit_price_toman'=>1000]]]
+        'payload'=>['customer_id'=>$customerId,'items'=>[['product_id'=>$productId,'quantity'=>2,'unit_price_toman'=>1000]]]
     ]]]));
     $proformaQueued = $sync->push($push)->get_data();
     $assert(($proformaQueued['results'][0]['status']??'')==='pending_review','namespaced sales.proforma.draft operation is accepted into manager review queue');
+    $proformaOperationId = (int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_sync_ops WHERE operation_uuid=%s",$proformaOperation));
+    $proformaApprove = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$proformaOperationId.'/approve');
+    $proformaApprove->set_param('id',$proformaOperationId);
+    $proformaApplied = $sync->approve_operation($proformaApprove);
+    $assert($proformaApplied->get_status()===201 && ($proformaApplied->get_data()['status']??'')==='applied','manager approval creates offline proforma draft');
+    $proformaId = (int)($proformaApplied->get_data()['proforma_id']??0);
+    $proformaRow = $wpdb->get_row($wpdb->prepare("SELECT created_by,customer_id,status,total_toman FROM {$wpdb->prefix}parsian_proformas WHERE id=%d",$proformaId),ARRAY_A);
+    $assert($proformaId>0 && (int)$proformaRow['created_by']===(int)$userId && (int)$proformaRow['customer_id']===$customerId && $proformaRow['status']==='draft' && (int)$proformaRow['total_toman']===2000,'offline proforma preserves seller ownership and validated line totals');
 
     $leadOperation=wp_generate_uuid4();
     $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
@@ -200,6 +221,15 @@ try {
         $wpdb->delete($wpdb->prefix.'parsian_devices',['user_id'=>$userId],['%d']);
         $wpdb->delete($wpdb->prefix.'parsian_leads',['owner_user_id'=>$userId],['%d']);
         $wpdb->delete($wpdb->prefix.'parsian_tasks',['assigned_user_id'=>$userId],['%d']);
+        $proformaIds = $wpdb->get_col($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_proformas WHERE created_by=%d",$userId));
+        foreach ((array)$proformaIds as $proformaId) {
+            $wpdb->delete($wpdb->prefix.'parsian_proforma_items',['proforma_id'=>(int)$proformaId],['%d']);
+            $wpdb->delete($wpdb->prefix.'parsian_proformas',['id'=>(int)$proformaId],['%d']);
+        }
+        $wpdb->delete($wpdb->prefix.'parsian_customers',['created_by'=>$userId],['%d']);
+        $wpdb->delete($wpdb->prefix.'parsian_products',['created_by'=>$userId],['%d']);
+        delete_user_meta($userId,'parsian_customer_'.$customerId);
+
         $wpdb->delete($wpdb->prefix.'parsian_events',['actor_user_id'=>$userId],['%d']);
         $wpdb->delete($wpdb->prefix.'parsian_events',['event_type'=>'crm.foreign.qa'],['%s']);
         require_once ABSPATH.'wp-admin/includes/user.php';
