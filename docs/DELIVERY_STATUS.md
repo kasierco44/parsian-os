@@ -203,3 +203,15 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Added bank account and import batch references to existing statement lines through guarded ALTER TABLE migrations.
 - Commit: e77f09145165578130439fbe6e3f1b7e96a5ab76.
 - Important: this commit is schema groundwork only. Bank account CRUD, CSV/XLSX parsing, allocation validation/settlement endpoints, opening/closing balance verification, and integration tests are not yet implemented. The existing exact one-line/one-journal matcher remains the only active matching behavior until those services are added.
+
+
+## Bank API implementation update (2026-11-19)
+
+- Added `class-bank.php` and registered it in the plugin bootstrap.
+- Added finance-authorized bank-account list/create/read/update endpoints. Each account must map to an active general-ledger bank account (account code 1210); account references are unique and opening balance/date are validated.
+- Added multipart CSV/XLSX statement import with a 10 MiB limit, file SHA-256 duplicate-batch detection, row-level external transaction duplicate detection, import-batch counters and row error reporting. XLSX requires PHP ZipArchive and SimpleXML; Excel serial dates are normalized.
+- Added allocation-based reconciliation endpoint. It locks statement lines and posted journals, checks statement-line and journal capacities, validates direction and bank-account-to-GL mapping per allocation pair, and persists allocations in a transaction with a match-group UUID. Partial statement-line matches are represented explicitly.
+- Existing single-line manual intake/match routes remain for backward compatibility. New batch-import and allocation routes are additive.
+- New routes: GET/POST `/bank/accounts`; GET/POST/PATCH `/bank/accounts/{id}`; POST `/bank/import`; GET `/bank/import-batches/{id}`; POST `/bank/reconcile`.
+- Source commits: `ff6f55b3e1381a458ca26dc306174ae1ccfb6902`, `688824aba8204ea50cddaf6ee247a9515f9deb72`, `7c518fd9d89cefe107b7478104a1812921613344`, `b77a5071f97b912c488ca4d8ec10bd123ccc9658`, `79ed44d88264d6b876edcff5e572c941fa72db32`, `052b266bd30ebd2577269faf40c0e60d6f418805`.
+- Verification status: no PHP lint, WP database migration, CSV/XLSX fixture, concurrency, or reconciliation integration test has yet been observed for these commits. Treat this as implemented source, not a validated release. The legacy matcher still needs a compatibility review against the new allocation table; bank opening/closing statement balance controls and period close are still outstanding.
