@@ -500,6 +500,17 @@ try {
     $manifestRequest->set_body(wp_json_encode($manifestTamper));
     $manifestResult = $backupService->validate_snapshot($manifestRequest);
     $assert($manifestResult->get_status() === 422 && ($manifestResult->get_data()['code'] ?? '') === 'backup_exclusion_manifest_mismatch', 'backup credential exclusion manifest cannot be silently altered');
+    $exportedSnapshot = $backupService->export_snapshot(new WP_REST_Request('GET', '/parsian-final/v1/backup/export'));
+    $exportedData = $exportedSnapshot->get_data();
+    $assert($exportedSnapshot->get_status() === 200 && isset($exportedData['tables']['devices'], $exportedData['tables']['sync_ops']), 'real export includes device registry and durable sync queue');
+    $assert(!array_key_exists('auth_tokens', $exportedData['tables']) && isset($exportedData['excluded_tables']['auth_tokens']), 'real export excludes credentials with an explicit manifest');
+    $assert(($exportedSnapshot->get_headers()['Cache-Control'] ?? '') === 'no-store, private, max-age=0', 'sensitive backup export disables intermediary and browser caching');
+    $exportValidationRequest = new WP_REST_Request('POST', '/parsian-final/v1/backup/validate');
+    $exportValidationRequest->set_header('content-type', 'application/json');
+    $exportValidationRequest->set_body(wp_json_encode($exportedData));
+    $exportValidation = $backupService->validate_snapshot($exportValidationRequest);
+    $assert($exportValidation->get_status() === 200 && ($exportValidation->get_data()['valid'] ?? false) === true, 'actual consistent database export validates against its checksum and manifest');
+
 
 
     WP_CLI::success('PARSIAN ONE auth/sync acceptance passed: idempotency, lead/customer/proforma/invoice/payment revisions, manager conflict decisions, task/proforma review, seller isolation and device revocation.');
