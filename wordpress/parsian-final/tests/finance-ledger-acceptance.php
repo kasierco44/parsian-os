@@ -24,10 +24,14 @@ $assert = static function($condition, string $message): void {
     if (!$condition) { throw new RuntimeException('ASSERTION FAILED: '.$message); }
 };
 $createEntry = static function(int $sourceId, string $date, int $debit, int $credit) use ($wpdb, $customerId, &$sourceIds, $assert): int {
-    $id = Parsian_Final_Ledger::create_entry('qa_fixture', $sourceId, 'تست پذیرش دفتر تفصیلی', [
+    $lines = $debit>0 ? [
         ['account_code'=>'1100','party_type'=>'customer','party_id'=>$customerId,'debit_toman'=>$debit,'credit_toman'=>0],
-        ['account_code'=>$debit>0?'4100':'1200','party_type'=>'','party_id'=>0,'debit_toman'=>0,'credit_toman'=>$debit>0?$debit:$credit],
-    ], get_current_user_id());
+        ['account_code'=>'4100','party_type'=>'','party_id'=>0,'debit_toman'=>0,'credit_toman'=>$debit],
+    ] : [
+        ['account_code'=>'1100','party_type'=>'customer','party_id'=>$customerId,'debit_toman'=>0,'credit_toman'=>$credit],
+        ['account_code'=>'1200','party_type'=>'','party_id'=>0,'debit_toman'=>$credit,'credit_toman'=>0],
+    ];
+    $id = Parsian_Final_Ledger::create_entry('qa_fixture', $sourceId, 'تست پذیرش دفتر تفصیلی', $lines, get_current_user_id());
     $assert($id>0, 'balanced fixture journal should be created');
     $wpdb->update($wpdb->prefix.'parsian_journal_entries',['created_at'=>$date.' 12:00:00'],['id'=>$id],['%s'],['%d']);
     $sourceIds[]=$sourceId;
@@ -52,7 +56,7 @@ try {
     $assert((int)$data['items'][0]['running_balance_toman']===7000,'first running balance equals 7,000');
     $assert((int)$data['items'][1]['running_balance_toman']===9000,'last running balance equals 9,000');
 
-    $dueDates=['2026-11-20','2026-11-10','2026-10-01','2026-08-20','2026-08-01'];
+    $dueDates=['2026-11-20','2026-11-10','2026-10-01','2026-08-25','2026-08-01'];
     foreach($dueDates as $index=>$due){
         $number='QA-'.wp_generate_password(12,false,false);
         $ok=$wpdb->insert($wpdb->prefix.'parsian_invoices',[
