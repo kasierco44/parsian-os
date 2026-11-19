@@ -36,9 +36,9 @@ final class Parsian_Final_Customer_Portal {
         foreach ((array) $rows as &$row) {
             $row['revision'] = hash('sha256', wp_json_encode([
                 'id'=>(int)$row['id'],'invoice_number'=>(string)$row['invoice_number'],
-                'total_toman'=>(int)$row['total_toman'],'status'=>(string)$row['status'],
+                'status'=>(string)$row['status'],'total_toman'=>(int)$row['total_toman'],
                 'due_date'=>(string)($row['due_date']??''),'issued_at'=>(string)$row['issued_at'],
-                'updated_at'=>(string)($row['updated_at']??''),'journal_entry_id'=>(int)$row['journal_entry_id'],'proforma_id'=>(int)$row['proforma_id'],'customer_id'=>(int)$row['customer_id'],'issued_by'=>(int)$row['issued_by']
+                'updated_at'=>(string)($row['updated_at']??''),'journal_entry_id'=>(int)$row['journal_entry_id']
             ], JSON_UNESCAPED_UNICODE));
             unset($row['proforma_id'], $row['customer_id'], $row['issued_by']);
         }
@@ -52,10 +52,11 @@ final class Parsian_Final_Customer_Portal {
         foreach ((array) $rows as &$row) {
             $row['revision'] = hash('sha256', wp_json_encode([
                 'id'=>(int)$row['id'],'document_number'=>(string)$row['document_number'],
-                'total_toman'=>(int)$row['total_toman'],'status'=>(string)$row['status'],
-                'due_date'=>(string)($row['due_date']??''),'created_at'=>(string)$row['created_at'],
-                'updated_at'=>(string)($row['updated_at']??''),'customer_id'=>(int)$row['customer_id'],
-                'notes'=>(string)($row['notes']??''),'invoice_id'=>(int)$row['invoice_id'],'created_by'=>(int)$row['created_by'],
+                'customer_id'=>(int)$row['customer_id'],'status'=>(string)$row['status'],
+                'total_toman'=>(int)$row['total_toman'],'due_date'=>(string)($row['due_date']??''),
+                'notes'=>(string)($row['notes']??''),'created_by'=>(int)$row['created_by'],
+                'created_at'=>(string)$row['created_at'],'updated_at'=>(string)($row['updated_at']??''),
+                'invoice_id'=>(int)$row['invoice_id'],
                 'items_revision'=>hash('sha256', wp_json_encode($wpdb->get_results($wpdb->prepare(
                     "SELECT product_id,description,quantity,unit_price_toman,line_total_toman FROM {$wpdb->prefix}parsian_proforma_items WHERE proforma_id=%d ORDER BY id",
                     (int)$row['id']
@@ -72,12 +73,12 @@ final class Parsian_Final_Customer_Portal {
         $rows=$wpdb->get_results($wpdb->prepare("SELECT id,amount_toman,method,reference,status,created_at,COALESCE(updated_at,created_at) AS updated_at,direction,party_type,party_id,created_by,journal_entry_id FROM {$wpdb->prefix}parsian_payments WHERE party_type='customer' AND party_id=%d AND direction='in' ORDER BY created_at DESC,id DESC LIMIT 100",$customerId),ARRAY_A);
         foreach ((array) $rows as &$row) {
             $row['revision'] = hash('sha256', wp_json_encode([
-                'id'=>(int)$row['id'],'amount_toman'=>(int)$row['amount_toman'],
-                'method'=>(string)$row['method'],'reference'=>(string)$row['reference'],
-                'status'=>(string)$row['status'],'created_at'=>(string)$row['created_at'],
-                'updated_at'=>(string)($row['updated_at']??''),'direction'=>(string)$row['direction'],
-                'party_type'=>(string)$row['party_type'],'party_id'=>(int)$row['party_id'],
-                'created_by'=>(int)$row['created_by'],'journal_entry_id'=>(int)$row['journal_entry_id']
+                'id'=>(int)$row['id'],'direction'=>(string)$row['direction'],
+                'amount_toman'=>(int)$row['amount_toman'],'party_type'=>(string)$row['party_type'],
+                'party_id'=>(int)$row['party_id'],'method'=>(string)$row['method'],
+                'reference'=>(string)$row['reference'],'status'=>(string)$row['status'],
+                'created_by'=>(int)$row['created_by'],'created_at'=>(string)$row['created_at'],
+                'updated_at'=>(string)($row['updated_at']??''),'journal_entry_id'=>(int)$row['journal_entry_id']
             ], JSON_UNESCAPED_UNICODE));
             unset($row['direction'], $row['party_type'], $row['party_id'], $row['created_by'], $row['journal_entry_id']);
         }
