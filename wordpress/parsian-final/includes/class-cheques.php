@@ -6,6 +6,10 @@ final class Parsian_Final_Cheques {
             'methods'=>WP_REST_Server::CREATABLE,'callback'=>[$this,'transition'],
             'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_finance_write');}
         ]);
+        register_rest_route('parsian-final/v1','/cheques/(?P<id>\\d+)/link-payment',[
+            'methods'=>WP_REST_Server::CREATABLE,'callback'=>[$this,'link_payment'],
+            'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_finance_write');}
+        ]);
         register_rest_route('parsian-final/v1','/cheques/(?P<id>\\d+)/history',[
             'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'history'],
             'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_finance_read');}
@@ -122,6 +126,26 @@ final class Parsian_Final_Cheques {
         $this->event('finance.cheque.transitioned','cheque',$id,['from'=>$from,'to'=>$to,'journal_entry_id'=>$journalId,'event_id'=>(int)$eventId]);
         $wpdb->query('COMMIT');
         return new WP_REST_Response(['cheque_id'=>$id,'from'=>$from,'status'=>$to,'event_id'=>(int)$eventId,'journal_entry_id'=>$journalId],200);
+    }
+    public function link_payment(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb; $id=absint($request['id']); $p=$request->get_json_params(); $paymentId=absint($p['payment_id']??0);
+        if($paymentId<1)return new WP_REST_Response(['code'=>'payment_id_required'],400);
+        $wpdb->query('START TRANSACTION');
+        $cheque=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}parsian_cheques WHERE id=%d FOR UPDATE",$id),ARRAY_A);
+        $payment=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}parsian_payments WHERE id=%d FOR UPDATE",$paymentId),ARRAY_A);
+        if(!$cheque||!$payment){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'cheque_or_payment_not_found'],404);}
+        $expected=$cheque['direction']==='received'?'in':'out';
+        if($cheque['status']!=='pending'||(int)$cheque['payment_id']>0||
+            $payment['status']!=='posted'||$payment['method']!=='cheque'||$payment['direction']!==$expected||
+            (int)$payment['amount_toman']!==(int)$cheque['amount_toman']||
+            $payment['party_type']!==$cheque['party_type']||(int)$payment['party_id']!==(int)$cheque['party_id']){
+            $wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'payment_link_mismatch_or_cheque_not_pending'],409);
+        }
+        $ok=$wpdb->update($wpdb->prefix.'parsian_cheques',['payment_id'=>$paymentId],['id'=>$id,'status'=>'pending','payment_id'=>0],['%d'],['%d','%s','%d']);
+        if($ok!==1){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'payment_link_conflict'],409);}
+        $this->event('finance.cheque.payment_linked','cheque',$id,['payment_id'=>$paymentId]);
+        $wpdb->query('COMMIT');
+        return new WP_REST_Response(['cheque_id'=>$id,'payment_id'=>$paymentId,'status'=>'linked'],200);
     }
     public function history(WP_REST_Request $request): WP_REST_Response {
         global $wpdb; $id=absint($request['id']);
