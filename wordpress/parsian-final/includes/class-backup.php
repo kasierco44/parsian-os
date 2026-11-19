@@ -7,7 +7,7 @@ final class Parsian_Final_Backup {
     private const MAX_BACKUP_BYTES = 20971520;
 
     private function tables(): array {
-        return ['customers','suppliers','leads','tasks','products','stock_movements','stock_ledger','stock_reservations','proformas','proforma_items','invoices','invoice_items','payments','payment_allocations','cheques','cheque_events','ledger_accounts','journal_entries','journal_lines','bank_accounts','bank_statement_lines','bank_import_batches','bank_reconciliation_matches','events'];
+        return ['devices','sync_ops','customers','suppliers','leads','tasks','products','stock_movements','stock_ledger','stock_reservations','proformas','proforma_items','invoices','invoice_items','payments','payment_allocations','cheques','cheque_events','ledger_accounts','journal_entries','journal_lines','bank_accounts','bank_statement_lines','bank_import_batches','bank_reconciliation_matches','events'];
     }
 
     public function register_routes(): void {
@@ -28,7 +28,7 @@ final class Parsian_Final_Backup {
             $tables[$suffix]=$wpdb->get_results("SELECT * FROM {$table} ORDER BY 1 ASC",ARRAY_A)?:[];
         }
         $assignments=$wpdb->get_results("SELECT user_id,meta_key,meta_value FROM {$wpdb->usermeta} WHERE meta_key='parsian_customer_id' OR meta_key LIKE 'parsian_customer_%' ORDER BY user_id,meta_key",ARRAY_A)?:[];
-        $payload=['format'=>'PARSIAN_FINAL_BACKUP','format_version'=>1,'plugin_version'=>PARSIAN_FINAL_VERSION,'schema_version'=>get_option('parsian_final_schema_version','unknown'),'source_site'=>home_url('/'),'created_at_utc'=>gmdate('c'),'tables'=>$tables,'user_customer_assignments'=>$assignments];
+        $payload=['format'=>'PARSIAN_FINAL_BACKUP','format_version'=>1,'plugin_version'=>PARSIAN_FINAL_VERSION,'schema_version'=>get_option('parsian_final_schema_version','unknown'),'source_site'=>home_url('/'),'created_at_utc'=>gmdate('c'),'tables'=>$tables,'excluded_tables'=>['auth_tokens'=>['reason'=>'credential material is intentionally excluded; revoke and re-register devices after disaster recovery']],'user_customer_assignments'=>$assignments];
         $canonical=wp_json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
         if(!is_string($canonical)||strlen($canonical)>self::MAX_BACKUP_BYTES)return new WP_REST_Response(['code'=>'backup_size_limit_exceeded'],413);
         $payload['checksum_sha256']=hash('sha256',$canonical);
@@ -37,13 +37,13 @@ final class Parsian_Final_Backup {
 
     public function validate_snapshot(WP_REST_Request $request): WP_REST_Response {
         $backup=$request->get_json_params();
-        if(!is_array($backup)||($backup['format']??'')!=='PARSIAN_FINAL_BACKUP'||(int)($backup['format_version']??0)!==1||!is_array($backup['tables']??null)||!is_string($backup['checksum_sha256']??null))
+        if(!is_array($backup)||($backup['format']??'')!=='PARSIAN_FINAL_BACKUP'||(int)($backup['format_version']??0)!==1||!is_array($backup['tables']??null)||!is_array($backup['excluded_tables']??null)||!is_string($backup['checksum_sha256']??null))
             return new WP_REST_Response(['valid'=>false,'code'=>'invalid_backup_format'],400);
         $checksum=strtolower($backup['checksum_sha256']);unset($backup['checksum_sha256']);
         $canonical=wp_json_encode($backup,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
         if(!is_string($canonical)||strlen($canonical)>self::MAX_BACKUP_BYTES)return new WP_REST_Response(['valid'=>false,'code'=>'backup_size_limit_exceeded'],413);
         if(!hash_equals(hash('sha256',$canonical),$checksum))return new WP_REST_Response(['valid'=>false,'code'=>'backup_checksum_mismatch'],422);
-        $expected=$this->tables();$provided=array_keys($backup['tables']);sort($expected);sort($provided);
+        $expected=$this->tables();$provided=array_keys($backup['tables']);sort($expected);sort($provided);\n        $expectedExcluded=['auth_tokens'=>['reason'=>'credential material is intentionally excluded; revoke and re-register devices after disaster recovery']];\n        if($backup['excluded_tables']!==$expectedExcluded)return new WP_REST_Response(['valid'=>false,'code'=>'backup_exclusion_manifest_mismatch'],422);
         if($expected!==$provided)return new WP_REST_Response(['valid'=>false,'code'=>'backup_table_set_mismatch'],422);
         foreach($backup['tables'] as $name=>$rows){
             if(!is_array($rows)||count($rows)>self::MAX_ROWS_PER_TABLE)return new WP_REST_Response(['valid'=>false,'code'=>'backup_table_shape_invalid','table'=>$name],422);
