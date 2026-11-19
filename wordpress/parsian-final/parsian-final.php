@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PARSIAN FINAL Core
  * Description: Central business platform for Parsian Ghat'e — identity, CRM, sales, finance, inventory and sync API.
- * Version: 0.4.24
+ * Version: 0.4.25
  * Requires at least: 6.2
  * Requires PHP: 8.0
  * Text Domain: parsian-final
