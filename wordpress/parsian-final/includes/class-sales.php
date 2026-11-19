@@ -101,16 +101,27 @@ final class Parsian_Final_Sales {
         $offset=($page-1)*$perPage;
         if(current_user_can('parsian_manage_users')||current_user_can('parsian_sales_approve')){
             $rows=$wpdb->get_results($wpdb->prepare(
-                "SELECT id,document_number,customer_id,status,total_toman,created_by,created_at,invoice_id
+                "SELECT id,document_number,customer_id,status,total_toman,due_date,notes,created_by,created_at,updated_at,invoice_id
                  FROM {$wpdb->prefix}parsian_proformas ORDER BY id DESC LIMIT %d OFFSET %d",$perPage,$offset
             ),ARRAY_A);
         } else {
             $rows=$wpdb->get_results($wpdb->prepare(
-                "SELECT id,document_number,customer_id,status,total_toman,created_by,created_at,invoice_id
+                "SELECT id,document_number,customer_id,status,total_toman,due_date,notes,created_by,created_at,updated_at,invoice_id
                  FROM {$wpdb->prefix}parsian_proformas WHERE created_by=%d ORDER BY id DESC LIMIT %d OFFSET %d",
                 get_current_user_id(),$perPage,$offset
             ),ARRAY_A);
         }
+        foreach ((array) $rows as &$row) {
+            $row['revision'] = hash('sha256', wp_json_encode([
+                'id'=>(int)$row['id'], 'document_number'=>(string)$row['document_number'],
+                'customer_id'=>(int)$row['customer_id'], 'status'=>(string)$row['status'],
+                'total_toman'=>(int)$row['total_toman'], 'due_date'=>(string)($row['due_date']??''),
+                'notes'=>(string)($row['notes']??''), 'created_by'=>(int)$row['created_by'],
+                'created_at'=>(string)$row['created_at'], 'updated_at'=>(string)$row['updated_at'],
+                'invoice_id'=>(int)$row['invoice_id']
+            ], JSON_UNESCAPED_UNICODE));
+        }
+        unset($row);
         return new WP_REST_Response(['items'=>$rows?:[],'page'=>$page,'per_page'=>$perPage],200);
     }
     public function get_proforma(WP_REST_Request $request): WP_REST_Response {
