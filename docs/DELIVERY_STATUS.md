@@ -341,3 +341,9 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Local PHP 8.4 syntax checks passed for the two newly added classes (customer portal and backup). This is not a whole-plugin lint run.
 - Previous GitHub Actions records still showed failed web, Android and PHP jobs with no exposed steps/logs. No successful latest CI run, APK, MSI/EXE, or staging DB acceptance result is confirmed in this status.
 - Staging migration and WP-CLI acceptance tests remain required. Production remains untouched and PR #21 remains unmerged.
+
+
+### Manager assignment and final panel bundle sync (2026-11-19)
+- Added a manager workspace to assign a customer record to a seller account and link a WordPress customer account to that customer record. The endpoints are manager-only and write audit events.
+- The panel's JavaScript and CSS are byte-for-byte synchronized between the standalone web panel and the WordPress plugin assets at the latest check.
+- Plugin development version is now 0.4.9. The installer migration creates the bearer-token table; the latest schema and new customer/backup classes still require a full PHP lint and Staging database acceptance run.
