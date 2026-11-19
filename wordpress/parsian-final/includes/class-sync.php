@@ -3,8 +3,8 @@ if (!defined('ABSPATH')) { exit; }
 final class Parsian_Final_Sync {
     public function register_routes(): void {
         register_rest_route('parsian-final/v1','/sync/devices',[
-            'methods'=>WP_REST_Server::CREATABLE,'callback'=>[$this,'register_device'],
-            'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_sync_use');}
+            ['methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'list_devices'],'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_sync_use');}],
+            ['methods'=>WP_REST_Server::CREATABLE,'callback'=>[$this,'register_device'],'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_sync_use');}]
         ]);
         register_rest_route('parsian-final/v1','/sync/push',[
             'methods'=>WP_REST_Server::CREATABLE,'callback'=>[$this,'push'],
@@ -14,6 +14,15 @@ final class Parsian_Final_Sync {
             'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'pull'],
             'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_sync_use');}
         ]);
+    }
+    public function list_devices(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $rows=$wpdb->get_results($wpdb->prepare(
+            "SELECT device_uuid,platform,label,created_at,last_seen_at,revoked_at
+             FROM {$wpdb->prefix}parsian_devices WHERE user_id=%d ORDER BY created_at DESC",
+            get_current_user_id()
+        ),ARRAY_A);
+        return new WP_REST_Response(['items'=>$rows?:[]],200);
     }
     public function register_device(WP_REST_Request $request): WP_REST_Response {
         $p=$request->get_json_params();
@@ -44,7 +53,7 @@ final class Parsian_Final_Sync {
         $p=$request->get_json_params();
         $device=strtolower(sanitize_text_field($p['device_uuid']??''));
         $ops=$p['operations']??null;
-        if(!wp_is_uuid($device)||!is_array($ops)||count($ops)>100)
+        if(!wp_is_uuid($device)||!is_array($ops)||count($ops)<1||count($ops)>100)
             return new WP_REST_Response(['code'=>'invalid_sync_batch'],400);
         global $wpdb;
         $devices=$wpdb->prefix.'parsian_devices';
@@ -56,14 +65,16 @@ final class Parsian_Final_Sync {
                 $results[]=['status'=>'rejected','code'=>'invalid_operation'];continue;
             }
             $type=sanitize_key($op['type']);
+            $allowedTypes=['crm.lead.create','crm.lead.update','crm.task.complete','sales.proforma.draft'];
             $payload=wp_json_encode($op['payload']);
-            if($type===''||strlen((string)$payload)>65535){
+            if(!in_array($type,$allowedTypes,true)||strlen((string)$payload)>65535){
                 $results[]=['operation_uuid'=>$op['operation_uuid'],'status'=>'rejected','code'=>'operation_too_large_or_invalid'];continue;
             }
             $uuid=strtolower($op['operation_uuid']);
-            $existing=$wpdb->get_row($wpdb->prepare("SELECT id,user_id,status FROM {$table} WHERE operation_uuid=%s",$uuid),ARRAY_A);
+            $payloadHash=hash('sha256',(string)$payload);
+            $existing=$wpdb->get_row($wpdb->prepare("SELECT id,user_id,device_uuid,status,payload_sha256 FROM {$table} WHERE operation_uuid=%s",$uuid),ARRAY_A);
             if($existing){
-                if((int)$existing['user_id']!==get_current_user_id()){
+                if((int)$existing['user_id']!==get_current_user_id() || $existing['device_uuid']!==$device || !hash_equals((string)$existing['payload_sha256'],$payloadHash)){
                     $results[]=['operation_uuid'=>$uuid,'status'=>'rejected','code'=>'operation_uuid_conflict'];
                 } else {
                     $results[]=['operation_uuid'=>$uuid,'status'=>$existing['status'],'duplicate'=>true];
@@ -72,12 +83,12 @@ final class Parsian_Final_Sync {
             }
             $ok=$wpdb->insert($table,[
                 'operation_uuid'=>$uuid,'device_uuid'=>$device,'user_id'=>get_current_user_id(),
-                'operation_type'=>$type,'payload'=>$payload,
+                'operation_type'=>$type,'payload'=>$payload,'payload_sha256'=>$payloadHash,
                 'status'=>'pending_review','created_at'=>current_time('mysql',true)
             ],['%s','%s','%d','%s','%s','%s','%s']);
             if(!$ok){
-                $duplicate=$wpdb->get_row($wpdb->prepare("SELECT user_id,status FROM {$table} WHERE operation_uuid=%s",$uuid),ARRAY_A);
-                $results[]=$duplicate && (int)$duplicate['user_id']===get_current_user_id()
+                $duplicate=$wpdb->get_row($wpdb->prepare("SELECT user_id,device_uuid,status,payload_sha256 FROM {$table} WHERE operation_uuid=%s",$uuid),ARRAY_A);
+                $results[]=$duplicate && (int)$duplicate['user_id']===get_current_user_id() && $duplicate['device_uuid']===$device && hash_equals((string)$duplicate['payload_sha256'],$payloadHash)
                     ?['operation_uuid'=>$uuid,'status'=>$duplicate['status'],'duplicate'=>true]
                     :['operation_uuid'=>$uuid,'status'=>'retry'];
             } else {
