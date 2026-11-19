@@ -191,7 +191,13 @@ final class Parsian_Final_Bank {
             foreach($bankLines as $bl){if((int)$bl['debit_toman']>0){$capacity+=(int)$bl['debit_toman'];$entryDirection='in';}if((int)$bl['credit_toman']>0){$capacity+=(int)$bl['credit_toman'];$entryDirection='out';}}
             $used=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(matched_amount_toman),0) FROM {$this->table('bank_reconciliation_matches')} WHERE journal_entry_id=%d",$id));
             if(!$capacity||$used+$journalSums[$id]>$capacity){$wpdb->query('ROLLBACK');return $this->error('journal_overallocated_or_not_bank_entry',409,['journal_entry_id'=>$id,'remaining_toman'=>$capacity-$used]);}
-            foreach($lines as $line){if($line['direction']!==$entryDirection){$wpdb->query('ROLLBACK');return $this->error('transaction_direction_mismatch',409,['journal_entry_id'=>$id,'statement_line_id'=>(int)$line['id']]);}}
+            foreach($lines as $line){
+                $bankAccount=$wpdb->get_row($wpdb->prepare("SELECT ledger_account_id FROM {$this->table('bank_accounts')} WHERE id=%d AND is_active=1",(int)$line['bank_account_id']),ARRAY_A);
+                $sameBankLedger=false;
+                foreach($bankLines as $bl){if($bankAccount && (int)$bl['account_id']===(int)$bankAccount['ledger_account_id']){$sameBankLedger=true;break;}}
+                if($line['direction']!==$entryDirection){$wpdb->query('ROLLBACK');return $this->error('transaction_direction_mismatch',409,['journal_entry_id'=>$id,'statement_line_id'=>(int)$line['id']]);}
+                if(!$sameBankLedger){$wpdb->query('ROLLBACK');return $this->error('bank_account_ledger_mismatch',409,['journal_entry_id'=>$id,'statement_line_id'=>(int)$line['id']]);}
+            }
         }
         foreach($allocations as $a){$ok=$wpdb->insert($this->table('bank_reconciliation_matches'),[
             'statement_line_id'=>absint($a['statement_line_id']),'journal_entry_id'=>absint($a['journal_entry_id']),
