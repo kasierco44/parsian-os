@@ -242,9 +242,22 @@ private fun leadUpdateSection(context: Context, onQueued: (String) -> Unit) {
                     if (phone.isNotBlank()) payload.put("phone", phone.trim())
                     if (province.isNotBlank()) payload.put("province", province.trim())
                     if (notes.isNotBlank()) payload.put("notes", notes.trim())
+                    val leadRows = DashboardRepository.loadOfflineResource(context, "leads")
+                    var baseUpdatedAt = ""
+                    for (index in 0 until leadRows.length()) {
+                        val cachedLead = leadRows.optJSONObject(index) ?: continue
+                        if (cachedLead.optLong("id", 0L) == leadId.toLong()) {
+                            baseUpdatedAt = cachedLead.optString("updated_at")
+                            break
+                        }
+                    }
+                    if (baseUpdatedAt.isBlank()) {
+                        throw IllegalStateException("نسخه مبنای سرور برای این سرنخ در گوشی موجود نیست؛ ابتدا همگام‌سازی و دریافت اطلاعات تازه را انجام دهید.")
+                    }
+                    payload.put("base_updated_at", baseUpdatedAt)
                     Outbox.enqueue(context, "crm.lead.update", payload)
                     leadId = ""; name = ""; phone = ""; province = ""; notes = ""
-                    onQueued("ویرایش سرنخ به صف آفلاین اضافه شد؛ پس از تأیید مدیر اعمال می‌شود.")
+                    onQueued("ویرایش با نسخه مبنای سرور در صف آفلاین قرار گرفت؛ اگر رکورد هم‌زمان تغییر کرده باشد، برای تصمیم مدیر متوقف می‌شود.")
                 } catch (error: Exception) { onQueued(error.message ?: "ثبت ویرایش سرنخ ناموفق بود.") }
             }
         }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
