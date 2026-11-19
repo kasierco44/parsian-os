@@ -212,6 +212,11 @@ final class Parsian_Final_Cheques {
             'matched_by'=>get_current_user_id(),'matched_at'=>current_time('mysql',true)
         ],['id'=>$id,'match_status'=>'unmatched'],['%d','%s','%d','%s'],['%d','%s']);
         if($ok!==1){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'reconciliation_conflict'],409);}
+        $allocation=$wpdb->insert($wpdb->prefix.'parsian_bank_reconciliation_matches',[
+            'statement_line_id'=>$id,'journal_entry_id'=>$journalId,'matched_amount_toman'=>(int)$line['amount_toman'],
+            'match_group_uuid'=>wp_generate_uuid4(),'matched_by'=>get_current_user_id(),'matched_at'=>current_time('mysql',true)
+        ],['%d','%d','%d','%s','%d','%s']);
+        if(!$allocation){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'reconciliation_allocation_conflict'],409);}
         $this->event('finance.bank_line.matched','bank_statement_line',$id,['journal_entry_id'=>$journalId]);
         $wpdb->query('COMMIT');
         return new WP_REST_Response(['status'=>'matched','statement_line_id'=>$id,'journal_entry_id'=>$journalId],200);
