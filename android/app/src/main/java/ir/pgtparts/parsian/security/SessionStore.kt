@@ -45,6 +45,9 @@ object SessionStore {
   return key
  }
  fun clear(context: Context) {
-  prefs(context).edit().clear().apply()
+  val store = prefs(context)
+  val databaseKey = store.getString("database_key", null)
+  store.edit().clear().apply()
+  if (databaseKey != null) store.edit().putString("database_key", databaseKey).apply()
  }
 }
