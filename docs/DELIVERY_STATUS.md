@@ -347,3 +347,9 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Added a manager workspace to assign a customer record to a seller account and link a WordPress customer account to that customer record. The endpoints are manager-only and write audit events.
 - The panel's JavaScript and CSS are byte-for-byte synchronized between the standalone web panel and the WordPress plugin assets at the latest check.
 - Plugin development version is now 0.4.9. The installer migration creates the bearer-token table; the latest schema and new customer/backup classes still require a full PHP lint and Staging database acceptance run.
+
+
+### Persian localization and staging gate (2026-11-19)
+- Web and Android data tables now format dates with the Persian Jalali calendar and translate common workflow statuses; monetary values and counts use Persian digits.
+- Plugin development version is 0.4.11. The staging acceptance runbook now specifies a database backup, full PHP lint, schema check, both WP-CLI acceptance harnesses and REST health check.
+- Local PHP lint passed for the new customer portal and backup classes and for the REST/CORS class. This still does not replace whole-plugin PHP lint, Android Gradle build, Windows Tauri build or live Staging validation.
