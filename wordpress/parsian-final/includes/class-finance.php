@@ -12,6 +12,21 @@ final class Parsian_Final_Finance {
             'callback' => [$this, 'approve_payment'],
             'permission_callback' => static function (): bool { return is_user_logged_in() && current_user_can('parsian_finance_write'); },
         ]);
+        register_rest_route('parsian-final/v1', '/payments/(?P<id>\\d+)/allocations', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'allocate_payment'],
+            'permission_callback' => static function (): bool { return is_user_logged_in() && current_user_can('parsian_finance_write'); },
+        ]);
+        register_rest_route('parsian-final/v1', '/invoices/(?P<id>\\d+)/balance', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [$this, 'invoice_balance'],
+            'permission_callback' => static function (): bool { return is_user_logged_in() && current_user_can('parsian_finance_read'); },
+        ]);
+        register_rest_route('parsian-final/v1', '/customers/(?P<id>\\d+)/outstanding', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [$this, 'customer_outstanding'],
+            'permission_callback' => static function (): bool { return is_user_logged_in() && current_user_can('parsian_finance_read'); },
+        ]);
         register_rest_route('parsian-final/v1', '/cheques', [
             'methods' => WP_REST_Server::CREATABLE,
             'callback' => [$this, 'create_cheque'],
@@ -156,5 +171,54 @@ final class Parsian_Final_Finance {
         ],['%s','%d','%s','%s','%d','%s','%s']);
         $wpdb->query('COMMIT');
         return new WP_REST_Response(['status'=>'posted','payment_id'=>$id,'journal_entry_id'=>$journalId,'amount_toman'=>$amount],200);
+    }
+    public function allocate_payment(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $paymentId=absint($request['id']); $p=$request->get_json_params();
+        $invoiceId=absint($p['invoice_id']??0);
+        $amount=filter_var($p['amount_toman']??null,FILTER_VALIDATE_INT);
+        if($invoiceId<1||$amount===false||$amount<1||$amount>1000000000000)
+            return new WP_REST_Response(['code'=>'invalid_allocation'],400);
+        $wpdb->query('START TRANSACTION');
+        $payment=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}parsian_payments WHERE id=%d FOR UPDATE",$paymentId),ARRAY_A);
+        $invoice=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}parsian_invoices WHERE id=%d FOR UPDATE",$invoiceId),ARRAY_A);
+        if(!$payment||!$invoice){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'payment_or_invoice_not_found'],404);}
+        if($payment['status']!=='posted'||$payment['direction']!=='in'||$payment['party_type']!=='customer'||(int)$payment['party_id']!==(int)$invoice['customer_id']){
+            $wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'payment_invoice_party_mismatch'],409);
+        }
+        if(!in_array($invoice['status'],['posted','fulfilled'],true)){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'invoice_not_allocatable'],409);}
+        $table=$wpdb->prefix.'parsian_payment_allocations';
+        $paymentAllocated=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(amount_toman),0) FROM {$table} WHERE payment_id=%d",$paymentId));
+        $invoiceAllocated=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(amount_toman),0) FROM {$table} WHERE invoice_id=%d",$invoiceId));
+        $paymentRemaining=(int)$payment['amount_toman']-$paymentAllocated;
+        $invoiceRemaining=(int)$invoice['total_toman']-$invoiceAllocated;
+        if($amount>$paymentRemaining||$amount>$invoiceRemaining){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'allocation_exceeds_remaining','payment_remaining_toman'=>$paymentRemaining,'invoice_remaining_toman'=>$invoiceRemaining],409);}
+        $ok=$wpdb->insert($table,['payment_id'=>$paymentId,'invoice_id'=>$invoiceId,'customer_id'=>(int)$invoice['customer_id'],'amount_toman'=>$amount,'allocated_by'=>get_current_user_id(),'allocated_at'=>current_time('mysql',true)],['%d','%d','%d','%d','%d','%s']);
+        if(!$ok){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'allocation_write_failed'],409);}
+        $newAllocated=$invoiceAllocated+$amount; $newBalance=(int)$invoice['total_toman']-$newAllocated;
+        $wpdb->insert($wpdb->prefix.'parsian_events',['event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>get_current_user_id(),'event_type'=>'finance.payment.allocated','aggregate_type'=>'invoice','aggregate_id'=>$invoiceId,'payload'=>wp_json_encode(['payment_id'=>$paymentId,'amount_toman'=>$amount,'remaining_toman'=>$newBalance]),'created_at'=>current_time('mysql',true)],['%s','%d','%s','%s','%d','%s','%s']);
+        $wpdb->query('COMMIT');
+        return new WP_REST_Response(['status'=>$newBalance===0?'paid':'partially_paid','payment_id'=>$paymentId,'invoice_id'=>$invoiceId,'allocated_toman'=>$newAllocated,'balance_toman'=>$newBalance],201);
+    }
+    public function invoice_balance(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb; $id=absint($request['id']);
+        $invoice=$wpdb->get_row($wpdb->prepare("SELECT id,invoice_number,customer_id,total_toman,status FROM {$wpdb->prefix}parsian_invoices WHERE id=%d",$id),ARRAY_A);
+        if(!$invoice)return new WP_REST_Response(['code'=>'invoice_not_found'],404);
+        $paid=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(amount_toman),0) FROM {$wpdb->prefix}parsian_payment_allocations WHERE invoice_id=%d",$id));
+        return new WP_REST_Response(['invoice'=>$invoice,'allocated_toman'=>$paid,'balance_toman'=>max(0,(int)$invoice['total_toman']-$paid),'payment_status'=>$paid<=0?'unpaid':($paid>=(int)$invoice['total_toman']?'paid':'partially_paid')],200);
+    }
+    public function customer_outstanding(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb; $customerId=absint($request['id']);
+        $rows=$wpdb->get_results($wpdb->prepare(
+            "SELECT i.id,i.invoice_number,i.issued_at,i.total_toman,
+                    COALESCE(a.allocated_toman,0) allocated_toman,
+                    GREATEST(i.total_toman-COALESCE(a.allocated_toman,0),0) balance_toman
+             FROM {$wpdb->prefix}parsian_invoices i
+             LEFT JOIN (SELECT invoice_id,SUM(amount_toman) allocated_toman FROM {$wpdb->prefix}parsian_payment_allocations GROUP BY invoice_id) a ON a.invoice_id=i.id
+             WHERE i.customer_id=%d AND i.status IN ('posted','fulfilled')
+             ORDER BY i.issued_at ASC,i.id ASC",$customerId
+        ),ARRAY_A)?:[];
+        $total=0;foreach($rows as &$row){$row['balance_toman']=(int)$row['balance_toman'];$total+=$row['balance_toman'];}unset($row);
+        return new WP_REST_Response(['customer_id'=>$customerId,'invoices'=>$rows,'total_outstanding_toman'=>$total],200);
     }
 }
