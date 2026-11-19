@@ -142,6 +142,7 @@ final class Parsian_Final_Install {
                 status varchar(24) NOT NULL DEFAULT 'draft',
                 currency varchar(8) NOT NULL DEFAULT 'IRR',
                 total_toman bigint unsigned NOT NULL DEFAULT 0,
+                due_date date NULL,
                 notes text NOT NULL,
                 created_by bigint unsigned NOT NULL,
                 approved_by bigint unsigned NOT NULL DEFAULT 0,
@@ -173,6 +174,7 @@ final class Parsian_Final_Install {
                 status varchar(24) NOT NULL DEFAULT 'posted',
                 currency varchar(8) NOT NULL DEFAULT 'IRR',
                 total_toman bigint unsigned NOT NULL,
+                due_date date NULL,
                 journal_entry_id bigint unsigned NOT NULL DEFAULT 0,
                 issued_by bigint unsigned NOT NULL,
                 issued_at datetime NOT NULL,
@@ -388,7 +390,16 @@ final class Parsian_Final_Install {
             KEY customer_allocated (customer_id,allocated_at)
         ) $charset;";
         dbDelta($allocationTable);
+        $proformaColumns = [
+            'due_date' => "ALTER TABLE {$p}proformas ADD COLUMN due_date date NULL"
+        ];
+        foreach ($proformaColumns as $column => $sql) {
+            if (!$wpdb->get_var($wpdb->prepare("SHOW COLUMNS FROM {$p}proformas LIKE %s", $column))) {
+                $wpdb->query($sql);
+            }
+        }
         $invoiceColumns = [
+            'due_date' => "ALTER TABLE {$p}invoices ADD COLUMN due_date date NULL",
             'cogs_toman' => "ALTER TABLE {$p}invoices ADD COLUMN cogs_toman bigint unsigned NOT NULL DEFAULT 0",
             'cogs_journal_entry_id' => "ALTER TABLE {$p}invoices ADD COLUMN cogs_journal_entry_id bigint unsigned NOT NULL DEFAULT 0"
         ];
