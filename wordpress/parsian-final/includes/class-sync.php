@@ -82,6 +82,10 @@ final class Parsian_Final_Sync {
             if(!in_array($type,$allowedTypes,true)||strlen((string)$payload)>65535){
                 $results[]=['operation_uuid'=>$op['operation_uuid'],'status'=>'rejected','code'=>'operation_too_large_or_invalid'];continue;
             }
+            $requiredCapability = str_starts_with($type, 'sales.') ? 'parsian_sales_create' : 'parsian_crm_write';
+            if (!current_user_can($requiredCapability)) {
+                $results[]=['operation_uuid'=>$op['operation_uuid'],'status'=>'rejected','code'=>'operation_actor_not_authorized'];continue;
+            }
             $uuid=strtolower($op['operation_uuid']);
             $payloadHash=hash('sha256',(string)$payload);
             $existing=$wpdb->get_row($wpdb->prepare("SELECT id,user_id,device_uuid,status,payload_sha256 FROM {$table} WHERE operation_uuid=%s",$uuid),ARRAY_A);
