@@ -15,6 +15,7 @@ final class Parsian_Final_Backup {
         $permission = static function (): bool { return is_user_logged_in() && current_user_can('parsian_manage_settings'); };
         register_rest_route('parsian-final/v1','/backup/export',['methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'export_snapshot'],'permission_callback'=>$permission]);
         register_rest_route('parsian-final/v1','/backup/validate',['methods'=>WP_REST_Server::CREATABLE,'callback'=>[$this,'validate_snapshot'],'permission_callback'=>$permission]);
+        register_rest_route('parsian-final/v1','/backup/restore-plan',['methods'=>WP_REST_Server::CREATABLE,'callback'=>[$this,'restore_plan'],'permission_callback'=>$permission]);
     }
 
     public function export_snapshot(WP_REST_Request $request): WP_REST_Response {
@@ -49,6 +50,61 @@ final class Parsian_Final_Backup {
         $response->header('Cache-Control','no-store, private, max-age=0');
         $response->header('Pragma','no-cache');
         return $response;
+    }
+
+
+    /**
+     * Build a non-destructive restore preflight. This endpoint never writes business data.
+     * Actual restore stays disabled until a transactional rollback strategy is verified.
+     */
+    public function restore_plan(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        if (!function_exists('wp_get_environment_type') || wp_get_environment_type() !== 'staging') {
+            return new WP_REST_Response(['ready'=>false,'code'=>'restore_staging_only','message'=>'برنامه‌ریزی بازیابی فقط در محیط Staging مجاز است.'],403);
+        }
+        $validation=$this->validate_snapshot($request);
+        if($validation->get_status()!==200 || !($validation->get_data()['valid']??false)) {
+            return new WP_REST_Response(['ready'=>false,'code'=>'restore_backup_invalid','validation'=>$validation->get_data()],422);
+        }
+        $backup=$request->get_json_params();
+        $targetSchema=(string)get_option('parsian_final_schema_version','unknown');
+        if((string)($backup['schema_version']??'')!==$targetSchema) {
+            return new WP_REST_Response(['ready'=>false,'code'=>'restore_schema_mismatch','source_schema'=>(string)($backup['schema_version']??''),'target_schema'=>$targetSchema,'message'=>'نسخه ساختار فایل پشتیبان با محیط مقصد یکسان نیست؛ ابتدا مهاجرت سازگار لازم است.'],409);
+        }
+        $tablePlan=[];
+        $allInnoDb=true;
+        foreach($this->tables() as $suffix) {
+            $table=$wpdb->prefix.'parsian_'.$suffix;
+            $status=$wpdb->get_row($wpdb->prepare("SHOW TABLE STATUS LIKE %s",$table),ARRAY_A);
+            if(!$status || strtoupper((string)($status['Engine']??''))!=='INNODB') {
+                $allInnoDb=false;
+                $tablePlan[$suffix]=['exists'=>(bool)$status,'engine'=>$status['Engine']??null,'compatible'=>false];
+                continue;
+            }
+            $columns=$wpdb->get_col("SHOW COLUMNS FROM {$table}",0);
+            $backupRows=$backup['tables'][$suffix]??[];
+            $rowKeys=[];
+            if(isset($backupRows[0])&&is_array($backupRows[0]))$rowKeys=array_keys($backupRows[0]);
+            $unknown=array_values(array_diff($rowKeys,$columns));
+            $tablePlan[$suffix]=['exists'=>true,'engine'=>'InnoDB','rows'=>count($backupRows),'unknown_columns'=>$unknown,'compatible'=>count($unknown)===0];
+            if($unknown)$allInnoDb=false;
+        }
+        $sourceSite=(string)($backup['source_site']??'');
+        $targetSite=home_url('/');
+        $sameSite=untrailingslashit($sourceSite)===untrailingslashit($targetSite);
+        $ready=$allInnoDb&&$sameSite;
+        return new WP_REST_Response([
+            'ready'=>$ready,
+            'restored'=>false,
+            'writes_performed'=>false,
+            'source_site'=>$sourceSite,
+            'target_site'=>$targetSite,
+            'same_site'=>$sameSite,
+            'schema_version'=>$targetSchema,
+            'all_tables_innodb'=>$allInnoDb,
+            'tables'=>$tablePlan,
+            'message'=>$ready?'پیش‌بررسی ساختار و محیط موفق بود؛ هنوز هیچ داده‌ای بازیابی نشده است.':'پیش‌بررسی کامل نشد؛ اختلاف سایت یا موتور/ستون جدول‌ها باید برطرف شود.'
+        ],200);
     }
 
     public function validate_snapshot(WP_REST_Request $request): WP_REST_Response {
