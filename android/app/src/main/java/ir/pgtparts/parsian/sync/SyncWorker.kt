@@ -131,7 +131,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
      val operationUuid = eventPayload.optString("operation_uuid")
      if (operationUuid.isNotBlank()) {
       when (eventType) {
-       "crm.lead.created.offline", "crm.lead.updated.offline" -> dao.updateStatus(operationUuid, "applied")
+       "crm.lead.created.offline", "crm.lead.updated.offline", "crm.task.completed.offline" -> dao.updateStatus(operationUuid, "applied")
        "sync.operation.rejected" -> dao.updateStatus(operationUuid, "rejected", eventPayload.optString("reason"))
       }
      }
