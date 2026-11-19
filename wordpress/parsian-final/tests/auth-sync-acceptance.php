@@ -203,7 +203,9 @@ try {
     wp_set_current_user($financeUserId);
     $assert($sync->register_device($financeDeviceRequest)->get_status()===200,'accountant device registration succeeds');
     $finance = new Parsian_Final_Finance();
-    $invoiceSnapshot = $finance->invoice_balance(new WP_REST_Request('GET','/parsian-final/v1/invoices/'.$invoiceId.'/balance'));
+    $invoiceBalanceRequest = new WP_REST_Request('GET','/parsian-final/v1/invoices/'.$invoiceId.'/balance');
+    $invoiceBalanceRequest->set_param('id',$invoiceId);
+    $invoiceSnapshot = $finance->invoice_balance($invoiceBalanceRequest);
     $invoiceSnapshotData = $invoiceSnapshot->get_data()['invoice'] ?? [];
     $assert(!empty($invoiceSnapshotData['revision']) && !empty($invoiceSnapshotData['updated_at']),'invoice balance exposes revision and timestamp');
     $invoiceUpdateUuid = wp_generate_uuid4();
