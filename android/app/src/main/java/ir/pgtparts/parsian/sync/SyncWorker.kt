@@ -4,6 +4,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import ir.pgtparts.parsian.data.ParsianDatabase
 import ir.pgtparts.parsian.data.SyncEventEntity
+import ir.pgtparts.parsian.data.SyncOperationAcknowledgement
 import ir.pgtparts.parsian.security.SessionStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -122,7 +123,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     val previousCursor = cursor
     val items = body.optJSONArray("items") ?: JSONArray()
     val events = ArrayList<SyncEventEntity>()
-    val operationAcknowledgements = ArrayList<Triple<String, String, String?>>()
+    val operationAcknowledgements = ArrayList<SyncOperationAcknowledgement>()
     val staleResources = linkedSetOf<String>()
     for (index in 0 until items.length()) {
      val item = items.optJSONObject(index) ?: continue
@@ -145,9 +146,11 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
       when (eventType) {
        "crm.lead.created.offline", "crm.lead.updated.offline", "crm.task.completed.offline", "sales.proforma.created.offline",
        "sync.customer.updated.offline", "sync.proforma.updated.offline", "sync.invoice.updated.offline", "sync.payment.updated.offline" ->
-        operationAcknowledgements.add(Triple(operationUuid, "applied", null))
+        operationAcknowledgements.add(SyncOperationAcknowledgement(operationUuid, "applied"))
+       "sync.operation.conflict" ->
+        operationAcknowledgements.add(SyncOperationAcknowledgement(operationUuid, "conflict", "record_changed_on_server"))
        "sync.operation.rejected" ->
-        operationAcknowledgements.add(Triple(operationUuid, "rejected", eventPayload.optString("reason")))
+        operationAcknowledgements.add(SyncOperationAcknowledgement(operationUuid, "rejected", eventPayload.optString("reason")))
       }
      }
      events.add(SyncEventEntity(
@@ -163,10 +166,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     val nextCursor = body.optLong("next_cursor", cursor)
     if (nextCursor < cursor) return Result.failure()
     // Persist inbox identities and cursor first; only acknowledge outbox items after that transaction commits.
-    dao.persistInboxPage(events, nextCursor, staleResources)
-    operationAcknowledgements.distinctBy { it.first }.forEach { ack ->
-     dao.updateStatus(ack.first, ack.second, ack.third)
-    }
+    dao.persistInboxPage(events, nextCursor, staleResources, operationAcknowledgements)
     cursor = nextCursor
     morePages = body.optBoolean("has_more", false)
     if (!morePages || (events.isEmpty() && nextCursor == previousCursor)) break
