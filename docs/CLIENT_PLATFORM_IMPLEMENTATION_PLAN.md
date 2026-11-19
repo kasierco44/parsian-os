@@ -129,14 +129,18 @@ Build requirements:
 7. Build Windows proof of concept, then role workspaces and signed installer.
 8. Staging installation, migration/rollback, backup/restore, penetration/security review, end-to-end acceptance and signed release artifacts.
 
-## Current source assessment
 
-The existing WordPress sync class is only a scaffold:
-- Device registration and basic push/pull endpoints exist.
-- Push currently records operations as pending_review; it is not a complete transactional business command processor.
-- Idempotency is based on operation UUID but does not yet compare canonical payload hashes.
-- Pull currently uses a numeric row cursor and broad manager/accountant access; it is not yet an opaque, scope-bound cursor contract.
-- No complete durable client outbox/inbox, conflict resolution, or retry worker is accepted.
-- Existing auth uses WordPress cookie/session behavior; native short-lived access/refresh token lifecycle is not implemented.
 
-No Android APK, Windows installer, production deployment, or end-to-end sync acceptance is claimed by this plan.
+## Current implementation snapshot (2026-11-19)
+
+### WordPress authentication and sync source
+- Native auth routes have been added: login issues opaque 15-minute access and 30-day refresh tokens; token hashes are stored server-side; refresh rotation, token-family logout, device revocation, and Bearer user resolution are implemented in source.
+- Sync push persists an allowlisted operation with payload hash, accepts identical retries idempotently, and rejects changed-payload reuse. Accepted offline operations remain pending review and are not automatically posted to finance, inventory, or sales.
+- Sync pull still uses a numeric event cursor and its scope is not yet assignment-aware for every domain. Aggregate-version conflict resolution, transactional command application/approval, complete client outbox/inbox, retry scheduling, and client-side revocation handling remain incomplete.
+- WP-CLI acceptance harnesses exist for auth/sync and finance/ledger, but neither has been executed against a staging WordPress/MySQL database. Source presence is not runtime validation.
+
+### Web client status
+- An initial role-aware Persian RTL web shell now exists at `web/parsian-panels/`. It checks the public health endpoint and reads the current user's identity/capabilities from `/me`.
+- This is a UI scaffold only. The operational manager, accountant and seller workflows, nonce injection by the WordPress host, browser tests, and staging deployment remain to be completed.
+
+No Android APK, Windows installer, production deployment, or end-to-end offline-sync acceptance is currently claimed.
