@@ -39,11 +39,15 @@ final class Parsian_Final_Finance {
             !in_array($party_type, $party_types, true)) {
             return new WP_REST_Response(['code'=>'invalid_payment'], 400);
         }
+        $partyId=absint($p['party_id']??0);
+        if($partyId<1 || ($direction==='in' && $party_type!=='customer') || ($direction==='out' && $party_type!=='supplier')) {
+            return new WP_REST_Response(['code'=>'invalid_party_mapping'],400);
+        }
         global $wpdb;
         $ok = $wpdb->insert($wpdb->prefix.'parsian_payments', [
             'direction'=>$direction, 'amount_toman'=>$amount,
             'party_type'=>$party_type,
-            'party_id'=>absint($p['party_id'] ?? 0),
+            'party_id'=>$partyId,
             'method'=>$method,
             'reference'=>sanitize_text_field($p['reference'] ?? ''),
             'status'=>'pending_approval','created_by'=>get_current_user_id(),
