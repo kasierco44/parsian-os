@@ -42,7 +42,8 @@ Do not install on production or use real customer/financial data until the liste
 - GET /proformas, GET /proformas/{id} list and retrieve documents within the caller's scope.
 - POST /proformas/{id}/approve requires the manager approval capability; it locks the draft, issues one final invoice, copies invoice lines, posts a balanced receivable/sales journal, and changes the proforma state in one database transaction.
 - POST /payments/{id}/approve posts customer receipts or supplier payments to the general ledger after finance approval. Cash, bank/card and cheque clearing/payable accounts are mapped to the baseline chart.
-- GET /ledger/journals and GET /ledger/trial-balance expose posted journal data to finance-authorized users.\n- GET /ledger/party-statement provides customer/supplier subledger activity and debit-credit totals.
+- GET /ledger/journals and GET /ledger/trial-balance expose posted journal data to finance-authorized users.
+- GET /ledger/party-statement provides customer/supplier subledger activity and debit-credit totals.
 - A version-gated schema upgrade creates the new sales and ledger tables and seeds baseline accounts on the next plugin load.
 
 Accounting scope note: the current invoice journal recognizes gross sales and customer receivables only. Tax, discounts, COGS/inventory valuation, returns/credit notes, settlement reconciliation and period closing are not implemented. Issued invoices do not decrement stock. Payment approval is not a substitute for bank reconciliation.
