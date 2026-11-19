@@ -183,6 +183,7 @@ final class Parsian_Final_Install {
                 due_date date NULL,
                 issued_by bigint unsigned NOT NULL,
                 issued_at datetime NOT NULL,
+                updated_at datetime NULL,
                 journal_entry_id bigint unsigned NOT NULL DEFAULT 0,
                 cogs_toman bigint unsigned NOT NULL DEFAULT 0,
                 cogs_journal_entry_id bigint unsigned NOT NULL DEFAULT 0,
@@ -215,6 +216,7 @@ final class Parsian_Final_Install {
                 status varchar(24) NOT NULL DEFAULT 'pending_approval',
                 created_by bigint unsigned NOT NULL,
                 created_at datetime NOT NULL,
+                updated_at datetime NULL,
                 journal_entry_id bigint unsigned NOT NULL DEFAULT 0,
                 reversed_at datetime NULL,
                 reversal_event_id bigint unsigned NOT NULL DEFAULT 0,
@@ -496,6 +498,14 @@ final class Parsian_Final_Install {
                 $wpdb->query($sql);
             }
         }
+        $paymentRevisionColumns = [
+            'updated_at' => "ALTER TABLE {$p}payments ADD COLUMN updated_at datetime NULL"
+        ];
+        foreach ($paymentRevisionColumns as $column => $sql) {
+            if (!$wpdb->get_var($wpdb->prepare("SHOW COLUMNS FROM {$p}payments LIKE %s", $column))) {
+                $wpdb->query($sql);
+            }
+        }
         $chequeColumns = [
             'party_type' => "ALTER TABLE {$p}cheques ADD COLUMN party_type varchar(24) NOT NULL DEFAULT 'other'",
             'party_id' => "ALTER TABLE {$p}cheques ADD COLUMN party_id bigint unsigned NOT NULL DEFAULT 0",
@@ -533,6 +543,7 @@ final class Parsian_Final_Install {
         }
         $invoiceColumns = [
             'due_date' => "ALTER TABLE {$p}invoices ADD COLUMN due_date date NULL",
+            'updated_at' => "ALTER TABLE {$p}invoices ADD COLUMN updated_at datetime NULL",
             'cogs_toman' => "ALTER TABLE {$p}invoices ADD COLUMN cogs_toman bigint unsigned NOT NULL DEFAULT 0",
             'cogs_journal_entry_id' => "ALTER TABLE {$p}invoices ADD COLUMN cogs_journal_entry_id bigint unsigned NOT NULL DEFAULT 0"
         ];
