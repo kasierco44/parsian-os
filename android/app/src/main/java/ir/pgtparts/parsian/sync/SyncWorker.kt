@@ -143,7 +143,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
      val operationUuid = eventPayload.optString("operation_uuid")
      if (operationUuid.isNotBlank()) {
       when (eventType) {
-       "crm.lead.created.offline", "crm.lead.updated.offline", "crm.task.completed.offline", "sales.proforma.created.offline" ->
+       "crm.lead.created.offline", "crm.lead.updated.offline", "crm.task.completed.offline", "sales.proforma.created.offline",
+       "sync.customer.updated.offline", "sync.proforma.updated.offline", "sync.invoice.updated.offline", "sync.payment.updated.offline" ->
         operationAcknowledgements.add(Triple(operationUuid, "applied", null))
        "sync.operation.rejected" ->
         operationAcknowledgements.add(Triple(operationUuid, "rejected", eventPayload.optString("reason")))
