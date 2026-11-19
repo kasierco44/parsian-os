@@ -175,7 +175,15 @@ final class Parsian_Final_Sync {
             $wpdb->query('ROLLBACK');
             return new WP_REST_Response(['code'=>'server_record_changed_again','message'=>'اطلاعات سرور دوباره تغییر کرده است؛ تعارض را تازه‌سازی کنید.'],409);
         }
-        $payload['base_updated_at'] = (string)$lead['updated_at'];
+        $currentRecord = $wpdb->get_row($wpdb->prepare("SELECT id,display_name,phone,province,notes,status,updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$leadId),ARRAY_A);
+        if (!$currentRecord) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'conflict_record_missing'],404); }
+        $payload['base_updated_at'] = (string)$currentRecord['updated_at'];
+        $payload['base_revision'] = hash('sha256', wp_json_encode([
+            'id' => (int)$currentRecord['id'], 'display_name' => (string)$currentRecord['display_name'],
+            'phone' => (string)$currentRecord['phone'], 'province' => (string)$currentRecord['province'],
+            'notes' => (string)$currentRecord['notes'], 'status' => (string)$currentRecord['status'],
+            'updated_at' => (string)$currentRecord['updated_at']
+        ], JSON_UNESCAPED_UNICODE));
         $updated = $wpdb->update($table,['status'=>'pending_review','payload'=>wp_json_encode($payload),'result'=>null],['id'=>$id,'status'=>'conflict'],['%s','%s','%s'],['%d','%s']);
         if ($updated !== 1) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_conflict_state_changed'],409); }
         $wpdb->query('COMMIT');
@@ -374,14 +382,26 @@ final class Parsian_Final_Sync {
             // Optimistic concurrency: an offline edit must carry the exact server timestamp
             // from the snapshot it was based on. Missing/unknown bases fail closed.
             $baseUpdatedAt = isset($payload['base_updated_at']) ? trim((string) $payload['base_updated_at']) : '';
+            $baseRevision = isset($payload['base_revision']) ? trim((string) $payload['base_revision']) : '';
             $serverUpdatedAt = (string) ($lead['updated_at'] ?? '');
-            if ($baseUpdatedAt === '' || $serverUpdatedAt === '' || !hash_equals($serverUpdatedAt, $baseUpdatedAt)) {
+            $serverRevision = hash('sha256', wp_json_encode([
+                'id' => (int) $lead['id'],
+                'display_name' => (string) ($lead['display_name'] ?? ''),
+                'phone' => (string) ($lead['phone'] ?? ''),
+                'province' => (string) ($lead['province'] ?? ''),
+                'notes' => (string) ($lead['notes'] ?? ''),
+                'status' => (string) ($lead['status'] ?? ''),
+                'updated_at' => $serverUpdatedAt,
+            ], JSON_UNESCAPED_UNICODE));
+            if ($baseUpdatedAt === '' || $baseRevision === '' || $serverUpdatedAt === '' ||
+                !hash_equals($serverUpdatedAt, $baseUpdatedAt) || !hash_equals($serverRevision, $baseRevision)) {
                 $conflict = [
                     'kind' => 'record_changed_on_server',
                     'resource_type' => 'lead',
                     'record_id' => $leadId,
                     'base_updated_at' => $baseUpdatedAt,
                     'server_updated_at' => $serverUpdatedAt,
+                    'server_revision' => $serverRevision,
                     'server_record' => [
                         'id' => (int) $lead['id'], 'display_name' => $lead['display_name'],
                         'phone' => $lead['phone'], 'province' => $lead['province'],
