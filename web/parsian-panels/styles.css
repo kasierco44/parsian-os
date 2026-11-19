@@ -8,3 +8,10 @@
 .parsian-os-app .desktop-form-input{display:block;width:100%;max-width:460px;margin:9px 0;border:1px solid #d9dce1;border-radius:8px;padding:11px;font:inherit;font-size:12px;background:#fff;color:#202329}
 
 .parsian-os-app .conflict-detail{white-space:normal;max-width:360px;min-width:240px;padding:9px;margin:0 0 8px;background:#fff4e5;border:1px solid #e8c58d;border-radius:7px;color:#704b16;font-size:11px;line-height:1.7;overflow-wrap:anywhere}
+
+.conflict-heading{display:block;margin:4px 0 8px;color:#7a2d22;font-size:12px}
+.conflict-compare{display:grid;gap:5px;margin:8px 0 12px}
+.conflict-row{display:grid;grid-template-columns:90px minmax(100px,1fr) minmax(100px,1fr);gap:6px;padding:7px;border:1px solid #e7d9ca;border-radius:6px;background:#fff}
+.conflict-field{font-weight:700;color:#555}
+.conflict-server{color:#17623b;overflow-wrap:anywhere}
+.conflict-device{color:#9a4b12;overflow-wrap:anywhere}
