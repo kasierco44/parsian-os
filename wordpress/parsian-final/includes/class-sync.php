@@ -375,7 +375,7 @@ final class Parsian_Final_Sync {
         $recordId = absint($conflict['record_id'] ?? 0);
         if ($resource === 'lead') {
             $currentRecord = $recordId ? $wpdb->get_row($wpdb->prepare(
-                "SELECT id,display_name,phone,province,notes,status,updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d FOR UPDATE",$recordId
+                "SELECT id,display_name,phone,province,notes,status,COALESCE(updated_at,created_at) AS updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d FOR UPDATE",$recordId
             ),ARRAY_A) : null;
             if (!$currentRecord) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'conflict_record_missing'],404); }
             $currentRevision = hash('sha256', wp_json_encode([
