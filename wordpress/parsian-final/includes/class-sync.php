@@ -592,7 +592,7 @@ final class Parsian_Final_Sync {
         if ($operation['operation_type'] === 'crm.lead.update') {
             $leadId = absint($payload['lead_id'] ?? 0);
             $lead = $leadId ? $wpdb->get_row($wpdb->prepare(
-                "SELECT id, owner_user_id, display_name, phone, province, notes, status, updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d FOR UPDATE",
+                "SELECT id, owner_user_id, display_name, phone, province, notes, status, COALESCE(updated_at,created_at) AS updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d FOR UPDATE",
                 $leadId
             ), ARRAY_A) : null;
             if (!$lead || (int) $lead['owner_user_id'] !== $ownerId) {
