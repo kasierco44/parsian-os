@@ -158,12 +158,113 @@ final class Parsian_Final_Sync {
         }
         $ownerId = (int) $operation['user_id'];
         $owner = get_userdata($ownerId);
-        if (!$owner || !in_array('parsian_seller', (array) $owner->roles, true) || !user_can($owner, 'parsian_crm_write')) {
+        $ownerCapability = str_starts_with((string) $operation['operation_type'], 'sales.') ? 'parsian_sales_create' : 'parsian_crm_write';
+        if (!$owner || !in_array('parsian_seller', (array) $owner->roles, true) || !user_can($owner, $ownerCapability)) {
             $wpdb->query('ROLLBACK');
             return new WP_REST_Response(['code'=>'operation_actor_not_seller'],403);
         }
         $payload = json_decode((string) $operation['payload'], true);
         if (!is_array($payload)) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'invalid_operation_payload'],422); }
+
+        if ($operation['operation_type'] === 'sales.proforma.draft') {
+            $customerId = absint($payload['customer_id'] ?? 0);
+            $items = $payload['items'] ?? null;
+            if (!$customerId || !is_array($items) || count($items) < 1 || count($items) > 100) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'offline_proforma_payload_invalid'],422);
+            }
+            $assigned = $wpdb->get_var($wpdb->prepare(
+                "SELECT umeta_id FROM {$wpdb->usermeta} WHERE user_id=%d AND meta_key=%s AND meta_value='1' LIMIT 1",
+                $ownerId, 'parsian_customer_' . $customerId
+            ));
+            $customer = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM {$wpdb->prefix}parsian_customers WHERE id=%d AND status='active'",
+                $customerId
+            ));
+            if (!$assigned || !$customer) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'offline_proforma_customer_not_assigned'],403);
+            }
+            $dueDate = $payload['due_date'] ?? null;
+            if ($dueDate !== null && $dueDate !== '' && (!is_string($dueDate) || !preg_match('/^\\d{4}-\\d{2}-\\d{2}$/',$dueDate) || !checkdate((int)substr($dueDate,5,2),(int)substr($dueDate,8,2),(int)substr($dueDate,0,4)))) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'offline_proforma_due_date_invalid'],422);
+            }
+            if ($dueDate === '') $dueDate = null;
+            $cleanItems = [];
+            $total = 0;
+            foreach ($items as $item) {
+                if (!is_array($item) || empty($item['product_id']) || !isset($item['quantity'],$item['unit_price_toman'])) {
+                    $wpdb->query('ROLLBACK');
+                    return new WP_REST_Response(['code'=>'offline_proforma_line_invalid'],422);
+                }
+                $productId = absint($item['product_id']);
+                $quantity = filter_var($item['quantity'], FILTER_VALIDATE_INT);
+                $price = filter_var($item['unit_price_toman'], FILTER_VALIDATE_INT);
+                if (!$productId || $quantity === false || $quantity < 1 || $quantity > 1000000 || $price === false || $price < 0 || $price > 1000000000000) {
+                    $wpdb->query('ROLLBACK');
+                    return new WP_REST_Response(['code'=>'offline_proforma_amount_invalid'],422);
+                }
+                $product = $wpdb->get_row($wpdb->prepare(
+                    "SELECT id,name FROM {$wpdb->prefix}parsian_products WHERE id=%d AND status='active' FOR UPDATE",
+                    $productId
+                ), ARRAY_A);
+                if (!$product || ($price > 0 && $quantity > intdiv(PHP_INT_MAX,$price))) {
+                    $wpdb->query('ROLLBACK');
+                    return new WP_REST_Response(['code'=>'offline_proforma_product_or_total_invalid'],422);
+                }
+                $lineTotal = $quantity * $price;
+                if ($lineTotal > 1000000000000 - $total) {
+                    $wpdb->query('ROLLBACK');
+                    return new WP_REST_Response(['code'=>'offline_proforma_total_limit'],422);
+                }
+                $total += $lineTotal;
+                $cleanItems[] = ['product_id'=>$productId,'description'=>$product['name'],'quantity'=>$quantity,'unit_price_toman'=>$price,'line_total_toman'=>$lineTotal];
+            }
+            if ($total < 1) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'offline_proforma_zero_total'],422);
+            }
+            $now = current_time('mysql',true);
+            $number = 'PF-'.gmdate('ymd').'-'.strtoupper(wp_generate_password(6,false,false));
+            $created = $wpdb->insert($wpdb->prefix.'parsian_proformas',[
+                'document_number'=>$number,'customer_id'=>$customerId,'status'=>'draft','currency'=>'IRR',
+                'total_toman'=>$total,'due_date'=>$dueDate,'notes'=>sanitize_textarea_field((string)($payload['notes']??'')),
+                'created_by'=>$ownerId,'created_at'=>$now,'updated_at'=>$now
+            ],['%s','%d','%s','%s','%d','%s','%s','%d','%s','%s']);
+            if (!$created) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'offline_proforma_create_failed'],500);
+            }
+            $proformaId = (int)$wpdb->insert_id;
+            foreach ($cleanItems as $line) {
+                $line['proforma_id'] = $proformaId;
+                if (!$wpdb->insert($wpdb->prefix.'parsian_proforma_items',$line,['%d','%s','%d','%d','%d','%d'])) {
+                    $wpdb->query('ROLLBACK');
+                    return new WP_REST_Response(['code'=>'offline_proforma_item_create_failed'],500);
+                }
+            }
+            $result = ['proforma_id'=>$proformaId,'document_number'=>$number,'total_toman'=>$total,'operation_uuid'=>$operation['operation_uuid']];
+            $operationUpdated = $wpdb->update($table,[
+                'status'=>'applied','result'=>wp_json_encode($result),'processed_at'=>$now
+            ],['id'=>$id,'status'=>'pending_review'],['%s','%s','%s'],['%d','%s']);
+            if ($operationUpdated !== 1) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'sync_operation_state_conflict'],409);
+            }
+            $eventOk = $wpdb->insert($wpdb->prefix.'parsian_events',[
+                'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>$ownerId,
+                'event_type'=>'sales.proforma.created.offline','aggregate_type'=>'proforma','aggregate_id'=>$proformaId,
+                'payload'=>wp_json_encode(['proforma_id'=>$proformaId,'customer_id'=>$customerId,'total_toman'=>$total,'approved_by'=>get_current_user_id(),'operation_uuid'=>$operation['operation_uuid']]),
+                'created_at'=>$now
+            ],['%s','%d','%s','%s','%d','%s','%s']);
+            if (!$eventOk) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'sync_event_write_failed'],500);
+            }
+            $wpdb->query('COMMIT');
+            return new WP_REST_Response(['status'=>'applied'] + $result,201);
+        }
 
         if ($operation['operation_type'] === 'crm.task.complete') {
             $taskId = absint($payload['task_id'] ?? 0);
