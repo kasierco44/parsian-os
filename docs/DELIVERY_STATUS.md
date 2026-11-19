@@ -193,3 +193,13 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Current bank statement intake is one normalized statement line per request; no CSV/Excel batch parser or import-batch audit trail exists yet.
 - Current matching permits one statement line to match one journal entry only. One-to-many and many-to-one allocations, bank account master records, opening/closing balance controls, bank fees/interest mappings, and period close remain outstanding.
 - Before production use, cheque/payment reversals, statement matching, and customer aging must pass integration tests against the actual schema and representative transaction fixtures.
+
+
+## Bank reconciliation schema foundation (2026-11-19)
+
+- Added bank account master table with stable account reference, masked account number, linked ledger account, opening balance/date, currency, and active flag.
+- Added import batch tracking with file SHA-256, row counters, status, and importing user.
+- Added reconciliation match-allocation table keyed by statement line and journal entry, with match-group UUID and allocated amount. This schema permits a future many-to-many matching workflow.
+- Added bank account and import batch references to existing statement lines through guarded ALTER TABLE migrations.
+- Commit: e77f09145165578130439fbe6e3f1b7e96a5ab76.
+- Important: this commit is schema groundwork only. Bank account CRUD, CSV/XLSX parsing, allocation validation/settlement endpoints, opening/closing balance verification, and integration tests are not yet implemented. The existing exact one-line/one-journal matcher remains the only active matching behavior until those services are added.
