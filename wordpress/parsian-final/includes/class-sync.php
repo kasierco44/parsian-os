@@ -14,6 +14,18 @@ final class Parsian_Final_Sync {
             'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'pull'],
             'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_sync_use');}
         ]);
+        register_rest_route('parsian-final/v1','/sync/operations',[
+            'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'list_pending_operations'],
+            'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_manage_users');}
+        ]);
+        register_rest_route('parsian-final/v1','/sync/operations/(?P<id>\\d+)/approve',[
+            'methods'=>WP_REST_Server::CREATABLE,'callback'=>[$this,'approve_operation'],
+            'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_manage_users');}
+        ]);
+        register_rest_route('parsian-final/v1','/sync/operations/(?P<id>\\d+)/reject',[
+            'methods'=>WP_REST_Server::CREATABLE,'callback'=>[$this,'reject_operation'],
+            'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_manage_users');}
+        ]);
     }
     public function list_devices(WP_REST_Request $request): WP_REST_Response {
         global $wpdb;
@@ -98,6 +110,107 @@ final class Parsian_Final_Sync {
         $wpdb->update($devices,['last_seen_at'=>current_time('mysql',true)],['id'=>(int)$deviceRow['id']],['%s'],['%d']);
         return new WP_REST_Response(['results'=>$results],202);
     }
+
+    public function list_pending_operations(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $limit = min(100, max(1, absint($request->get_param('limit') ?: 50)));
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT id,operation_uuid,user_id,device_uuid,operation_type,payload,status,created_at
+             FROM {$wpdb->prefix}parsian_sync_ops
+             WHERE status='pending_review'
+             ORDER BY id ASC LIMIT %d",
+            $limit
+        ), ARRAY_A);
+        foreach ((array) $rows as &$row) {
+            $row['payload'] = json_decode((string) $row['payload'], true) ?: [];
+        }
+        unset($row);
+        return new WP_REST_Response(['items' => $rows ?: []], 200);
+    }
+
+    public function approve_operation(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $id = absint($request['id']);
+        $table = $wpdb->prefix . 'parsian_sync_ops';
+        $wpdb->query('START TRANSACTION');
+        $operation = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d FOR UPDATE", $id), ARRAY_A);
+        if (!$operation) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_operation_not_found'],404); }
+        if ($operation['status'] === 'applied') {
+            $result = json_decode((string) $operation['result'], true) ?: [];
+            $wpdb->query('COMMIT');
+            return new WP_REST_Response(['status'=>'already_applied'] + $result, 200);
+        }
+        if ($operation['status'] !== 'pending_review') {
+            $wpdb->query('ROLLBACK');
+            return new WP_REST_Response(['code'=>'sync_operation_not_reviewable','status'=>$operation['status']],409);
+        }
+        if ($operation['operation_type'] !== 'crm.lead.create') {
+            $wpdb->query('ROLLBACK');
+            return new WP_REST_Response(['code'=>'operation_handler_not_available','operation_type'=>$operation['operation_type']],422);
+        }
+        $ownerId = (int) $operation['user_id'];
+        $owner = get_userdata($ownerId);
+        if (!$owner || !in_array('parsian_seller', (array) $owner->roles, true) || !user_can($owner, 'parsian_crm_write')) {
+            $wpdb->query('ROLLBACK');
+            return new WP_REST_Response(['code'=>'operation_actor_not_seller'],403);
+        }
+        $payload = json_decode((string) $operation['payload'], true);
+        if (!is_array($payload)) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'invalid_operation_payload'],422); }
+        $name = trim(sanitize_text_field((string) ($payload['name'] ?? '')));
+        $phone = trim(sanitize_text_field((string) ($payload['phone'] ?? '')));
+        $province = trim(sanitize_text_field((string) ($payload['province'] ?? '')));
+        $notes = sanitize_textarea_field((string) ($payload['notes'] ?? ''));
+        if ($name === '' || strlen($name) > 190 || strlen($phone) > 40 || strlen($province) > 100) {
+            $wpdb->query('ROLLBACK');
+            return new WP_REST_Response(['code'=>'offline_lead_payload_invalid'],422);
+        }
+        $ok = $wpdb->insert($wpdb->prefix . 'parsian_leads', [
+            'display_name'=>$name,'phone'=>$phone,'province'=>$province,'notes'=>$notes,
+            'owner_user_id'=>$ownerId,'status'=>'new','created_at'=>current_time('mysql',true)
+        ], ['%s','%s','%s','%s','%d','%s','%s']);
+        if (!$ok) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'offline_lead_create_failed'],500); }
+        $leadId = (int) $wpdb->insert_id;
+        $result = ['lead_id'=>$leadId,'operation_uuid'=>$operation['operation_uuid']];
+        $updated = $wpdb->update($table, [
+            'status'=>'applied','result'=>wp_json_encode($result),'processed_at'=>current_time('mysql',true)
+        ], ['id'=>$id,'status'=>'pending_review'], ['%s','%s','%s'], ['%d','%s']);
+        if ($updated !== 1) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_operation_state_conflict'],409); }
+        $wpdb->insert($wpdb->prefix . 'parsian_events', [
+            'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>get_current_user_id(),
+            'event_type'=>'crm.lead.created.offline','aggregate_type'=>'lead','aggregate_id'=>$leadId,
+            'payload'=>wp_json_encode(['lead_id'=>$leadId,'owner_user_id'=>$ownerId,'operation_uuid'=>$operation['operation_uuid']]),
+            'created_at'=>current_time('mysql',true)
+        ], ['%s','%d','%s','%s','%d','%s','%s']);
+        $wpdb->query('COMMIT');
+        return new WP_REST_Response(['status'=>'applied'] + $result, 201);
+    }
+
+    public function reject_operation(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $id = absint($request['id']);
+        $reason = sanitize_textarea_field((string) ($request->get_param('reason') ?? ''));
+        $table = $wpdb->prefix . 'parsian_sync_ops';
+        $wpdb->query('START TRANSACTION');
+        $operation = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d FOR UPDATE", $id), ARRAY_A);
+        if (!$operation) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_operation_not_found'],404); }
+        if ($operation['status'] !== 'pending_review') {
+            $wpdb->query('ROLLBACK');
+            return new WP_REST_Response(['code'=>'sync_operation_not_reviewable','status'=>$operation['status']],409);
+        }
+        $updated = $wpdb->update($table, [
+            'status'=>'rejected','result'=>wp_json_encode(['reason'=>$reason]),'processed_at'=>current_time('mysql',true)
+        ], ['id'=>$id,'status'=>'pending_review'], ['%s','%s','%s'], ['%d','%s']);
+        if ($updated !== 1) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_operation_state_conflict'],409); }
+        $wpdb->insert($wpdb->prefix . 'parsian_events', [
+            'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>get_current_user_id(),
+            'event_type'=>'sync.operation.rejected','aggregate_type'=>'sync_operation','aggregate_id'=>$id,
+            'payload'=>wp_json_encode(['operation_uuid'=>$operation['operation_uuid'],'reason'=>$reason]),
+            'created_at'=>current_time('mysql',true)
+        ], ['%s','%d','%s','%s','%d','%s','%s']);
+        $wpdb->query('COMMIT');
+        return new WP_REST_Response(['status'=>'rejected','operation_uuid'=>$operation['operation_uuid']],200);
+    }
+
     public function pull(WP_REST_Request $request): WP_REST_Response {
         global $wpdb;
         $sinceRaw=$request->get_param('since_id');
