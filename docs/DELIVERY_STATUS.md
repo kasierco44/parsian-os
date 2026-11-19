@@ -496,3 +496,11 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Logout clears the cached dashboard together with outbox, inbox and sync metadata; the SQLCipher database key is retained so the encrypted database remains readable if the same device account signs in again.
 - This is a bounded read-cache foundation, not a complete offline-first domain model. It does not yet merge server events into customer/lead/task/proforma tables, and cached data is not guaranteed to be fresh. Authentication/authorization HTTP failures are not silently masked by stale cache.
 - Source changes are committed on the development branch. Android Gradle compilation and migration/device tests remain unverified because the latest Android Actions job (`44506825591`, job `135500497941`) again terminated with `runner_id=0` and no executed steps.
+
+
+## Android sync inbox identity hardening (2026-11-19)
+
+- Room schema advanced from version 3 to 4 with a non-destructive migration that adds a unique index on server `eventUuid`; prior migrations 1-to-2 and 2-to-3 are retained.
+- Inbox inserts now use ABORT rather than REPLACE. Before advancing the pull cursor, the Room transaction checks both server `eventId` and `eventUuid`: an exact replay is ignored, while an ID/UUID collision aborts the transaction and leaves the cursor unchanged.
+- This closes a duplicate-delivery/identity-overwrite gap in inbox persistence. It is not yet aggregate-level conflict resolution: applying event payloads to customer, lead, task, and proforma read models remains outstanding.
+- Source changes only. Gradle compilation, Room migration execution on device, and duplicate/collision instrumentation tests have not been run because GitHub Actions runner allocation remains unverified.
