@@ -1,4 +1,4 @@
-# PARSIAN FINAL — Windows desktop shell
+# PARSIAN ONE — Windows desktop shell
 
 Initial Tauri 2 shell proof of concept that packages the shared web-panel UI as a Windows desktop window.
 
