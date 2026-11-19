@@ -127,6 +127,9 @@ final class Parsian_Final_Finance {
             $wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'outgoing_payment_requires_supplier'],422);
         }
         $method=$payment['method'];
+        if(!in_array($method,['cash','transfer','card','cheque'],true)){
+            $wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'payment_method_not_mapped'],422);
+        }
         $assetCode=$method==='cash'?'1200':($method==='cheque'?'1220':'1210');
         if($payment['direction']==='out' && $method==='cheque')$assetCode='2200';
         $amount=(int)$payment['amount_toman'];
