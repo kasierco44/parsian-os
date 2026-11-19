@@ -288,3 +288,11 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Latest observed Android debug, web static-check, PHP lint and Windows bundle jobs all returned `failure`; GitHub job metadata contained no steps and `logs_url=null`. Attempts to retrieve job logs returned 404, so the failure cause cannot be diagnosed from available run data.
 - Failed jobs for the latest web, Android and PHP runs were re-queued successfully, but a successful rerun has not yet been observed. Local Node.js `node --check` passed for the current web panel JavaScript source.
 - No APK, Windows installer, production ZIP or staging runtime validation is being represented as delivered by these latest runs.
+
+
+## Android offline foundation update (2026-11-19)
+
+- Added SQLCipher-backed Room storage for the local sync outbox. The database passphrase is generated randomly and retained inside AndroidX EncryptedSharedPreferences protected by Android Keystore.
+- Added encrypted session storage for API root, access/refresh tokens and device UUID. The login repository calls the WordPress /auth/login endpoint over HTTPS and stores the returned opaque tokens; the launch screen allows the user to enter a staging API URL rather than hard-coding Production.
+- Added an outbox enqueue API with the currently server-allowlisted operation types and a network-constrained WorkManager worker. The worker registers the device, pushes up to 100 queued operations, attempts refresh-token rotation on HTTP 401, and marks accepted operations as pending review rather than treating them as posted business transactions.
+- Not implemented yet: a full pull/inbox store, aggregate-version conflict resolution, dead-letter UI, explicit logout/revocation UI, business workflows, complete unit/API tests and physical-device validation. The new Kotlin code has not been compiled because the available GitHub Actions job records expose no build logs; no APK is claimed.
