@@ -52,6 +52,27 @@ final class Parsian_Final_Install {
             ) $charset;"
         ];
         foreach ($tables as $sql) { dbDelta($sql); }
+        // Opaque access/refresh tokens are stored only as SHA-256 hashes.
+        $authTables = [
+            "CREATE TABLE {$p}auth_tokens (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                token_hash char(64) NOT NULL,
+                token_type varchar(12) NOT NULL,
+                family_uuid char(36) NOT NULL,
+                user_id bigint unsigned NOT NULL,
+                device_uuid char(36) NOT NULL,
+                expires_at datetime NOT NULL,
+                revoked_at datetime NULL,
+                created_at datetime NOT NULL,
+                last_used_at datetime NULL,
+                PRIMARY KEY  (id),
+                UNIQUE KEY token_hash (token_hash),
+                KEY user_family (user_id,family_uuid),
+                KEY device_type (device_uuid,token_type),
+                KEY expires_at (expires_at)
+            ) $charset;"
+        ];
+        foreach ($authTables as $sql) { dbDelta($sql); }
         $crmTables = [
             "CREATE TABLE {$p}customers (
                 id bigint unsigned NOT NULL AUTO_INCREMENT,
