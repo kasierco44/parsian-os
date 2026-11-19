@@ -44,7 +44,7 @@ final class Parsian_Final_Panels {
         if (!current_user_can('parsian_access_core')) {
             wp_die(esc_html__('شما اجازه دسترسی به این بخش را ندارید.', 'parsian-final'));
         }
-        echo '<div class="wrap parsian-final-admin">';
+        echo '<div class="wrap parsian-final-admin parsian-os-app">';
         echo '<div class="shell">';
         echo '<aside><h1>پارسیان OS</h1><nav id="navigation" class="navigation"></nav><small id="api-status">در حال اتصال به هسته مرکزی...</small></aside>';
         echo '<main><header><span id="role-chip">در حال شناسایی نقش</span><h2 id="page-title">داشبورد</h2><p id="user-name">کاربر</p></header>';
