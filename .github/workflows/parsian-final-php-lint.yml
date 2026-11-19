@@ -20,6 +20,53 @@ permissions:
   contents: read
 
 jobs:
+  wp-cli-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: parsian_qa
+          MYSQL_USER: parsian_qa
+          MYSQL_PASSWORD: parsian_qa
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup PHP with MySQL support
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mysqli
+          tools: none
+          coverage: none
+      - name: Download WP-CLI
+        run: curl -fsSLo wp-cli.phar https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+      - name: Install isolated WordPress Staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          WP_PATH="$RUNNER_TEMP/parsian-one-wp"
+          echo "WP_PATH=$WP_PATH" >> "$GITHUB_ENV"
+          php wp-cli.phar core download --path="$WP_PATH" --skip-content
+          php wp-cli.phar config create --path="$WP_PATH" --dbname=parsian_qa --dbuser=parsian_qa --dbpass=parsian_qa --dbhost=127.0.0.1 --skip-check --extra-php <<'PHP'
+          define('WP_ENVIRONMENT_TYPE', 'staging');
+          PHP
+          php wp-cli.phar core install --path="$WP_PATH" --url=http://localhost --title="PARSIAN ONE QA" --admin_user=qa-admin --admin_password="Disposable-QA-Only-Password-2026" --admin_email=qa@example.invalid --skip-email
+          mkdir -p "$WP_PATH/wp-content/plugins"
+          cp -R wordpress/parsian-final "$WP_PATH/wp-content/plugins/parsian-final"
+          php wp-cli.phar --path="$WP_PATH" plugin activate parsian-final
+      - name: Run isolated auth and sync acceptance suite
+        run: php wp-cli.phar --path="$WP_PATH" --require=wordpress/parsian-final/tests/enable-qa.php eval-file wordpress/parsian-final/tests/auth-sync-acceptance.php
+
   php-lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
