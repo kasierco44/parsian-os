@@ -157,3 +157,8 @@ No Android APK, Windows installer, production deployment, or end-to-end offline-
 - Native login calls the WordPress token endpoint over HTTPS and stores access/refresh tokens and device UUID in encrypted preferences.
 - A WorkManager worker registers the device, pushes the server-allowlisted queued operations, rotates refresh tokens after 401, and leaves server-accepted commands in pending-review state.
 - Pull/inbox persistence, version-based conflict handling, full domain workflows, logout/revocation UX and device-level tests remain incomplete. This source has not yet passed a verified Android build.
+
+
+### WordPress-hosted web panel integration update (2026-11-19)
+- Added a WordPress admin menu entry gated by `parsian_access_core`; the plugin enqueues the shared panel assets only on its page and injects `rest_url()` plus a server-generated `wp_rest` nonce.
+- The web shell now has read-only CRM customer/lead lists, proforma listing and manager approval, trial balance, journal register and bank-account views. Remaining work includes create/edit flows, payment/cheque screens, bank import/reconciliation UI, Jalali controls, full customer self-service and browser end-to-end tests.
