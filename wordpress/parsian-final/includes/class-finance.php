@@ -256,8 +256,15 @@ final class Parsian_Final_Finance {
     }
     public function invoice_balance(WP_REST_Request $request): WP_REST_Response {
         global $wpdb; $id=absint($request['id']);
-        $invoice=$wpdb->get_row($wpdb->prepare("SELECT id,invoice_number,customer_id,total_toman,status FROM {$wpdb->prefix}parsian_invoices WHERE id=%d",$id),ARRAY_A);
+        $invoice=$wpdb->get_row($wpdb->prepare("SELECT id,invoice_number,proforma_id,customer_id,status,total_toman,due_date,issued_by,issued_at,COALESCE(updated_at,issued_at) AS updated_at,journal_entry_id FROM {$wpdb->prefix}parsian_invoices WHERE id=%d",$id),ARRAY_A);
         if(!$invoice)return new WP_REST_Response(['code'=>'invoice_not_found'],404);
+        $invoice['revision'] = hash('sha256', wp_json_encode([
+            'id'=>(int)$invoice['id'],'invoice_number'=>(string)$invoice['invoice_number'],
+            'status'=>(string)$invoice['status'],'total_toman'=>(int)$invoice['total_toman'],
+            'due_date'=>(string)($invoice['due_date']??''),'issued_at'=>(string)$invoice['issued_at'],
+            'updated_at'=>(string)$invoice['updated_at'],'journal_entry_id'=>(int)$invoice['journal_entry_id']
+        ], JSON_UNESCAPED_UNICODE));
+        unset($invoice['proforma_id'], $invoice['issued_by']);
         $paid=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(amount_toman),0) FROM {$wpdb->prefix}parsian_payment_allocations WHERE invoice_id=%d AND status='active'",$id));
         return new WP_REST_Response(['invoice'=>$invoice,'allocated_toman'=>$paid,'balance_toman'=>max(0,(int)$invoice['total_toman']-$paid),'payment_status'=>$paid<=0?'unpaid':($paid>=(int)$invoice['total_toman']?'paid':'partially_paid')],200);
     }
