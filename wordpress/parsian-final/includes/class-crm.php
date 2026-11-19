@@ -118,14 +118,14 @@ final class Parsian_Final_CRM {
         $offset = ($page - 1) * $per_page;
         if (current_user_can('parsian_manage_users') || current_user_can('parsian_finance_read')) {
             $rows = $wpdb->get_results($wpdb->prepare(
-                "SELECT id, display_name, province, status FROM {$table} ORDER BY id DESC LIMIT %d OFFSET %d",
+                "SELECT id, display_name, phone, province, city, address, credit_limit_toman, notes, status, created_at, updated_at FROM {$table} ORDER BY id DESC LIMIT %d OFFSET %d",
                 $per_page, $offset
             ), ARRAY_A);
         } else {
             // Enforce assignment in SQL before pagination; never fetch unassigned customers.
             $user_id = get_current_user_id();
             $rows = $wpdb->get_results($wpdb->prepare(
-                "SELECT c.id, c.display_name, c.province, c.status
+                "SELECT c.id, c.display_name, c.phone, c.province, c.city, c.address, c.credit_limit_toman, c.notes, c.status, c.created_at, c.updated_at
                  FROM {$table} c
                  INNER JOIN {$wpdb->usermeta} um
                    ON um.user_id = %d
@@ -135,6 +135,19 @@ final class Parsian_Final_CRM {
                 $user_id, $per_page, $offset
             ), ARRAY_A);
         }
+        foreach ((array) $rows as &$row) {
+            $revisionData = [
+                'id'=>(int)$row['id'], 'display_name'=>(string)$row['display_name'],
+                'phone'=>(string)$row['phone'], 'province'=>(string)$row['province'],
+                'city'=>(string)$row['city'], 'address'=>(string)$row['address'],
+                'credit_limit_toman'=>(int)$row['credit_limit_toman'],
+                'notes'=>(string)$row['notes'], 'status'=>(string)$row['status'],
+                'created_at'=>(string)$row['created_at'], 'updated_at'=>(string)($row['updated_at']??'')
+            ];
+            $row['revision'] = hash('sha256', wp_json_encode($revisionData, JSON_UNESCAPED_UNICODE));
+            unset($row['phone'], $row['city'], $row['address'], $row['credit_limit_toman'], $row['notes'], $row['created_at']);
+        }
+        unset($row);
         return new WP_REST_Response(['items' => $rows ?: [], 'page' => $page, 'per_page' => $per_page], 200);
     }
     public function leads(WP_REST_Request $request): WP_REST_Response {
