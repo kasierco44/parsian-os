@@ -190,6 +190,39 @@ try {
     $finalLeadName = $wpdb->get_var($wpdb->prepare("SELECT display_name FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead));
     $assert($finalLeadName==='Server Newer Name','stale device payload never overwrites the newer server value');
 
+    // The manager may explicitly rebase a device patch, but final approval rechecks it.
+    $rebaseBaseRow = $wpdb->get_row($wpdb->prepare("SELECT id,display_name,phone,province,notes,status,updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead),ARRAY_A);
+    $rebaseTimestamp = (string)$rebaseBaseRow['updated_at'];
+    $rebaseRevision = hash('sha256', wp_json_encode([
+        'id'=>(int)$rebaseBaseRow['id'],'display_name'=>(string)$rebaseBaseRow['display_name'],
+        'phone'=>(string)$rebaseBaseRow['phone'],'province'=>(string)$rebaseBaseRow['province'],
+        'notes'=>(string)$rebaseBaseRow['notes'],'status'=>(string)$rebaseBaseRow['status'],
+        'updated_at'=>$rebaseTimestamp
+    ], JSON_UNESCAPED_UNICODE));
+    $rebaseOperation = wp_generate_uuid4();
+    $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
+        'operation_uuid'=>$rebaseOperation,'type'=>'crm.lead.update',
+        'payload'=>['lead_id'=>$createdLead,'display_name'=>'Manager Accepted Device Value','base_updated_at'=>$rebaseTimestamp,'base_revision'=>$rebaseRevision]
+    ]]]));
+    $rebaseQueued = $sync->push($push)->get_data();
+    $assert(($rebaseQueued['results'][0]['status']??'')==='pending_review','rebase fixture is queued');
+    $rebaseId = (int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_sync_ops WHERE operation_uuid=%s",$rebaseOperation));
+    $wpdb->update($wpdb->prefix.'parsian_leads',['province'=>'Another Server Edit','updated_at'=>gmdate('Y-m-d H:i:s',time()+20)],['id'=>$createdLead],['%s','%s'],['%d']);
+    $rebaseApproveFirst = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$rebaseId.'/approve');
+    $rebaseApproveFirst->set_param('id',$rebaseId);
+    $assert($sync->approve_operation($rebaseApproveFirst)->get_status()===409,'second concurrent edit is detected');
+    $resolveApply = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$rebaseId.'/resolve-conflict');
+    $resolveApply->set_param('id',$rebaseId);
+    $resolveApply->set_param('decision','apply_device');
+    $rebased = $sync->resolve_conflict($resolveApply);
+    $assert($rebased->get_status()===200 && ($rebased->get_data()['resolution']??'')==='device_changes_rebased','manager can explicitly rebase device changes to current server revision');
+    $rebaseApproveFinal = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$rebaseId.'/approve');
+    $rebaseApproveFinal->set_param('id',$rebaseId);
+    $appliedAfterRebase = $sync->approve_operation($rebaseApproveFinal);
+    $assert($appliedAfterRebase->get_status()===200 && ($appliedAfterRebase->get_data()['status']??'')==='applied','rebased device changes require and pass a separate final approval');
+    $finalRebasedName = $wpdb->get_var($wpdb->prepare("SELECT display_name FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead));
+    $assert($finalRebasedName==='Manager Accepted Device Value','explicitly approved rebased device value is applied');
+
     $crm = new Parsian_Final_CRM();
     $taskRequest = new WP_REST_Request('POST','/parsian-final/v1/tasks');
     $taskRequest->set_param('title','Offline completion QA task');
