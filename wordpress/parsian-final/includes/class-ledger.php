@@ -6,7 +6,11 @@ final class Parsian_Final_Ledger {
             'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'journals'],
             'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_finance_read');}
         ]);
-        register_rest_route('parsian-final/v1','/ledger/party-statement',[\n            'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'party_statement'],\n            'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_finance_read');}\n        ]);\n        register_rest_route('parsian-final/v1','/ledger/trial-balance',[
+        register_rest_route('parsian-final/v1','/ledger/party-statement',[
+            'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'party_statement'],
+            'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_finance_read');}
+        ]);
+        register_rest_route('parsian-final/v1','/ledger/trial-balance',[
             'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'trial_balance'],
             'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_finance_read');}
         ]);
