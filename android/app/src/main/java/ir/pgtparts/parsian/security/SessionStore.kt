@@ -3,6 +3,8 @@ import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import java.util.UUID
+import java.security.SecureRandom
+import android.util.Base64
 data class ParsianSession(val apiRoot: String, val accessToken: String, val refreshToken: String, val deviceUuid: String)
 object SessionStore {
  private const val PREFS = "parsian_secure_session"
@@ -33,9 +35,16 @@ object SessionStore {
  fun rotate(context: Context, accessToken: String, refreshToken: String) {
   prefs(context).edit().putString("access_token", accessToken).putString("refresh_token", refreshToken).apply()
  }
+ fun databasePassphrase(context: Context): ByteArray {
+  val store = prefs(context)
+  val existing = store.getString("database_key", null)
+  if (existing != null) return Base64.decode(existing, Base64.NO_WRAP)
+  val key = ByteArray(32)
+  SecureRandom().nextBytes(key)
+  store.edit().putString("database_key", Base64.encodeToString(key, Base64.NO_WRAP)).apply()
+  return key
+ }
  fun clear(context: Context) {
-  val store = prefs(context); val device = store.getString("device_uuid", null)
-  store.edit().clear().apply()
-  if (device != null) store.edit().putString("device_uuid", device).apply()
+  prefs(context).edit().clear().apply()
  }
 }
