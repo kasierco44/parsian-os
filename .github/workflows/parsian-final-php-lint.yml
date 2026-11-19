@@ -4,10 +4,16 @@ on:
   push:
     branches:
       - feature/parsian-final-core-platform
+    paths:
+      - 'wordpress/parsian-final/**'
+      - '.github/workflows/parsian-final-php-lint.yml'
   pull_request:
     branches:
       - main
       - feature/parsian-final-core-platform
+    paths:
+      - 'wordpress/parsian-final/**'
+      - '.github/workflows/parsian-final-php-lint.yml'
   workflow_dispatch:
 
 permissions:
