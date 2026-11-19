@@ -472,6 +472,7 @@ try {
         'source_site' => home_url('/'),
         'created_at_utc' => gmdate('c'),
         'tables' => $backupTables,
+        'excluded_tables' => ['auth_tokens' => ['reason' => 'credential material is intentionally excluded; revoke and re-register devices after disaster recovery']],
         'user_customer_assignments' => [],
     ];
     $backupCanonical = wp_json_encode($backupPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -489,6 +490,17 @@ try {
     $tamperedRequest->set_body(wp_json_encode($tamperedBackup));
     $tamperedResult = $backupService->validate_snapshot($tamperedRequest);
     $assert($tamperedResult->get_status() === 422 && ($tamperedResult->get_data()['code'] ?? '') === 'backup_checksum_mismatch', 'tampered backup content is rejected by checksum validation');
+    $manifestTamper = $backupPayload;
+    $manifestTamper['excluded_tables'] = [];
+    unset($manifestTamper['checksum_sha256']);
+    $manifestCanonical = wp_json_encode($manifestTamper, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $manifestTamper['checksum_sha256'] = hash('sha256', $manifestCanonical);
+    $manifestRequest = new WP_REST_Request('POST', '/parsian-final/v1/backup/validate');
+    $manifestRequest->set_header('content-type', 'application/json');
+    $manifestRequest->set_body(wp_json_encode($manifestTamper));
+    $manifestResult = $backupService->validate_snapshot($manifestRequest);
+    $assert($manifestResult->get_status() === 422 && ($manifestResult->get_data()['code'] ?? '') === 'backup_exclusion_manifest_mismatch', 'backup credential exclusion manifest cannot be silently altered');
+
 
     WP_CLI::success('PARSIAN ONE auth/sync acceptance passed: idempotency, lead/customer/proforma/invoice/payment revisions, manager conflict decisions, task/proforma review, seller isolation and device revocation.');
 } finally {
