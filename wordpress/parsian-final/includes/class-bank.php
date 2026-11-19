@@ -23,6 +23,15 @@ final class Parsian_Final_Bank {
         register_rest_route('parsian-final/v1','/bank/import-batches/(?P<id>\\d+)',[
             'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'get_batch'],'permission_callback'=>$read,
         ]);
+        register_rest_route('parsian-final/v1','/bank/statement-lines',[
+            'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'list_statement_lines'],'permission_callback'=>$read,
+        ]);
+        register_rest_route('parsian-final/v1','/bank/reconciliation-summary',[
+            'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'reconciliation_summary'],'permission_callback'=>$read,
+        ]);
+        register_rest_route('parsian-final/v1','/bank/journal-candidates',[
+            'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'journal_candidates'],'permission_callback'=>$read,
+        ]);
         register_rest_route('parsian-final/v1','/bank/reconcile',[
             'methods'=>WP_REST_Server::CREATABLE,'callback'=>[$this,'reconcile'],'permission_callback'=>$write,
         ]);
@@ -164,10 +173,50 @@ final class Parsian_Final_Bank {
         return $row?new WP_REST_Response($row,200):$this->error('import_batch_not_found',404);
     }
 
+
+    public function list_statement_lines(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $page=max(1,absint($request->get_param('page')?:1));
+        $perPage=min(100,max(1,absint($request->get_param('per_page')?:50)));
+        $where=['1=1'];$args=[];
+        $accountId=absint($request->get_param('bank_account_id'));
+        $status=sanitize_key((string)$request->get_param('match_status'));
+        if($accountId){$where[]='l.bank_account_id=%d';$args[]=$accountId;}
+        if(in_array($status,['unmatched','partial','matched'],true)){$where[]='l.match_status=%s';$args[]=$status;}
+        $args[]=$perPage;$args[]=($page-1)*$perPage;
+        $sql="SELECT l.id,l.bank_account_id,b.bank_name,b.account_title,l.transaction_date,l.direction,l.amount_toman,l.reference,l.description,l.match_status,l.matched_journal_entry_id,l.import_batch_id
+              FROM {$wpdb->prefix}parsian_bank_statement_lines l
+              LEFT JOIN {$wpdb->prefix}parsian_bank_accounts b ON b.id=l.bank_account_id
+              WHERE ".implode(' AND ',$where)." ORDER BY l.transaction_date DESC,l.id DESC LIMIT %d OFFSET %d";
+        $rows=$wpdb->get_results($wpdb->prepare($sql,$args),ARRAY_A);
+        return new WP_REST_Response(['items'=>$rows?:[],'page'=>$page,'per_page'=>$perPage],200);
+    }
+
+    public function reconciliation_summary(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $rows=$wpdb->get_results("SELECT match_status,COUNT(*) AS line_count,COALESCE(SUM(amount_toman),0) AS amount_toman
+            FROM {$wpdb->prefix}parsian_bank_statement_lines GROUP BY match_status",ARRAY_A);
+        return new WP_REST_Response(['items'=>$rows?:[]],200);
+    }
+
+    public function journal_candidates(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $rows=$wpdb->get_results("SELECT j.id,j.memo,j.created_at,
+            SUM(CASE WHEN a.account_code='1210' THEN l.debit_toman ELSE 0 END) AS bank_debit_toman,
+            SUM(CASE WHEN a.account_code='1210' THEN l.credit_toman ELSE 0 END) AS bank_credit_toman,
+            COALESCE((SELECT SUM(m.matched_amount_toman) FROM {$wpdb->prefix}parsian_bank_reconciliation_matches m WHERE m.journal_entry_id=j.id),0) AS matched_amount_toman
+            FROM {$wpdb->prefix}parsian_journal_entries j
+            JOIN {$wpdb->prefix}parsian_journal_lines l ON l.journal_entry_id=j.id
+            JOIN {$wpdb->prefix}parsian_ledger_accounts a ON a.id=l.account_id
+            WHERE j.status='posted' AND a.account_code='1210'
+            GROUP BY j.id ORDER BY j.created_at DESC,j.id DESC LIMIT 100",ARRAY_A);
+        return new WP_REST_Response(['items'=>$rows?:[]],200);
+    }
+
     public function reconcile(WP_REST_Request $request): WP_REST_Response {
         global $wpdb;
         $p=$request->get_json_params();$allocations=$p['allocations']??null;
-        if(!is_array($allocations)||count($allocations)<2||count($allocations)>200)return $this->error('allocations_array_required',400);
+        if(!is_array($allocations)||count($allocations)<1||count($allocations)>200)return $this->error('allocations_array_required',400);
         $group=wp_generate_uuid4();$actor=get_current_user_id();$now=current_time('mysql',true);
         $wpdb->query('START TRANSACTION');
         $lineIds=[];$journalIds=[];$lineSums=[];$journalSums=[];
