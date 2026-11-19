@@ -6,7 +6,7 @@ const desktopInvoke=window.__TAURI__&&window.__TAURI__.core&&window.__TAURI__.co
 const isDesktop=typeof desktopInvoke==='function';
 let desktopSession=null;
 const el=id=>document.getElementById(id);
-const roleInfo={manager:['مدیر','داشبورد مدیریت','عملیات، کاربران، اهداف فروش و کنترل‌های مدیریتی'],accountant:['حسابدار','میزکار حسابداری','دفاتر، دریافت و پرداخت، چک‌ها و مغایرت‌گیری'],seller:['فروشنده','میزکار CRM فروش','مشتریان تخصیص‌یافته، پیگیری‌ها، وظایف و پیش‌فاکتورها'],customer:['مشتری','پنل مشتری','سفارش‌ها و اسناد متعلق به حساب شما'],guest:['مهمان','ورود به پارسیان OS','برای مشاهده اطلاعات با حساب سازمانی وارد شوید']};
+const roleInfo={manager:['مدیر','داشبورد مدیریت','عملیات، تخصیص مشتری، گزارش‌ها و پشتیبان‌گیری'],accountant:['حسابدار','میزکار حسابداری','دفاتر مالی، تراز آزمایشی و حساب‌های بانکی'],seller:['فروشنده','میزکار CRM فروش','مشتریان تخصیص‌یافته، سرنخ‌های فروش و پیش‌فاکتورها'],customer:['مشتری','پنل مشتری','فاکتورها، پیش‌فاکتورها و دریافت‌های حساب شما'],guest:['مهمان','ورود به پارسیان OS','برای مشاهده اطلاعات با حساب سازمانی وارد شوید']};
 const modules=[
 {key:'customers',cap:'parsian_crm_read',roles:['manager','seller'],icon:'◎',title:'مشتریان',desc:'مشتریان مجاز و تخصیص‌یافته',endpoint:'/customers',fields:[['id','شناسه'],['display_name','نام مشتری'],['province','استان'],['status','وضعیت']]},
 {key:'leads',cap:'parsian_crm_read',roles:['manager','seller'],icon:'◉',title:'سرنخ‌های فروش',desc:'سرنخ‌های ثبت‌شده و پیگیری',endpoint:'/leads',fields:[['id','شناسه'],['display_name','نام'],['phone','تلفن'],['province','استان'],['status','وضعیت'],['created_at','تاریخ ثبت']]},
