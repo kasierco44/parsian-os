@@ -10,6 +10,6 @@ object SyncScheduler {
  fun enqueue(context: Context) {
   val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
   val request = OneTimeWorkRequestBuilder<SyncWorker>().setConstraints(constraints).build()
-  WorkManager.getInstance(context).enqueueUniqueWork(UNIQUE_WORK, ExistingWorkPolicy.KEEP, request)
+  WorkManager.getInstance(context).enqueueUniqueWork(UNIQUE_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
  }
 }
