@@ -19,11 +19,13 @@ android {
         create("seller") {
             dimension = "audience"
             applicationIdSuffix = ".seller"
+            resValue("string", "app_name", "پارسیان‌یار فروشنده")
             buildConfigField("String", "APP_ROLE", "\"seller\"")
         }
         create("customer") {
             dimension = "audience"
             applicationIdSuffix = ".customer"
+            resValue("string", "app_name", "پارسیان قطعه | مشتریان")
             buildConfigField("String", "APP_ROLE", "\"customer\"")
         }
     }
