@@ -7,6 +7,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 object SyncScheduler {
  private const val UNIQUE_WORK = "parsian-offline-outbox"
+ fun cancel(context: Context) { WorkManager.getInstance(context).cancelUniqueWork(UNIQUE_WORK) }
  fun enqueue(context: Context) {
   val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
   val request = OneTimeWorkRequestBuilder<SyncWorker>().setConstraints(constraints).build()
