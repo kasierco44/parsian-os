@@ -7,7 +7,7 @@ final class Parsian_Final_Backup {
     private const MAX_BACKUP_BYTES = 20971520;
 
     private function tables(): array {
-        return ['customers','suppliers','leads','products','stock_movements','stock_ledger','stock_reservations','proformas','proforma_items','invoices','invoice_items','payments','payment_allocations','cheques','cheque_events','ledger_accounts','journal_entries','journal_lines','bank_accounts','bank_statement_lines','bank_import_batches','bank_reconciliation_matches','events'];
+        return ['customers','suppliers','leads','tasks','products','stock_movements','stock_ledger','stock_reservations','proformas','proforma_items','invoices','invoice_items','payments','payment_allocations','cheques','cheque_events','ledger_accounts','journal_entries','journal_lines','bank_accounts','bank_statement_lines','bank_import_batches','bank_reconciliation_matches','events'];
     }
 
     public function register_routes(): void {
