@@ -259,10 +259,17 @@ final class Parsian_Final_Sync {
         if ($baseUpdatedAt === '' || $baseRevision === '' || $serverUpdatedAt === '' ||
             !hash_equals($serverUpdatedAt, $baseUpdatedAt) || !hash_equals($serverRevision, $baseRevision)) {
             $deviceChanges = array_intersect_key($payload, array_flip($config['mutable']));
+            $serverRecord = $row;
+            if ($resource === 'proforma') {
+                $serverRecord['items'] = $wpdb->get_results($wpdb->prepare(
+                    "SELECT product_id,description,quantity,unit_price_toman,line_total_toman FROM {$wpdb->prefix}parsian_proforma_items WHERE proforma_id=%d ORDER BY id",
+                    $recordId
+                ), ARRAY_A) ?: [];
+            }
             $conflict = [
                 'kind'=>'record_changed_on_server','resource_type'=>$resource,'record_id'=>$recordId,
-                'base_updated_at'=>$baseUpdatedAt,'server_updated_at'=>$serverUpdatedAt,
-                'server_revision'=>$serverRevision,'server_record'=>$row,'device_changes'=>$deviceChanges
+                'base_updated_at'=>$baseUpdatedAt,'base_revision'=>$baseRevision,'server_updated_at'=>$serverUpdatedAt,
+                'server_revision'=>$serverRevision,'server_record'=>$serverRecord,'device_changes'=>$deviceChanges
             ];
             $conflictUpdated = $wpdb->update($wpdb->prefix.'parsian_sync_ops',[
                 'status'=>'conflict','result'=>wp_json_encode($conflict)
