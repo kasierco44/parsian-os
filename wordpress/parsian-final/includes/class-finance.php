@@ -3,6 +3,11 @@ if (!defined('ABSPATH')) { exit; }
 final class Parsian_Final_Finance {
     public function register_routes(): void {
         register_rest_route('parsian-final/v1', '/payments', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [$this, 'list_payments'],
+            'permission_callback' => static function (): bool { return is_user_logged_in() && current_user_can('parsian_finance_read'); },
+        ]);
+        register_rest_route('parsian-final/v1', '/payments', [
             'methods' => WP_REST_Server::CREATABLE,
             'callback' => [$this, 'create_payment'],
             'permission_callback' => static function (): bool { return is_user_logged_in() && current_user_can('parsian_finance_write'); },
@@ -38,6 +43,20 @@ final class Parsian_Final_Finance {
             'permission_callback' => static function (): bool { return is_user_logged_in() && current_user_can('parsian_finance_read'); },
         ]);
     }
+    public function list_payments(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $page = max(1, absint($request->get_param('page') ?: 1));
+        $perPage = min(100, max(1, absint($request->get_param('per_page') ?: 50)));
+        $offset = ($page - 1) * $perPage;
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT id,direction,amount_toman,party_type,party_id,method,reference,status,created_by,created_at,journal_entry_id
+             FROM {$wpdb->prefix}parsian_payments
+             ORDER BY created_at DESC,id DESC LIMIT %d OFFSET %d",
+            $perPage, $offset
+        ), ARRAY_A);
+        return new WP_REST_Response(['items'=>$rows ?: [],'page'=>$page,'per_page'=>$perPage],200);
+    }
+
     public function create_payment(WP_REST_Request $request): WP_REST_Response {
         $p = $request->get_json_params();
         if (!is_array($p)) { return new WP_REST_Response(['code' => 'invalid_payment'], 400); }
