@@ -100,7 +100,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
      val uuid = item.optString("operation_uuid")
      if (uuid.isBlank()) continue
      when (item.optString("status")) {
-      "pending_review", "accepted", "applied" -> dao.updateStatus(uuid, "pending_review")
+      "pending_review", "accepted" -> dao.updateStatus(uuid, "pending_review")
+      "applied" -> dao.updateStatus(uuid, "applied")
       "rejected" -> dao.updateStatus(uuid, "rejected", item.optString("code"))
       "retry" -> dao.recordRetry(uuid, "server_requested_retry")
       else -> dao.recordRetry(uuid, "unknown_server_result")
@@ -124,13 +125,23 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
      val item = items.optJSONObject(index) ?: continue
      val eventId = item.optLong("id", -1L)
      if (eventId < 0L) continue
+     val eventType = item.optString("event_type")
+     val payloadJson = item.optString("payload", "{}")
+     val eventPayload = try { JSONObject(payloadJson) } catch (_: Exception) { JSONObject() }
+     val operationUuid = eventPayload.optString("operation_uuid")
+     if (operationUuid.isNotBlank()) {
+      when (eventType) {
+       "crm.lead.created.offline" -> dao.updateStatus(operationUuid, "applied")
+       "sync.operation.rejected" -> dao.updateStatus(operationUuid, "rejected", eventPayload.optString("reason"))
+      }
+     }
      events.add(SyncEventEntity(
       eventId = eventId,
       eventUuid = item.optString("event_uuid"),
-      eventType = item.optString("event_type"),
+      eventType = eventType,
       aggregateType = item.optString("aggregate_type"),
       aggregateId = item.optLong("aggregate_id"),
-      payloadJson = item.optString("payload", "{}"),
+      payloadJson = payloadJson,
       createdAt = item.optString("created_at")
      ))
     }
