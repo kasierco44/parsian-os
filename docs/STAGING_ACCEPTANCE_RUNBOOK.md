@@ -8,7 +8,7 @@ This runbook is for an isolated WordPress **Staging** site only. Do not run the 
 2. Export a database backup using the hosting panel or WP-CLI. Example from the WordPress root:
 
    ```bash
-   wp db export "$HOME/parsian-staging-before-0.4.9.sql"
+   wp db export "$HOME/parsian-staging-before-0.4.11.sql"
    ```
 
 3. Keep the backup outside the public web root. Confirm that the file exists and is non-empty.
