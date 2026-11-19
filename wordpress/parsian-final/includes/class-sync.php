@@ -305,7 +305,7 @@ final class Parsian_Final_Sync {
                 $changes[$field] = sanitize_textarea_field((string)$payload[$field]);
             } else {
                 $value = trim(sanitize_text_field((string)$payload[$field]));
-                $max = $field === 'display_name' ? 190 : ($field === 'phone' ? 40 : 100);
+                $max = $field === 'display_name' ? 190 : ($field === 'phone' ? 40 : ($field === 'address' ? 1000 : 100));
                 if (($field === 'display_name' && $value === '') || strlen($value)>$max) {
                     $wpdb->query('ROLLBACK');
                     return new WP_REST_Response(['code'=>'sync_update_field_invalid','field'=>$field],422);
