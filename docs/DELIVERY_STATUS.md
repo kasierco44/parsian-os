@@ -412,3 +412,11 @@ Keep the existing live site and its database untouched until a staging backup, m
 ### Schema acceptance harness (2026-11-19)
 - Added a Staging-only schema acceptance script that checks all 26 expected tables, ten active seeded chart-of-account codes, and critical auth/sync/bank/payment/cheque migration columns.
 - Local PHP 8.4 syntax check passed for the new schema acceptance harness. The schema migration itself has not run against MySQL yet; the runbook now executes this check before the finance and auth/sync acceptance harnesses.
+
+
+## Delta sync cursor and role-scope hardening (2026-11-19)
+
+- Changed /sync/pull to scan a bounded global event-ID page and advance the delta cursor over the scanned range, even when some events are hidden from the caller. This prevents seller clients from repeatedly requesting the same cursor range when only other users' events were created.
+- Manager accounts can read the global event stream. Accountant accounts are restricted to finance/accounting/payment/cheque/bank/stock event namespaces. Other users receive only events attributed to their own user ID.
+- Added acceptance assertions for seller event isolation and cursor progress across a foreign event; the test refreshes the current WordPress user after changing its manager capability.
+- These are source and test-harness changes only. PHP lint and the WP-CLI/MySQL acceptance harness have not yet been run on Staging; no runtime pass is claimed.
