@@ -487,3 +487,12 @@ Keep the existing live site and its database untouched until a staging backup, m
   Each job reports `runner_id=0`, an empty runner name, and an empty steps array; each terminated before a workflow step executed. Therefore no fresh PHP lint, ZIP package, or APK result can be claimed from these runs.
 - The immediate external release blocker remains GitHub Actions runner allocation/account usage settings. Review repository Actions policy and account billing/usage budgets using the official [GitHub Actions troubleshooting guide](https://docs.github.com/en/actions/how-tos/troubleshoot-workflows).
 - Production remains untouched. Do not merge PR #21 or distribute a release artifact until CI, staging migrations, runtime acceptance, and restore rehearsal pass.
+
+
+## Android offline dashboard cache update (2026-11-19)
+
+- Added an encrypted Room `dashboard_snapshots` table (database schema version 3) with a non-destructive migration from version 2.
+- Seller and customer dashboard responses are now saved as a complete JSON snapshot only after all role-specific API reads succeed. On network I/O failure, the app falls back to the last complete snapshot and labels the screen as offline.
+- Logout clears the cached dashboard together with outbox, inbox and sync metadata; the SQLCipher database key is retained so the encrypted database remains readable if the same device account signs in again.
+- This is a bounded read-cache foundation, not a complete offline-first domain model. It does not yet merge server events into customer/lead/task/proforma tables, and cached data is not guaranteed to be fresh. Authentication/authorization HTTP failures are not silently masked by stale cache.
+- Source changes are committed on the development branch. Android Gradle compilation and migration/device tests remain unverified because the latest Android Actions job (`44506825591`, job `135500497941`) again terminated with `runner_id=0` and no executed steps.
