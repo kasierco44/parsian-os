@@ -23,12 +23,6 @@ final class Parsian_Final_Bank {
         register_rest_route('parsian-final/v1','/bank/import-batches/(?P<id>\\d+)',[
             'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'get_batch'],'permission_callback'=>$read,
         ]);
-        register_rest_route('parsian-final/v1','/bank/statement-lines',[
-            'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'list_statement_lines'],'permission_callback'=>$read,
-        ]);
-        register_rest_route('parsian-final/v1','/bank/reconciliation-summary',[
-            'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'reconciliation_summary'],'permission_callback'=>$read,
-        ]);
         register_rest_route('parsian-final/v1','/bank/journal-candidates',[
             'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'journal_candidates'],'permission_callback'=>$read,
         ]);
@@ -173,31 +167,6 @@ final class Parsian_Final_Bank {
         return $row?new WP_REST_Response($row,200):$this->error('import_batch_not_found',404);
     }
 
-
-    public function list_statement_lines(WP_REST_Request $request): WP_REST_Response {
-        global $wpdb;
-        $page=max(1,absint($request->get_param('page')?:1));
-        $perPage=min(100,max(1,absint($request->get_param('per_page')?:50)));
-        $where=['1=1'];$args=[];
-        $accountId=absint($request->get_param('bank_account_id'));
-        $status=sanitize_key((string)$request->get_param('match_status'));
-        if($accountId){$where[]='l.bank_account_id=%d';$args[]=$accountId;}
-        if(in_array($status,['unmatched','partial','matched'],true)){$where[]='l.match_status=%s';$args[]=$status;}
-        $args[]=$perPage;$args[]=($page-1)*$perPage;
-        $sql="SELECT l.id,l.bank_account_id,b.bank_name,b.account_title,l.transaction_date,l.direction,l.amount_toman,l.reference,l.description,l.match_status,l.matched_journal_entry_id,l.import_batch_id
-              FROM {$wpdb->prefix}parsian_bank_statement_lines l
-              LEFT JOIN {$wpdb->prefix}parsian_bank_accounts b ON b.id=l.bank_account_id
-              WHERE ".implode(' AND ',$where)." ORDER BY l.transaction_date DESC,l.id DESC LIMIT %d OFFSET %d";
-        $rows=$wpdb->get_results($wpdb->prepare($sql,$args),ARRAY_A);
-        return new WP_REST_Response(['items'=>$rows?:[],'page'=>$page,'per_page'=>$perPage],200);
-    }
-
-    public function reconciliation_summary(WP_REST_Request $request): WP_REST_Response {
-        global $wpdb;
-        $rows=$wpdb->get_results("SELECT match_status,COUNT(*) AS line_count,COALESCE(SUM(amount_toman),0) AS amount_toman
-            FROM {$wpdb->prefix}parsian_bank_statement_lines GROUP BY match_status",ARRAY_A);
-        return new WP_REST_Response(['items'=>$rows?:[]],200);
-    }
 
     public function journal_candidates(WP_REST_Request $request): WP_REST_Response {
         global $wpdb;
