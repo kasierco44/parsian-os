@@ -41,12 +41,12 @@ final class Parsian_Final_Bank {
     }
     public function list_accounts(WP_REST_Request $request): WP_REST_Response {
         global $wpdb;
-        $rows=$wpdb->get_results("SELECT b.id,b.account_ref,b.bank_name,b.account_title,b.account_number_masked,b.ledger_account_id,b.currency,b.opening_balance_toman,b.opening_balance_date,b.is_active,a.account_code,a.account_name FROM {$this->table('bank_accounts')} b LEFT JOIN {$this->table('ledger_accounts')} a ON a.id=b.ledger_account_id ORDER BY b.id DESC",ARRAY_A);
+        $rows=$wpdb->get_results("SELECT b.id,b.account_ref,b.bank_name,b.account_title,b.account_number_masked,b.ledger_account_id,b.currency,b.opening_balance_toman,b.opening_balance_date,b.is_active,a.account_code,a.account_name FROM {$wpdb->prefix}parsian_bank_accounts b LEFT JOIN {$wpdb->prefix}parsian_ledger_accounts a ON a.id=b.ledger_account_id ORDER BY b.id DESC",ARRAY_A);
         return new WP_REST_Response(['items'=>$rows?:[]],200);
     }
     public function get_account(WP_REST_Request $request): WP_REST_Response {
         global $wpdb; $id=absint($request['id']);
-        $row=$wpdb->get_row($wpdb->prepare("SELECT b.*,a.account_code,a.account_name FROM {$this->table('bank_accounts')} b LEFT JOIN {$this->table('ledger_accounts')} a ON a.id=b.ledger_account_id WHERE b.id=%d",$id),ARRAY_A);
+        $row=$wpdb->get_row($wpdb->prepare("SELECT b.*,a.account_code,a.account_name FROM {$wpdb->prefix}parsian_bank_accounts b LEFT JOIN {$wpdb->prefix}parsian_ledger_accounts a ON a.id=b.ledger_account_id WHERE b.id=%d",$id),ARRAY_A);
         return $row?new WP_REST_Response($row,200):$this->error('bank_account_not_found',404);
     }
     public function save_account(WP_REST_Request $request): WP_REST_Response {
@@ -64,10 +64,10 @@ final class Parsian_Final_Bank {
         if($ref===''||strlen($ref)>80||$bank===''||$title===''||$ledger<1||!in_array($currency,['IRR','IRT'],true)||
             $opening===false||abs((int)$opening)>100000000000000||($date!==null&&$date!==''&&!$this->valid_date($date)))
             return $this->error('invalid_bank_account',400);
-        $account=$wpdb->get_row($wpdb->prepare("SELECT id,account_code FROM {$this->table('ledger_accounts')} WHERE id=%d AND is_active=1",$ledger),ARRAY_A);
+        $account=$wpdb->get_row($wpdb->prepare("SELECT id,account_code FROM {$wpdb->prefix}parsian_ledger_accounts WHERE id=%d AND is_active=1",$ledger),ARRAY_A);
         if(!$account||!in_array((string)$account['account_code'],['1210'],true))
             return $this->error('active_bank_ledger_account_1210_required',422);
-        $duplicate=(int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$this->table('bank_accounts')} WHERE account_ref=%s AND id<>%d",$ref,$id));
+        $duplicate=(int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_bank_accounts WHERE account_ref=%s AND id<>%d",$ref,$id));
         if($duplicate) return $this->error('bank_account_ref_exists',409);
         $data=['account_ref'=>$ref,'bank_name'=>$bank,'account_title'=>$title,'account_number_masked'=>$masked,
             'ledger_account_id'=>$ledger,'currency'=>$currency,'opening_balance_toman'=>(int)$opening,
@@ -130,14 +130,14 @@ final class Parsian_Final_Bank {
     }
     public function import_statement(WP_REST_Request $request): WP_REST_Response {
         global $wpdb;
-        $accountId=absint($request->get_param('bank_account_id')); $account=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table('bank_accounts')} WHERE id=%d AND is_active=1",$accountId),ARRAY_A);
+        $accountId=absint($request->get_param('bank_account_id')); $account=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}parsian_bank_accounts WHERE id=%d AND is_active=1",$accountId),ARRAY_A);
         if(!$account)return $this->error('active_bank_account_required',422);
         $files=$request->get_file_params(); $file=$files['file']??null;
         if(!is_array($file)||($file['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK||!is_uploaded_file($file['tmp_name']))return $this->error('uploaded_file_required',400);
         $ext=strtolower(pathinfo((string)$file['name'],PATHINFO_EXTENSION)); if(!in_array($ext,['csv','xlsx'],true))return $this->error('csv_or_xlsx_required',415);
         if((int)$file['size']>10*1024*1024)return $this->error('file_too_large',413);
         $hash=hash_file('sha256',$file['tmp_name']);
-        $existing=(int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$this->table('bank_import_batches')} WHERE bank_account_id=%d AND file_sha256=%s",$accountId,$hash));
+        $existing=(int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_bank_import_batches WHERE bank_account_id=%d AND file_sha256=%s",$accountId,$hash));
         if($existing)return $this->error('file_already_imported',409,['batch_id'=>$existing]);
         [$rows,$parseErrors]=$ext==='csv'?$this->parse_csv($file['tmp_name']):$this->parse_xlsx($file['tmp_name']);
         $wpdb->insert($this->table('bank_import_batches'),['bank_account_id'=>$accountId,'source_name'=>sanitize_file_name($file['name']),
@@ -145,7 +145,7 @@ final class Parsian_Final_Bank {
         $batchId=(int)$wpdb->insert_id; $accepted=0;$duplicates=0;$errors=$parseErrors;
         foreach($rows as $i=>$raw){$row=$this->normalize_row($raw);$rowNumber=$i+2;
             if(isset($row['error'])){$errors[]=['row'=>$rowNumber,'error'=>$row['error']];continue;}
-            $dupe=(int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$this->table('bank_statement_lines')} WHERE bank_account_id=%d AND external_line_id=%s",$accountId,$row['external_line_id']));
+            $dupe=(int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_bank_statement_lines WHERE bank_account_id=%d AND external_line_id=%s",$accountId,$row['external_line_id']));
             if($dupe){$duplicates++;continue;}
             $ok=$wpdb->insert($this->table('bank_statement_lines'),array_merge($row,['bank_account_ref'=>$account['account_ref'],'bank_account_id'=>$accountId,
                 'import_batch_id'=>$batchId,'match_status'=>'unmatched','created_by'=>get_current_user_id(),'created_at'=>current_time('mysql',true)]));
@@ -159,7 +159,7 @@ final class Parsian_Final_Bank {
     }
     public function get_batch(WP_REST_Request $request): WP_REST_Response {
         global $wpdb;$id=absint($request['id']);
-        $row=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table('bank_import_batches')} WHERE id=%d",$id),ARRAY_A);
+        $row=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}parsian_bank_import_batches WHERE id=%d",$id),ARRAY_A);
         return $row?new WP_REST_Response($row,200):$this->error('import_batch_not_found',404);
     }
 
@@ -178,21 +178,21 @@ final class Parsian_Final_Bank {
         }
         sort($lineIds);sort($journalIds);
         $lines=[];
-        foreach($lineIds as $id){$row=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table('bank_statement_lines')} WHERE id=%d FOR UPDATE",$id),ARRAY_A);
+        foreach($lineIds as $id){$row=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}parsian_bank_statement_lines WHERE id=%d FOR UPDATE",$id),ARRAY_A);
             if(!$row){$wpdb->query('ROLLBACK');return $this->error('statement_line_not_found',404);}
-            $already=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(matched_amount_toman),0) FROM {$this->table('bank_reconciliation_matches')} WHERE statement_line_id=%d",$id));
+            $already=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(matched_amount_toman),0) FROM {$wpdb->prefix}parsian_bank_reconciliation_matches WHERE statement_line_id=%d",$id));
             if($already+$lineSums[$id]>(int)$row['amount_toman']){$wpdb->query('ROLLBACK');return $this->error('statement_line_overallocated',409,['statement_line_id'=>$id,'remaining_toman'=>(int)$row['amount_toman']-$already]);}
             $lines[$id]=$row;
         }
-        foreach($journalIds as $id){$entry=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table('journal_entries')} WHERE id=%d AND status='posted' FOR UPDATE",$id),ARRAY_A);
+        foreach($journalIds as $id){$entry=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}parsian_journal_entries WHERE id=%d AND status='posted' FOR UPDATE",$id),ARRAY_A);
             if(!$entry){$wpdb->query('ROLLBACK');return $this->error('posted_journal_not_found',404);}
-            $bankLines=$wpdb->get_results($wpdb->prepare("SELECT l.account_id,l.debit_toman,l.credit_toman,a.account_code FROM {$this->table('journal_lines')} l JOIN {$this->table('ledger_accounts')} a ON a.id=l.account_id WHERE l.journal_entry_id=%d AND a.account_code='1210'",$id),ARRAY_A);
+            $bankLines=$wpdb->get_results($wpdb->prepare("SELECT l.account_id,l.debit_toman,l.credit_toman,a.account_code FROM {$wpdb->prefix}parsian_journal_lines l JOIN {$wpdb->prefix}parsian_ledger_accounts a ON a.id=l.account_id WHERE l.journal_entry_id=%d AND a.account_code='1210'",$id),ARRAY_A);
             $capacity=0;$entryDirection='';
             foreach($bankLines as $bl){if((int)$bl['debit_toman']>0){$capacity+=(int)$bl['debit_toman'];$entryDirection='in';}if((int)$bl['credit_toman']>0){$capacity+=(int)$bl['credit_toman'];$entryDirection='out';}}
-            $used=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(matched_amount_toman),0) FROM {$this->table('bank_reconciliation_matches')} WHERE journal_entry_id=%d",$id));
+            $used=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(matched_amount_toman),0) FROM {$wpdb->prefix}parsian_bank_reconciliation_matches WHERE journal_entry_id=%d",$id));
             if(!$capacity||$used+$journalSums[$id]>$capacity){$wpdb->query('ROLLBACK');return $this->error('journal_overallocated_or_not_bank_entry',409,['journal_entry_id'=>$id,'remaining_toman'=>$capacity-$used]);}
             foreach($lines as $line){
-                $bankAccount=$wpdb->get_row($wpdb->prepare("SELECT ledger_account_id FROM {$this->table('bank_accounts')} WHERE id=%d AND is_active=1",(int)$line['bank_account_id']),ARRAY_A);
+                $bankAccount=$wpdb->get_row($wpdb->prepare("SELECT ledger_account_id FROM {$wpdb->prefix}parsian_bank_accounts WHERE id=%d AND is_active=1",(int)$line['bank_account_id']),ARRAY_A);
                 $sameBankLedger=false;
                 foreach($bankLines as $bl){if($bankAccount && (int)$bl['account_id']===(int)$bankAccount['ledger_account_id']){$sameBankLedger=true;break;}}
                 if($line['direction']!==$entryDirection){$wpdb->query('ROLLBACK');return $this->error('transaction_direction_mismatch',409,['journal_entry_id'=>$id,'statement_line_id'=>(int)$line['id']]);}
@@ -205,7 +205,7 @@ final class Parsian_Final_Bank {
         ]);
             if(!$ok){$wpdb->query('ROLLBACK');return $this->error('duplicate_or_failed_allocation',409);}
         }
-        foreach($lineIds as $id){$row=$lines[$id];$total=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(matched_amount_toman),0) FROM {$this->table('bank_reconciliation_matches')} WHERE statement_line_id=%d",$id));
+        foreach($lineIds as $id){$row=$lines[$id];$total=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(matched_amount_toman),0) FROM {$wpdb->prefix}parsian_bank_reconciliation_matches WHERE statement_line_id=%d",$id));
             $status=$total===(int)$row['amount_toman']?'matched':'partial';
             $wpdb->update($this->table('bank_statement_lines'),['match_status'=>$status,'matched_by'=>$actor,'matched_at'=>$now,
                 'matched_journal_entry_id'=>count($journalIds)===1?(int)$journalIds[0]:0],['id'=>$id]);
