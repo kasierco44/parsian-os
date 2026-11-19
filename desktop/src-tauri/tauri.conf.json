@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "PARSIAN OS",
+  "productName": "PARSIAN ONE",
   "version": "0.1.0",
   "identifier": "ir.pgtparts.parsian",
   "build": {
@@ -10,7 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "PARSIAN OS — نسخه توسعه",
+        "title": "PARSIAN ONE — نسخه توسعه",
         "width": 1280,
         "height": 820,
         "minWidth": 900,
