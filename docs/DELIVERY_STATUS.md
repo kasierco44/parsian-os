@@ -224,3 +224,18 @@ Keep the existing live site and its database untouched until a staging backup, m
 - The harness has been added to source but has **not** been executed against a staging WordPress database. A successful test result is not claimed.
 - Updated the legacy exact-match endpoint to write into the new reconciliation allocation table in the same transaction, so legacy matches consume allocation capacity and cannot be silently re-used by the new matcher.
 - Follow-up verification still required: PHP lint on the full plugin, isolated staging migration, execution of the WP-CLI harness, and bank CSV/XLSX fixtures including duplicate-file, duplicate-row, malformed-row, partial and multi-journal cases.
+
+
+## Token authentication and offline sync hardening (2026-11-19)
+
+- Plugin version/schema version bumped to `0.4.2`; activation migration creates `parsian_auth_tokens` with SHA-256 token hashes, token family, user/device binding, expiry and revocation metadata.
+- `/auth/login` now authenticates WordPress credentials without issuing a browser login cookie and returns a 15-minute opaque Bearer access token plus a 30-day refresh token. Tokens are stored only as SHA-256 hashes.
+- `/auth/refresh` rotates refresh tokens; reuse of a revoked refresh token is rejected. Bearer access tokens are resolved through WordPress `determine_current_user` and checked against token expiry and device revocation.
+- `/auth/logout` revokes the token family; `/auth/revoke-device` revokes a device and all its tokens. Login can create/bind a device UUID and platform.
+- Sync now exposes the current user's device registry, limits accepted operation types to an explicit allowlist, persists a SHA-256 digest of each operation payload, treats identical retries idempotently, and rejects reuse of an operation UUID with changed payload/device/user. Offline operations remain `pending_review`; they are not posted to accounting, inventory or sales automatically.
+- Added guarded WP-CLI acceptance harness `tests/auth-sync-acceptance.php` for login, access-token resolution, refresh rotation/reuse rejection, queued sync retry, changed-payload conflict and device revocation. It requires explicit opt-in and refuses production.
+- Added `tests/finance-ledger-acceptance.php` earlier for subledger and aging acceptance.
+- Added GitHub Actions workflow `.github/workflows/parsian-php-lint.yml` to lint every plugin PHP file on relevant pushes/PRs.
+- **Verification status:** the GitHub Actions runs associated with the lint workflow returned failure before exposing any job steps/logs (`logs_url=null`, empty steps); retry behaved the same. Therefore PHP lint is **not confirmed passing**. No isolated WordPress/MySQL staging database is connected here, so neither WP-CLI acceptance harness nor dbDelta migration has been executed. No DB integration test is claimed.
+- **Remaining sync work:** domain-specific conflict resolution using aggregate versions, server-side processing/approval of pending operations, delta access scoping by assigned customer/representative, retention/cleanup and Android/Windows client persistence/retry tests remain outstanding.
+- Latest source commits include `82bc5a508cb2635ba165baa9f1c44d56dc59240b` (auth), `56dcfb9387fdfceb05e2c130a90475495a9f0510` (token schema), `ecffac3f4f7b6c515ca14cda4d9693d60514e3b7` (sync idempotency), `001cf3e5a2fb04c7692dd7b9ddc378c9df6be42d` (sync schema), `94d4b9f17fce33fd8778495fa245591f35358d2a` and `2d1e421d61a0267e0e55b6a926419230773eedc9` (auth/sync test harness).
