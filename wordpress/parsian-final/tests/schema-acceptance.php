@@ -33,6 +33,7 @@ foreach ($accounts as $code) {
 $requiredColumns = [
     'auth_tokens' => ['token_hash','token_type','family_uuid','user_id','device_uuid','expires_at','revoked_at'],
     'sync_ops' => ['operation_uuid','payload_sha256','status','result','processed_at'],
+    'tasks' => ['title','assigned_user_id','status','completed_at','completed_by'],
     'bank_statement_lines' => ['bank_account_id','import_batch_id','match_status'],
     'payments' => ['journal_entry_id','reversed_at','reversal_event_id'],
     'cheques' => ['payment_id','cleared_at','last_event_id'],
