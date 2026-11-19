@@ -275,3 +275,16 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Added `.github/workflows/parsian-android-build.yml` to assemble both debug variants and upload APK artifacts. The workflow has been added but its first result has not yet been inspected; no APK build success or downloadable APK is claimed.
 - Added `.github/workflows/parsian-web-checks.yml` to run Node syntax validation and verify required web panel assets. Its result also remains to be inspected.
 - Android minimum SDK is currently API 26 as a provisional baseline; confirm supported devices before release. Debug builds are not production-signed.
+
+
+## Windows desktop proof of concept (2026-11-19)
+
+- Added a minimal Tauri 2 desktop shell under `desktop/src-tauri/`, configured to package the shared web panel as Windows MSI and NSIS bundles.
+- Added `.github/workflows/parsian-windows-build.yml` for Windows installer builds. The observed workflow run failed and the GitHub job response exposed no step details or logs; therefore no installer is available or claimed.
+- The shell is not yet connected to the staging API: the current web panel expects WordPress cookie authentication and a REST nonce, while a Tauri origin requires explicit API URL, Bearer session handling and CORS configuration. Encrypted local SQLite, OS credential storage, durable sync, backup/restore and code signing remain unimplemented.
+
+## CI recheck note (2026-11-19)
+
+- Latest observed Android debug, web static-check, PHP lint and Windows bundle jobs all returned `failure`; GitHub job metadata contained no steps and `logs_url=null`. Attempts to retrieve job logs returned 404, so the failure cause cannot be diagnosed from available run data.
+- Failed jobs for the latest web, Android and PHP runs were re-queued successfully, but a successful rerun has not yet been observed. Local Node.js `node --check` passed for the current web panel JavaScript source.
+- No APK, Windows installer, production ZIP or staging runtime validation is being represented as delivered by these latest runs.
