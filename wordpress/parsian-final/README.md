@@ -1,6 +1,6 @@
 # PARSIAN FINAL — WordPress Core
 
-Central WordPress plugin source for the PARSIAN FINAL platform. Plugin source version: **0.4.2**.
+Central WordPress plugin source for the PARSIAN FINAL platform. Plugin source version: **0.4.3**.
 
 ## Architecture
 - WordPress REST API is the single system-of-record boundary for web, Android and Windows clients.
@@ -11,6 +11,7 @@ Central WordPress plugin source for the PARSIAN FINAL platform. Plugin source ve
 ## Implemented source areas
 - Schema/install and version-gated upgrades.
 - Roles and capabilities: manager, accountant, seller, customer.
+- WordPress-hosted PARSIAN OS menu page with role-aware web workspace, bundled CSS/JS assets and server-generated REST nonce.
 - CRM customer/lead endpoints with seller scoping in server-side queries.
 - Persisted proformas, manager approval, invoice conversion and balanced sales/receivable journal posting.
 - Payment approval, customer receipt allocations and party statements.
@@ -47,7 +48,7 @@ Base: `/wp-json/parsian-final/v1`
 - Bank CSV/XLSX parsing, duplicate-file/row handling, partial and many-to-many reconciliation require fixture and integration tests; opening/closing statement balance controls and period close remain outstanding.
 - Accounting still needs full tax/discount treatment, returns/credit notes, period close and complete reconciliation acceptance.
 - Sync pull still uses a numeric cursor and is not fully bound to per-customer assignment scopes. Aggregate-version conflict resolution, transactional processing/approval of queued operations, retention and retry policies are incomplete.
-- Web panel screens are an initial UI scaffold; operational CRUD/reporting workflows and nonce injection from the WordPress host remain incomplete.
+- Web panel currently provides read views for CRM customers/leads, proformas, trial balance, journals and bank accounts plus manager proforma approval. Create/edit, payments, cheques, reconciliation, full customer self-service and browser acceptance tests remain incomplete.
 - Android flavors are scaffolded; encrypted local DB, token vault, outbox/inbox, WorkManager sync and business workflows remain incomplete.
 - Windows clients, installer, signed release artifacts, backup/restore acceptance and end-to-end security tests are not complete.
 
