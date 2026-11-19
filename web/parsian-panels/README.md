@@ -27,6 +27,7 @@ Do not hard-code credentials or tokens. WordPress cookie authentication for REST
 - Responsive Persian RTL shell and industrial theme.
 - Role-aware navigation based on WordPress `/me` response.
 - WordPress health and identity connectivity checks.
-- Business modules are placeholders until endpoint contracts and integration tests are complete.
+- Read-only CRM views for customers and leads; proforma list with manager approval action; accountant/manager views for trial balance, journal register and bank accounts.
+- Create/edit forms, payment/cheque workflows, statement upload and reconciliation UI, Jalali date controls and end-to-end browser tests remain incomplete.
 
 Development UI scaffold only; not production-ready.
