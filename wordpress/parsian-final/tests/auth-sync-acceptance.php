@@ -102,6 +102,21 @@ try {
     $createdLead=(int)($approvedData['lead_id']??0);
     $assert($createdLead>0&&(int)$wpdb->get_var($wpdb->prepare("SELECT owner_user_id FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead))===(int)$userId,'approved offline lead remains owned by its originating seller');
 
+    $updateOperation = wp_generate_uuid4();
+    $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
+        'operation_uuid'=>$updateOperation,'type'=>'crm.lead.update',
+        'payload'=>['lead_id'=>$createdLead,'display_name'=>'Updated Offline QA Lead','province'=>'Tehran']
+    ]]]));
+    $updateQueued = $sync->push($push)->get_data();
+    $assert(($updateQueued['results'][0]['status']??'')==='pending_review','offline lead update is queued for manager review');
+    $updateId = (int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_sync_ops WHERE operation_uuid=%s",$updateOperation));
+    $updateRequest = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$updateId.'/approve');
+    $updateRequest->set_param('id',$updateId);
+    $updatedLeadResponse = $sync->approve_operation($updateRequest);
+    $assert($updatedLeadResponse->get_status()===200 && ($updatedLeadResponse->get_data()['status']??'')==='applied','manager approval applies offline lead update');
+    $updatedLeadRow = $wpdb->get_row($wpdb->prepare("SELECT display_name,province FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead),ARRAY_A);
+    $assert(($updatedLeadRow['display_name']??'')==='Updated Offline QA Lead' && ($updatedLeadRow['province']??'')==='Tehran','offline lead update changes only the originating seller lead');
+
     // Verify seller event isolation and cursor progress over another user's event.
     $foreignEventId = 0;
     $foreignEventOk = $wpdb->insert($wpdb->prefix.'parsian_events', [
