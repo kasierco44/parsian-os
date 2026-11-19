@@ -544,3 +544,10 @@ Keep the existing live site and its database untouched until a staging backup, m
 
 - Added WP-CLI acceptance assertions for a complete empty-table snapshot with a valid SHA-256 checksum, explicit non-restoration semantics, and rejection of a payload whose table content is changed without updating its checksum.
 - This adds source-level test coverage only. The WP-CLI/MySQL workflow has not run for the resulting commit, and automatic restore, encrypted-at-rest export, scheduled off-site backups, and a real restore rehearsal remain release blockers.
+
+## Backup scope hardening (2026-11-19)
+
+- Snapshot export now includes the registered-device table and durable sync-operation queue, which were previously omitted from the business snapshot.
+- Credential-bearing auth_tokens are intentionally excluded. The backup carries an explicit exclusion manifest explaining that devices must be re-registered after disaster recovery; validation rejects a missing or altered exclusion manifest.
+- WP-CLI acceptance fixtures now cover the expanded table set, checksum tampering, and exclusion-manifest tampering.
+- This is still a development-only export/validation feature: no restore engine or real restore rehearsal exists, and the updated acceptance suite has not run on GitHub Actions.
