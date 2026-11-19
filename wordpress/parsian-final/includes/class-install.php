@@ -134,6 +134,108 @@ final class Parsian_Final_Install {
             ) $charset;"
         ];
         foreach ($domainTables as $sql) { dbDelta($sql); }
+        $workflowTables = [
+            "CREATE TABLE {$p}proformas (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                document_number varchar(40) NOT NULL,
+                customer_id bigint unsigned NOT NULL,
+                status varchar(24) NOT NULL DEFAULT 'draft',
+                currency varchar(8) NOT NULL DEFAULT 'IRR',
+                total_toman bigint unsigned NOT NULL DEFAULT 0,
+                notes text NOT NULL,
+                created_by bigint unsigned NOT NULL,
+                approved_by bigint unsigned NOT NULL DEFAULT 0,
+                approved_at datetime NULL,
+                invoice_id bigint unsigned NOT NULL DEFAULT 0,
+                created_at datetime NOT NULL,
+                updated_at datetime NOT NULL,
+                PRIMARY KEY  (id),
+                UNIQUE KEY document_number (document_number),
+                KEY customer_status (customer_id,status),
+                KEY created_by (created_by,created_at)
+            ) $charset;",
+            "CREATE TABLE {$p}proforma_items (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                proforma_id bigint unsigned NOT NULL,
+                product_id bigint unsigned NOT NULL,
+                description varchar(190) NOT NULL DEFAULT '',
+                quantity bigint unsigned NOT NULL,
+                unit_price_toman bigint unsigned NOT NULL,
+                line_total_toman bigint unsigned NOT NULL,
+                PRIMARY KEY  (id),
+                KEY proforma_id (proforma_id)
+            ) $charset;",
+            "CREATE TABLE {$p}invoices (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                invoice_number varchar(40) NOT NULL,
+                proforma_id bigint unsigned NOT NULL,
+                customer_id bigint unsigned NOT NULL,
+                status varchar(24) NOT NULL DEFAULT 'posted',
+                currency varchar(8) NOT NULL DEFAULT 'IRR',
+                total_toman bigint unsigned NOT NULL,
+                journal_entry_id bigint unsigned NOT NULL DEFAULT 0,
+                issued_by bigint unsigned NOT NULL,
+                issued_at datetime NOT NULL,
+                PRIMARY KEY  (id),
+                UNIQUE KEY invoice_number (invoice_number),
+                UNIQUE KEY proforma_id (proforma_id),
+                KEY customer_issued (customer_id,issued_at)
+            ) $charset;",
+            "CREATE TABLE {$p}invoice_items (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                invoice_id bigint unsigned NOT NULL,
+                product_id bigint unsigned NOT NULL,
+                description varchar(190) NOT NULL DEFAULT '',
+                quantity bigint unsigned NOT NULL,
+                unit_price_toman bigint unsigned NOT NULL,
+                line_total_toman bigint unsigned NOT NULL,
+                PRIMARY KEY  (id),
+                KEY invoice_id (invoice_id)
+            ) $charset;",
+            "CREATE TABLE {$p}ledger_accounts (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                account_code varchar(20) NOT NULL,
+                account_name varchar(190) NOT NULL,
+                account_type varchar(20) NOT NULL,
+                is_active tinyint(1) NOT NULL DEFAULT 1,
+                PRIMARY KEY  (id),
+                UNIQUE KEY account_code (account_code)
+            ) $charset;",
+            "CREATE TABLE {$p}journal_entries (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                entry_number varchar(40) NOT NULL,
+                source_type varchar(30) NOT NULL,
+                source_id bigint unsigned NOT NULL,
+                memo varchar(255) NOT NULL DEFAULT '',
+                status varchar(16) NOT NULL DEFAULT 'posted',
+                debit_total_toman bigint unsigned NOT NULL,
+                credit_total_toman bigint unsigned NOT NULL,
+                created_by bigint unsigned NOT NULL,
+                created_at datetime NOT NULL,
+                PRIMARY KEY  (id),
+                UNIQUE KEY entry_number (entry_number),
+                UNIQUE KEY source_once (source_type,source_id),
+                KEY created_at (created_at)
+            ) $charset;",
+            "CREATE TABLE {$p}journal_lines (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                journal_entry_id bigint unsigned NOT NULL,
+                account_id bigint unsigned NOT NULL,
+                party_type varchar(30) NOT NULL DEFAULT '',
+                party_id bigint unsigned NOT NULL DEFAULT 0,
+                debit_toman bigint unsigned NOT NULL DEFAULT 0,
+                credit_toman bigint unsigned NOT NULL DEFAULT 0,
+                memo varchar(190) NOT NULL DEFAULT '',
+                PRIMARY KEY  (id),
+                KEY entry_id (journal_entry_id),
+                KEY account_party (account_id,party_type,party_id)
+            ) $charset;"
+        ];
+        foreach ($workflowTables as $sql) { dbDelta($sql); }
+        if (!$wpdb->get_var($wpdb->prepare("SHOW COLUMNS FROM {$p}payments LIKE %s", 'journal_entry_id'))) {
+            $wpdb->query("ALTER TABLE {$p}payments ADD COLUMN journal_entry_id bigint unsigned NOT NULL DEFAULT 0");
+        }
+
         update_option('parsian_final_schema_version', PARSIAN_FINAL_VERSION, false);
         Parsian_Final_Roles::register();
     }
