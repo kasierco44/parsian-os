@@ -71,7 +71,13 @@ object DashboardRepository {
     suspend fun logout(context: Context) {
         val session = SessionStore.read(context)
         if (session != null) {
-            try { request(session.apiRoot + "/auth/logout", "POST", session.accessToken, "{}") } catch (_: Exception) { }
+            try {
+                val revoked = request(
+                    session.apiRoot + "/auth/revoke-device", "POST", session.accessToken,
+                    JSONObject().put("device_uuid", session.deviceUuid).toString()
+                )
+                if (revoked.code !in 200..299) request(session.apiRoot + "/auth/logout", "POST", session.accessToken, "{}")
+            } catch (_: Exception) { }
         }
         SyncScheduler.cancel(context)
         val dao = ParsianDatabase.get(context).syncOperations()
