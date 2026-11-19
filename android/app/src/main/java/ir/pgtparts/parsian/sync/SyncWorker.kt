@@ -121,18 +121,21 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     val previousCursor = cursor
     val items = body.optJSONArray("items") ?: JSONArray()
     val events = ArrayList<SyncEventEntity>()
+    val operationAcknowledgements = ArrayList<Triple<String, String, String?>>()
     for (index in 0 until items.length()) {
      val item = items.optJSONObject(index) ?: continue
      val eventId = item.optLong("id", -1L)
-     if (eventId < 0L) continue
+     if (eventId <= 0L) continue
      val eventType = item.optString("event_type")
      val payloadJson = item.optString("payload", "{}")
      val eventPayload = try { JSONObject(payloadJson) } catch (_: Exception) { JSONObject() }
      val operationUuid = eventPayload.optString("operation_uuid")
      if (operationUuid.isNotBlank()) {
       when (eventType) {
-       "crm.lead.created.offline", "crm.lead.updated.offline", "crm.task.completed.offline", "sales.proforma.created.offline" -> dao.updateStatus(operationUuid, "applied")
-       "sync.operation.rejected" -> dao.updateStatus(operationUuid, "rejected", eventPayload.optString("reason"))
+       "crm.lead.created.offline", "crm.lead.updated.offline", "crm.task.completed.offline", "sales.proforma.created.offline" ->
+        operationAcknowledgements.add(Triple(operationUuid, "applied", null))
+       "sync.operation.rejected" ->
+        operationAcknowledgements.add(Triple(operationUuid, "rejected", eventPayload.optString("reason")))
       }
      }
      events.add(SyncEventEntity(
@@ -147,7 +150,11 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     }
     val nextCursor = body.optLong("next_cursor", cursor)
     if (nextCursor < cursor) return Result.failure()
+    // Persist inbox identities and cursor first; only acknowledge outbox items after that transaction commits.
     dao.persistInboxPage(events, nextCursor)
+    operationAcknowledgements.distinctBy { it.first }.forEach { ack ->
+     dao.updateStatus(ack.first, ack.second, ack.third)
+    }
     cursor = nextCursor
     morePages = body.optBoolean("has_more", false)
     if (!morePages || (events.isEmpty() && nextCursor == previousCursor)) break
