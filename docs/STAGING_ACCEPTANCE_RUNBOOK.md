@@ -41,6 +41,7 @@ The environment must report `staging` (or a clearly isolated non-production envi
 Run each command as a separate WP-CLI process:
 
 ```bash
+wp eval 'define("PARSIAN_ALLOW_FINANCE_TESTS", true); require WP_PLUGIN_DIR . "/parsian-final/tests/schema-acceptance.php";'
 wp eval 'define("PARSIAN_ALLOW_FINANCE_TESTS", true); require WP_PLUGIN_DIR . "/parsian-final/tests/finance-ledger-acceptance.php";'
 wp eval 'define("PARSIAN_ALLOW_FINANCE_TESTS", true); require WP_PLUGIN_DIR . "/parsian-final/tests/auth-sync-acceptance.php";'
 ```
