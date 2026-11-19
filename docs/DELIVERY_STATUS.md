@@ -407,3 +407,8 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Seeded the required base chart of accounts (1100, 1200, 1210, 1220, 1300, 2100, 2200, 3100, 4100, 5100) with INSERT IGNORE so repeated upgrades do not overwrite customized account names.
 - Installer now defines 26 tables across core and lifecycle modules. This is a source-level schema inventory only; the migration has not yet been executed against Staging. Database backup and the acceptance runbook must be used before testing.
 - Backup snapshot now also includes supplier and cheque event history tables. Plugin development version is 0.4.23.
+
+
+### Schema acceptance harness (2026-11-19)
+- Added a Staging-only schema acceptance script that checks all 26 expected tables, ten active seeded chart-of-account codes, and critical auth/sync/bank/payment/cheque migration columns.
+- Local PHP 8.4 syntax check passed for the new schema acceptance harness. The schema migration itself has not run against MySQL yet; the runbook now executes this check before the finance and auth/sync acceptance harnesses.
