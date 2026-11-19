@@ -367,3 +367,9 @@ Keep the existing live site and its database untouched until a staging backup, m
 
 ### Date formatter correction (2026-11-19)
 - Corrected escaped digit patterns in the web Jalali date parser and synchronized the corrected JavaScript into the plugin bundle. Plugin development version is 0.4.15.
+
+
+### Offline operation review (2026-11-19)
+- Added a manager-only queue for pending device operations. Managers can approve supported offline lead creation (which writes a lead under the originating seller and records an event visible to that seller) or reject an operation with a reason.
+- The current server-side apply handler intentionally supports only crm.lead.create. Other queued operation types remain pending until a matching domain-safe processor is implemented. The acceptance harness now includes approval, rejection and seller event visibility assertions; these still need to run against isolated Staging.
+- Plugin development version is now 0.4.17.
