@@ -102,10 +102,24 @@ try {
     $createdLead=(int)($approvedData['lead_id']??0);
     $assert($createdLead>0&&(int)$wpdb->get_var($wpdb->prepare("SELECT owner_user_id FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead))===(int)$userId,'approved offline lead remains owned by its originating seller');
 
+    // Verify seller event isolation and cursor progress over another user's event.
+    $foreignEventId = 0;
+    $foreignEventOk = $wpdb->insert($wpdb->prefix.'parsian_events', [
+        'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>0,
+        'event_type'=>'crm.foreign.qa','aggregate_type'=>'qa','aggregate_id'=>1,
+        'payload'=>wp_json_encode(['must_not_leak'=>true]),'created_at'=>current_time('mysql',true)
+    ], ['%s','%d','%s','%s','%d','%s','%s']);
+    $assert($foreignEventOk===1,'foreign fixture event is inserted');
+    $foreignEventId=(int)$wpdb->insert_id;
+    $user->remove_cap('parsian_manage_users');
+
     $pullRequest=new WP_REST_Request('GET','/parsian-final/v1/sync/pull');
     $pullRequest->set_param('since_id',0);
     $pulled=$sync->pull($pullRequest)->get_data();
     $assert((bool)array_filter($pulled['items']??[],static fn($event)=>($event['event_type']??'')==='crm.lead.created.offline'),'originating seller can pull the offline approval event');
+    $assert(!(bool)array_filter($pulled['items']??[],static fn($event)=>($event['event_type']??'')==='crm.foreign.qa'),'seller cannot pull another user event');
+    $assert((int)($pulled['next_cursor']??0)>=$foreignEventId,'seller delta cursor advances over filtered foreign events');
+    $user->add_cap('parsian_manage_users');
 
     $rejectOperation=wp_generate_uuid4();
     $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
@@ -136,6 +150,7 @@ try {
         $wpdb->delete($wpdb->prefix.'parsian_devices',['user_id'=>$userId],['%d']);
         $wpdb->delete($wpdb->prefix.'parsian_leads',['owner_user_id'=>$userId],['%d']);
         $wpdb->delete($wpdb->prefix.'parsian_events',['actor_user_id'=>$userId],['%d']);
+        $wpdb->delete($wpdb->prefix.'parsian_events',['event_type'=>'crm.foreign.qa'],['%s']);
         require_once ABSPATH.'wp-admin/includes/user.php';
         wp_delete_user($userId);
     }
