@@ -1,55 +1,58 @@
 # PARSIAN FINAL — WordPress Core
 
-Central WordPress plugin source for the PARSIAN FINAL platform. Plugin source version: **0.4.3**.
+Central WordPress plugin source for PARSIAN FINAL. Development source version: **0.4.23**.
 
 ## Architecture
+
 - WordPress REST API is the single system-of-record boundary for web, Android and Windows clients.
-- Clients must never connect directly to the WordPress MySQL database.
-- All writes require server-side capability checks, record-level scope, validation and auditability.
-- Install and test only on an isolated staging WordPress site until migrations, rollback, security and acceptance tests pass.
+- Clients never connect directly to MySQL.
+- Every write is guarded by server-side capabilities, domain validation, record scoping and audit events.
+- Install and test on an isolated Staging site only. Production remains untouched until migrations, rollback, security and acceptance tests pass.
 
 ## Implemented source areas
-- Schema/install and version-gated upgrades.
-- Roles and capabilities: manager, accountant, seller, customer.
-- WordPress-hosted PARSIAN OS menu page with role-aware web workspace, bundled CSS/JS assets and server-generated REST nonce.
-- CRM customer/lead endpoints with seller scoping in server-side queries.
-- Persisted proformas, manager approval, invoice conversion and balanced sales/receivable journal posting.
-- Payment approval, customer receipt allocations and party statements.
-- Double-entry journal register, trial balance and customer/supplier subledger reporting.
-- Inventory movement approval, stock ledger, weighted-average costing, invoice reservations and fulfillment/COGS posting.
+
+- Versioned dbDelta schema for CRM, sales, finance, ledger, inventory, bank, cheque, token, device and sync tables; base chart-of-accounts seed.
+- Roles and capabilities for manager, accountant, seller and customer.
+- WordPress-hosted role-aware web workspace with bundled assets and REST nonce; Windows Tauri bearer-token login uses configured CORS origins and Windows Credential Manager.
+- CRM customer/lead endpoints with seller assignment scoping; manager-only seller assignment and customer-account linking.
+- Proformas, manager approval, invoice conversion and balanced sales/receivable journal posting.
+- Payment register, approval, allocations, party statements and customer portal read views.
+- Double-entry journals, trial balance, party subledger and aging report.
+- Inventory movement approval, stock ledger, reservation and fulfillment/COGS foundations.
 - Cheque lifecycle and event history.
-- Bank account, statement import batch and reconciliation allocation source.
-- Opaque Bearer access/refresh token issuance, rotation, token-family revocation and device revocation.
-- Initial offline sync device registration, operation allowlist, payload-hash idempotency and delta event pull.
+- Bank account register, CSV/XLSX statement import, statement-line views, one-to-one and grouped reconciliation allocation APIs.
+- Opaque access/refresh tokens, rotation, token-family revocation, device registration and device revocation.
+- Offline sync outbox/inbox API, idempotency hash, delta event pull, manager review queue and supported offline lead creation approval.
+- Manager-only JSON database snapshot export with SHA-256 validation (non-destructive; not a restore system).
 
 ## Important API routes
+
 Base: `/wp-json/parsian-final/v1`
 
-- `GET /health`, `GET /me`
-- `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/revoke-device`
-- `GET|POST /sync/devices`, `POST /sync/push`, `GET /sync/pull`
-- `POST /proformas`, `GET /proformas`, `GET /proformas/{id}`, `POST /proformas/{id}/approve`
-- `POST /payments/{id}/approve`, `GET /ledger/journals`, `GET /ledger/trial-balance`, `GET /ledger/party-statement`
-- Bank routes include account management, statement import batches and reconciliation; consult `includes/class-bank.php` for current request schema.
+- Identity: `GET /health`, `GET /me`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/revoke-device`
+- Sync: `GET|POST /sync/devices`, `POST /sync/push`, `GET /sync/pull`, `GET /sync/operations`, `POST /sync/operations/{id}/approve`, `POST /sync/operations/{id}/reject`
+- CRM: `GET /customers`, `GET /leads`, `POST /customers/{id}/assign-seller`, `POST /customers/{id}/link-user`
+- Sales: `POST /proformas`, `GET /proformas`, `GET /proformas/{id}`, `POST /proformas/{id}/approve`
+- Finance: `GET /payments`, `POST /payments`, `POST /payments/{id}/approve`, `GET /cheques`, `GET /ledger/journals`, `GET /ledger/trial-balance`, `GET /ledger/party-statement`
+- Bank: `GET /bank/accounts`, `POST /bank/import`, `GET /bank/statement-lines`, `GET /bank/reconciliation-summary`, `GET /bank/journal-candidates`, `POST /bank/reconcile`
+- Customer portal: `GET /portal/overview`, `GET /portal/invoices`, `GET /portal/proformas`, `GET /portal/payments`
+- Backup: `GET /backup/export`, `POST /backup/validate`
 
-## Staging-only setup
-1. Back up the staging database and files.
-2. Copy this directory to `wp-content/plugins/parsian-final`.
-3. Activate **PARSIAN FINAL Core** on disposable staging only.
-4. Check `/wp-json/parsian-final/v1/health` and verify the reported plugin/schema versions.
-5. Create synthetic test users for manager, accountant and seller roles.
-6. Run the guarded WP-CLI acceptance harnesses only against the isolated staging database:
-   - `tests/finance-ledger-acceptance.php`
-   - `tests/auth-sync-acceptance.php`
-7. Rehearse rollback and backup restore before any production consideration.
+## Staging acceptance
+
+Follow `docs/STAGING_ACCEPTANCE_RUNBOOK.md` before running migrations or fixture tests. The runbook requires a Staging database backup, full PHP lint, schema verification, both WP-CLI acceptance harnesses and a REST health check.
 
 ## Known limitations — not production-ready
-- Source implementation is not equivalent to successful WordPress/MySQL runtime validation. The acceptance harnesses and migrations still require staging execution.
-- Bank CSV/XLSX parsing, duplicate-file/row handling, partial and many-to-many reconciliation require fixture and integration tests; opening/closing statement balance controls and period close remain outstanding.
-- Accounting still needs full tax/discount treatment, returns/credit notes, period close and complete reconciliation acceptance.
-- Sync pull still uses a numeric cursor and is not fully bound to per-customer assignment scopes. Aggregate-version conflict resolution, transactional processing/approval of queued operations, retention and retry policies are incomplete.
-- Web panel currently provides read views for CRM customers/leads, proformas, trial balance, journals and bank accounts plus manager proforma approval. Create/edit, payments, cheques, reconciliation, full customer self-service and browser acceptance tests remain incomplete.
-- Android flavors are scaffolded; encrypted local DB, token vault, outbox/inbox, WorkManager sync and business workflows remain incomplete.
-- Windows clients, installer, signed release artifacts, backup/restore acceptance and end-to-end security tests are not complete.
 
-Do not use real customer, cheque or bank data in test fixtures. Do not install this development branch on the production site.
+- The latest schema source has not yet been executed against Staging. Whole-plugin PHP lint and both WP-CLI acceptance harnesses still need a verified pass.
+- No APK or Windows MSI/NSIS installer is confirmed. Android and Windows builds, clean-device/VM installation, update, uninstall and signing tests remain outstanding.
+- Android has encrypted Room outbox/inbox, token storage, seller/customer read views and offline lead drafts; aggregate-version conflict resolution, full domain processors, dead-letter handling and complete business workflows remain incomplete.
+- Windows Tauri has remote bearer authentication and Credential Manager storage but no local encrypted SQLite outbox/inbox or full offline workflow yet.
+- Only `crm.lead.create` is currently applied from the manager review queue. Other allowlisted offline operation types remain pending until their safe domain handlers are implemented.
+- Bank statement upload and reconciliation APIs/UI exist, but CSV/XLSX fixtures, opening/closing balance controls and end-to-end matching tests remain outstanding.
+- Accounting still needs full tax/discount treatment, returns/credit notes, period close and full COGS/stock valuation acceptance.
+- Backup export is limited to 10,000 rows per table and 20 MiB; it excludes WordPress uploads/media, credentials and device tokens. Validation does not restore data. Full backup requires host-level database plus files backup.
+
+## Safety
+
+Do not install this development build on Production, do not merge PR #21, and do not treat source commits or a green syntax check as proof of operational readiness.
