@@ -296,3 +296,11 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Added encrypted session storage for API root, access/refresh tokens and device UUID. The login repository calls the WordPress /auth/login endpoint over HTTPS and stores the returned opaque tokens; the launch screen allows the user to enter a staging API URL rather than hard-coding Production.
 - Added an outbox enqueue API with the currently server-allowlisted operation types and a network-constrained WorkManager worker. The worker registers the device, pushes up to 100 queued operations, attempts refresh-token rotation on HTTP 401, and marks accepted operations as pending review rather than treating them as posted business transactions.
 - Not implemented yet: a full pull/inbox store, aggregate-version conflict resolution, dead-letter UI, explicit logout/revocation UI, business workflows, complete unit/API tests and physical-device validation. The new Kotlin code has not been compiled because the available GitHub Actions job records expose no build logs; no APK is claimed.
+
+
+## Web panel operational read views (2026-11-19)
+
+- Replaced the initial generic module placeholders with live read-only views for assigned customers, seller-owned leads, proformas, trial balance, posted journal register and bank accounts using the existing WordPress REST routes.
+- Added manager-only proforma approval action in the UI; the server's `parsian_sales_approve` capability remains the authoritative gate. Table values are inserted as text nodes rather than HTML, reducing stored/reflected XSS risk.
+- Corrected WordPress role slug mapping and verified the current web JavaScript with local Node.js `node --check` (passed).
+- The panel still depends on authenticated WordPress cookie + REST nonce on the same origin. No browser integration, live staging data, CRUD forms, payment/cheque operations or reconciliation UI has been validated.
