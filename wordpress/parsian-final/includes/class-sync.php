@@ -254,7 +254,7 @@ final class Parsian_Final_Sync {
                 || str_starts_with($eventType, 'bank.')
                 || str_starts_with($eventType, 'stock.');
 
-            if ($isManager || ($isFinance && $financeEvent) || (int) $event['actor_user_id'] === $userId) {
+            if ($isManager || ($isFinance ? $financeEvent : (int) $event['actor_user_id'] === $userId)) {
                 unset($event['actor_user_id']);
                 $visible[] = $event;
             }
