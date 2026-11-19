@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -114,13 +113,13 @@ private fun ParsianMobileApp(context: Context) {
                                     Text("تعداد پیش‌فاکتور: " + overview.optInt("proforma_count"))
                                     Spacer(Modifier.height(14.dp))
                                 }
-                                portalSection(data, "invoices", "فاکتورهای من", listOf("invoice_number", "total_toman", "status", "due_date"))
-                                portalSection(data, "proformas", "پیش‌فاکتورهای من", listOf("document_number", "total_toman", "status", "due_date"))
-                                portalSection(data, "payments", "دریافت‌های من", listOf("amount_toman", "method", "reference", "status"))
+                                item { portalSection(data, "invoices", "فاکتورهای من", listOf("invoice_number", "total_toman", "status", "due_date")) }
+                                item { portalSection(data, "proformas", "پیش‌فاکتورهای من", listOf("document_number", "total_toman", "status", "due_date")) }
+                                item { portalSection(data, "payments", "دریافت‌های من", listOf("amount_toman", "method", "reference", "status")) }
                             } else {
-                                portalSection(data, "customers", "مشتریان تخصیص‌یافته", listOf("display_name", "province", "status"))
-                                portalSection(data, "leads", "سرنخ‌های فروش من", listOf("display_name", "phone", "province", "status"))
-                                portalSection(data, "proformas", "پیش‌فاکتورهای من", listOf("document_number", "total_toman", "status"))
+                                item { portalSection(data, "customers", "مشتریان تخصیص‌یافته", listOf("display_name", "province", "status")) }
+                                item { portalSection(data, "leads", "سرنخ‌های فروش من", listOf("display_name", "phone", "province", "status")) }
+                                item { portalSection(data, "proformas", "پیش‌فاکتورهای من", listOf("document_number", "total_toman", "status")) }
                             }
                         }
                     }
