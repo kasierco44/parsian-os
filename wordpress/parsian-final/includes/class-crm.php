@@ -156,6 +156,18 @@ final class Parsian_Final_CRM {
                 get_current_user_id(), $per_page, $offset
             ), ARRAY_A);
         }
+        foreach ((array) $rows as &$row) {
+            $row['revision'] = hash('sha256', wp_json_encode([
+                'id' => (int) $row['id'],
+                'display_name' => (string) ($row['display_name'] ?? ''),
+                'phone' => (string) ($row['phone'] ?? ''),
+                'province' => (string) ($row['province'] ?? ''),
+                'notes' => (string) ($row['notes'] ?? ''),
+                'status' => (string) ($row['status'] ?? ''),
+                'updated_at' => (string) ($row['updated_at'] ?? ''),
+            ], JSON_UNESCAPED_UNICODE));
+        }
+        unset($row);
         return new WP_REST_Response(['items' => $rows ?: [], 'page' => $page, 'per_page' => $per_page], 200);
     }
     public function create_lead(WP_REST_Request $request): WP_REST_Response {
