@@ -28,7 +28,7 @@ final class Parsian_Final_REST {
             'parsian_manage_settings','parsian_manage_users','parsian_view_reports',
             'parsian_crm_read','parsian_crm_write','parsian_sales_create','parsian_sales_approve',
             'parsian_finance_read','parsian_finance_write','parsian_inventory_read',
-            'parsian_inventory_write','parsian_sync_use'
+            'parsian_inventory_write','parsian_sync_use','parsian_customer_portal_read'
         ];
         $granted = [];
         foreach ($caps as $cap) { if (current_user_can($cap)) { $granted[] = $cap; } }
