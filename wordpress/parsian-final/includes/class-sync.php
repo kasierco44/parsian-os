@@ -264,9 +264,10 @@ final class Parsian_Final_Sync {
                 'base_updated_at'=>$baseUpdatedAt,'server_updated_at'=>$serverUpdatedAt,
                 'server_revision'=>$serverRevision,'server_record'=>$row,'device_changes'=>$deviceChanges
             ];
-            $wpdb->update($wpdb->prefix.'parsian_sync_ops',[
+            $conflictUpdated = $wpdb->update($wpdb->prefix.'parsian_sync_ops',[
                 'status'=>'conflict','result'=>wp_json_encode($conflict)
             ],['id'=>(int)$operation['id'],'status'=>'pending_review'],['%s','%s'],['%d','%s']);
+            if ($conflictUpdated !== 1) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_conflict_state_changed'],409); }
             $eventOk = $wpdb->insert($wpdb->prefix.'parsian_events',[
                 'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>$ownerId,
                 'event_type'=>'sync.operation.conflict','aggregate_type'=>$resource,'aggregate_id'=>$recordId,
@@ -630,7 +631,8 @@ final class Parsian_Final_Sync {
                     ],
                     'device_changes' => array_intersect_key($payload, array_flip(['display_name','phone','province','notes']))
                 ];
-                $wpdb->update($table, ['status'=>'conflict','result'=>wp_json_encode($conflict)], ['id'=>$id,'status'=>'pending_review'], ['%s','%s'], ['%d','%s']);
+                $conflictUpdated = $wpdb->update($table, ['status'=>'conflict','result'=>wp_json_encode($conflict)], ['id'=>$id,'status'=>'pending_review'], ['%s','%s'], ['%d','%s']);
+                if ($conflictUpdated !== 1) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_conflict_state_changed'],409); }
                 $eventOk = $wpdb->insert($wpdb->prefix.'parsian_events',[
                     'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>$ownerId,
                     'event_type'=>'sync.operation.conflict','aggregate_type'=>'lead','aggregate_id'=>$leadId,
