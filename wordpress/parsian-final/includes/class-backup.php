@@ -82,6 +82,7 @@ final class Parsian_Final_Backup {
                 continue;
             }
             $columns=$wpdb->get_col("SHOW COLUMNS FROM {$table}",0);
+            if(!$columns){$allInnoDb=false;$tablePlan[$suffix]=['exists'=>true,'engine'=>'InnoDB','compatible'=>false,'reason'=>'table_columns_unavailable'];continue;}
             $backupRows=$backup['tables'][$suffix]??[];
             $rowKeys=[];
             if(isset($backupRows[0])&&is_array($backupRows[0]))$rowKeys=array_keys($backupRows[0]);
@@ -92,7 +93,8 @@ final class Parsian_Final_Backup {
         $sourceSite=(string)($backup['source_site']??'');
         $targetSite=home_url('/');
         $sameSite=untrailingslashit($sourceSite)===untrailingslashit($targetSite);
-        $ready=$allInnoDb&&$sameSite;
+        $confirmedTarget=isset($request['target_site_confirmation']) && is_string($request['target_site_confirmation']) && hash_equals(untrailingslashit($targetSite),untrailingslashit($request['target_site_confirmation']));
+        $ready=$allInnoDb&&$confirmedTarget;
         return new WP_REST_Response([
             'ready'=>$ready,
             'restored'=>false,
@@ -100,10 +102,11 @@ final class Parsian_Final_Backup {
             'source_site'=>$sourceSite,
             'target_site'=>$targetSite,
             'same_site'=>$sameSite,
+            'target_site_confirmed'=>$confirmedTarget,
             'schema_version'=>$targetSchema,
             'all_tables_innodb'=>$allInnoDb,
             'tables'=>$tablePlan,
-            'message'=>$ready?'پیش‌بررسی ساختار و محیط موفق بود؛ هنوز هیچ داده‌ای بازیابی نشده است.':'پیش‌بررسی کامل نشد؛ اختلاف سایت یا موتور/ستون جدول‌ها باید برطرف شود.'
+            'message'=>$ready?'پیش‌بررسی ساختار موفق بود؛ تأیید صریح مقصد ثبت شد و هنوز هیچ داده‌ای بازیابی نشده است.':'پیش‌بررسی کامل نشد؛ موتور/ستون جدول‌ها یا تأیید صریح آدرس مقصد لازم است.'
         ],200);
     }
 
