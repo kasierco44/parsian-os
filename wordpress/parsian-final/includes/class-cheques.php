@@ -125,6 +125,9 @@ final class Parsian_Final_Cheques {
                 'status'=>'reversed','reversed_at'=>current_time('mysql',true),'reversal_event_id'=>(int)$eventId
             ],['id'=>(int)$cheque['payment_id'],'status'=>'posted'],['%s','%s','%d'],['%d','%s']);
             if($paymentUpdate!==1){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'linked_payment_reversal_conflict'],409);}
+            $wpdb->update($wpdb->prefix.'parsian_payment_allocations',[
+                'status'=>'reversed','reversed_at'=>current_time('mysql',true),'reversal_event_id'=>(int)$eventId
+            ],['payment_id'=>(int)$cheque['payment_id'],'status'=>'active'],['%s','%s','%d'],['%d','%s']);
         }
         $this->event('finance.cheque.transitioned','cheque',$id,['from'=>$from,'to'=>$to,'journal_entry_id'=>$journalId,'event_id'=>(int)$eventId]);
         $wpdb->query('COMMIT');
