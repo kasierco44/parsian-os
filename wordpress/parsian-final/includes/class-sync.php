@@ -629,6 +629,7 @@ final class Parsian_Final_Sync {
                     'resource_type' => 'lead',
                     'record_id' => $leadId,
                     'base_updated_at' => $baseUpdatedAt,
+                    'base_revision' => $baseRevision,
                     'server_updated_at' => $serverUpdatedAt,
                     'server_revision' => $serverRevision,
                     'server_record' => [
