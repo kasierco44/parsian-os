@@ -1,6 +1,6 @@
 # PARSIAN FINAL — WordPress Core
 
-Central WordPress plugin source for PARSIAN FINAL. Development source version: **0.4.23**.
+Central WordPress plugin source for PARSIAN FINAL. Development source version: **0.4.24**.
 
 ## Architecture
 
@@ -56,3 +56,9 @@ Follow `docs/STAGING_ACCEPTANCE_RUNBOOK.md` before running migrations or fixture
 ## Safety
 
 Do not install this development build on Production, do not merge PR #21, and do not treat source commits or a green syntax check as proof of operational readiness.
+
+
+### Offline task and proforma workflow (0.4.24)
+- Added task storage and manager assignment endpoint (`POST /tasks`); sellers can list only their assigned tasks (`GET /tasks`).
+- Manager-approved offline `crm.task.complete` updates the assigned task in one transaction and emits a delta-sync event.
+- Manager-approved offline `sales.proforma.draft` validates customer assignment, active products, quantities and amounts, creates a draft proforma only, and records its event and operation result transactionally. It does not issue an invoice or reserve stock.
