@@ -188,7 +188,7 @@ final class Parsian_Final_Ledger {
         if(!$this->valid_date($asOf))return new WP_REST_Response(['code'=>'invalid_as_of_date'],400);
         global $wpdb;
         $customers=$wpdb->get_col("SELECT DISTINCT customer_id FROM {$wpdb->prefix}parsian_invoices WHERE status IN ('posted','fulfilled') ORDER BY customer_id ASC");
-        $result=[];$totals=['0_30'=>0,'31_60'=>0,'61_90'=>0,'over_90'=>0];$grand=0;
+        $result=[];$totals=['not_due'=>0,'1_30'=>0,'31_60'=>0,'61_90'=>0,'over_90'=>0];$grand=0;
         foreach((array)$customers as $customerId){
             $aging=$this->aging_for_customer((int)$customerId,$asOf);
             if($aging['total_outstanding_toman']<1)continue;
@@ -196,6 +196,6 @@ final class Parsian_Final_Ledger {
             foreach($totals as $key=>$value)$totals[$key]+=$aging['buckets_toman'][$key];
             $grand+=$aging['total_outstanding_toman'];
         }
-        return new WP_REST_Response(['as_of_date'=>$asOf,'basis'=>'days_since_invoice_issue_date_not_due_date','customers'=>$result,'totals_toman'=>$totals,'total_outstanding_toman'=>$grand],200);
+        return new WP_REST_Response(['as_of_date'=>$asOf,'basis'=>'days_past_due_using_due_date_fallback_to_issue_date','customers'=>$result,'totals_toman'=>$totals,'total_outstanding_toman'=>$grand],200);
     }
 }
