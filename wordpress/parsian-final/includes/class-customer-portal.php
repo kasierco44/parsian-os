@@ -32,14 +32,16 @@ final class Parsian_Final_Customer_Portal {
     public function invoices(WP_REST_Request $request): WP_REST_Response {
         $customerId=$this->customer_id(); if(!$customerId)return $this->denied();
         global $wpdb;
-        $rows=$wpdb->get_results($wpdb->prepare("SELECT id,invoice_number,total_toman,status,due_date,issued_at,COALESCE(updated_at,issued_at) AS updated_at,journal_entry_id FROM {$wpdb->prefix}parsian_invoices WHERE customer_id=%d ORDER BY issued_at DESC,id DESC LIMIT 100",$customerId),ARRAY_A);
+        $rows=$wpdb->get_results($wpdb->prepare("SELECT id,invoice_number,total_toman,status,due_date,issued_at,COALESCE(updated_at,issued_at) AS updated_at,journal_entry_id,proforma_id,customer_id,issued_by FROM {$wpdb->prefix}parsian_invoices WHERE customer_id=%d ORDER BY issued_at DESC,id DESC LIMIT 100",$customerId),ARRAY_A);
         foreach ((array) $rows as &$row) {
             $row['revision'] = hash('sha256', wp_json_encode([
                 'id'=>(int)$row['id'],'invoice_number'=>(string)$row['invoice_number'],
                 'total_toman'=>(int)$row['total_toman'],'status'=>(string)$row['status'],
                 'due_date'=>(string)($row['due_date']??''),'issued_at'=>(string)$row['issued_at'],
-                'updated_at'=>(string)($row['updated_at']??''),'journal_entry_id'=>(int)$row['journal_entry_id']
+                'updated_at'=>(string)($row['updated_at']??''),'journal_entry_id'=>(int)$row['journal_entry_id'],'proforma_id'=>(int)$row['proforma_id'],'customer_id'=>(int)$row['customer_id'],'issued_by'=>(int)$row['issued_by']
             ], JSON_UNESCAPED_UNICODE));
+        }
+            unset($row['proforma_id'], $row['customer_id'], $row['issued_by']);
         }
         unset($row);
         return new WP_REST_Response(['items'=>$rows?:[]],200);
@@ -47,7 +49,7 @@ final class Parsian_Final_Customer_Portal {
     public function proformas(WP_REST_Request $request): WP_REST_Response {
         $customerId=$this->customer_id(); if(!$customerId)return $this->denied();
         global $wpdb;
-        $rows=$wpdb->get_results($wpdb->prepare("SELECT id,document_number,total_toman,status,due_date,created_at,updated_at,customer_id,notes,invoice_id FROM {$wpdb->prefix}parsian_proformas WHERE customer_id=%d ORDER BY created_at DESC,id DESC LIMIT 100",$customerId),ARRAY_A);
+        $rows=$wpdb->get_results($wpdb->prepare("SELECT id,document_number,total_toman,status,due_date,created_at,updated_at,customer_id,notes,invoice_id,created_by FROM {$wpdb->prefix}parsian_proformas WHERE customer_id=%d ORDER BY created_at DESC,id DESC LIMIT 100",$customerId),ARRAY_A);
         foreach ((array) $rows as &$row) {
             $row['revision'] = hash('sha256', wp_json_encode([
                 'id'=>(int)$row['id'],'document_number'=>(string)$row['document_number'],
