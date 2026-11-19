@@ -160,27 +160,28 @@ final class Parsian_Final_Ledger {
     private function aging_for_customer(int $customerId,string $asOf): array {
         global $wpdb;
         $rows=$wpdb->get_results($wpdb->prepare(
-            "SELECT i.id,i.invoice_number,i.issued_at,i.total_toman,
+            "SELECT i.id,i.invoice_number,i.issued_at,i.due_date,i.total_toman,
                     COALESCE(SUM(CASE WHEN pa.status='active' THEN pa.amount_toman ELSE 0 END),0) allocated_toman
              FROM {$wpdb->prefix}parsian_invoices i
              LEFT JOIN {$wpdb->prefix}parsian_payment_allocations pa ON pa.invoice_id=i.id
              WHERE i.customer_id=%d AND i.status IN ('posted','fulfilled')
-             GROUP BY i.id,i.invoice_number,i.issued_at,i.total_toman
+             GROUP BY i.id,i.invoice_number,i.issued_at,i.due_date,i.total_toman
              HAVING i.total_toman-COALESCE(SUM(CASE WHEN pa.status='active' THEN pa.amount_toman ELSE 0 END),0)>0
              ORDER BY i.issued_at ASC,i.id ASC",
             $customerId
         ),ARRAY_A)?:[];
-        $buckets=['0_30'=>0,'31_60'=>0,'61_90'=>0,'over_90'=>0];$items=[];$total=0;
+        $buckets=['not_due'=>0,'1_30'=>0,'31_60'=>0,'61_90'=>0,'over_90'=>0];$items=[];$total=0;
         $asOfTs=strtotime($asOf.' 00:00:00');
         foreach($rows as $row){
             $balance=max(0,(int)$row['total_toman']-(int)$row['allocated_toman']);
             $issued=substr((string)$row['issued_at'],0,10);
-            $days=max(0,(int)floor(($asOfTs-strtotime($issued.' 00:00:00'))/86400));
-            $bucket=$days<=30?'0_30':($days<=60?'31_60':($days<=90?'61_90':'over_90'));
+            $due=!empty($row['due_date'])?(string)$row['due_date']:$issued;
+            $days=(int)floor(($asOfTs-strtotime($due.' 00:00:00'))/86400);
+            $bucket=$days<=0?'not_due':($days<=30?'1_30':($days<=60?'31_60':($days<=90?'61_90':'over_90')));
             $buckets[$bucket]+=$balance;$total+=$balance;
-            $items[]=['invoice_id'=>(int)$row['id'],'invoice_number'=>$row['invoice_number'],'issued_at'=>$row['issued_at'],'age_days'=>$days,'aging_bucket'=>$bucket,'balance_toman'=>$balance];
+            $items[]=['invoice_id'=>(int)$row['id'],'invoice_number'=>$row['invoice_number'],'issued_at'=>$row['issued_at'],'due_date'=>$row['due_date']?:null,'days_past_due'=>max(0,$days),'aging_bucket'=>$bucket,'balance_toman'=>$balance];
         }
-        return ['as_of_date'=>$asOf,'basis'=>'days_since_invoice_issue_date_not_due_date','buckets_toman'=>$buckets,'total_outstanding_toman'=>$total,'invoices'=>$items];
+        return ['as_of_date'=>$asOf,'basis'=>'days_past_due_using_due_date_fallback_to_issue_date','buckets_toman'=>$buckets,'total_outstanding_toman'=>$total,'invoices'=>$items];
     }
     public function receivables_aging(WP_REST_Request $request): WP_REST_Response {
         $asOf=$request->get_param('as_of_date')?:current_time('Y-m-d');
