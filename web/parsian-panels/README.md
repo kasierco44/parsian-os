@@ -35,6 +35,6 @@ Development UI scaffold only; not production-ready.
 ## Customer and backup workspaces (2026-11-19)
 
 - Customer role now has read-only self-service views for its linked account's invoices, proformas and posted incoming payments.
-- Manager role has a database snapshot export and checksum validation workspace, customer/seller assignment controls, and an offline-operation review queue. The only currently executable offline approval handler is lead creation; other operation types can be rejected but are not applied. Validation is non-destructive; backup restore is not implemented. The export is capped at 10,000 rows per table and 20 MiB and excludes WordPress uploads/media and authentication tokens.
+- Manager role has a database snapshot export and checksum validation workspace, customer/seller assignment controls, and an offline-operation review queue. The only currently executable offline approval handler is lead creation; other operation types can be rejected but are not applied. The manager review queue shows pending operations and writes review events back to the originating seller's delta stream. Validation is non-destructive; backup restore is not implemented. The export is capped at 10,000 rows per table and 20 MiB and excludes WordPress uploads/media and authentication tokens.
 - Windows Tauri uses a separate bearer-token login path; the WordPress admin panel continues to use same-origin cookie + REST nonce authentication.
 - Web tables use Persian digits, Jalali dates and Persian labels for common workflow states.
