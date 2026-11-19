@@ -49,11 +49,22 @@ final class Parsian_Final_Finance {
         $perPage = min(100, max(1, absint($request->get_param('per_page') ?: 50)));
         $offset = ($page - 1) * $perPage;
         $rows = $wpdb->get_results($wpdb->prepare(
-            "SELECT id,direction,amount_toman,party_type,party_id,method,reference,status,created_by,created_at,journal_entry_id
+            "SELECT id,direction,amount_toman,party_type,party_id,method,reference,status,created_by,created_at,updated_at,journal_entry_id
              FROM {$wpdb->prefix}parsian_payments
              ORDER BY created_at DESC,id DESC LIMIT %d OFFSET %d",
             $perPage, $offset
         ), ARRAY_A);
+        foreach ((array) $rows as &$row) {
+            $row['revision'] = hash('sha256', wp_json_encode([
+                'id'=>(int)$row['id'],'direction'=>(string)$row['direction'],
+                'amount_toman'=>(int)$row['amount_toman'],'party_type'=>(string)$row['party_type'],
+                'party_id'=>(int)$row['party_id'],'method'=>(string)$row['method'],
+                'reference'=>(string)$row['reference'],'status'=>(string)$row['status'],
+                'created_by'=>(int)$row['created_by'],'created_at'=>(string)$row['created_at'],
+                'updated_at'=>(string)($row['updated_at']??''),'journal_entry_id'=>(int)$row['journal_entry_id']
+            ], JSON_UNESCAPED_UNICODE));
+        }
+        unset($row);
         return new WP_REST_Response(['items'=>$rows ?: [],'page'=>$page,'per_page'=>$perPage],200);
     }
 
@@ -85,7 +96,7 @@ final class Parsian_Final_Finance {
             'method'=>$method,
             'reference'=>sanitize_text_field($p['reference'] ?? ''),
             'status'=>'pending_approval','created_by'=>get_current_user_id(),
-            'created_at'=>current_time('mysql', true)
+            'created_at'=>current_time('mysql', true),'updated_at'=>current_time('mysql', true)
         ], ['%s','%d','%s','%d','%s','%s','%s','%d','%s']);
         if (!$ok) return new WP_REST_Response(['code'=>'payment_create_failed'], 500);
         $id = (int) $wpdb->insert_id;
@@ -196,7 +207,7 @@ final class Parsian_Final_Finance {
         }
         $journalId=Parsian_Final_Ledger::create_entry('payment',$id,'ثبت دریافت/پرداخت شماره '.$id,$lines,get_current_user_id());
         if(!$journalId){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'journal_post_failed'],500);}
-        $updated=$wpdb->update($table,['status'=>'posted','journal_entry_id'=>$journalId],['id'=>$id,'status'=>'pending_approval'],['%s','%d'],['%d','%s']);
+        $updated=$wpdb->update($table,['status'=>'posted','journal_entry_id'=>$journalId,'updated_at'=>current_time('mysql',true)],['id'=>$id,'status'=>'pending_approval'],['%s','%d','%s'],['%d','%s']);
         if($updated!==1){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'payment_state_conflict'],409);}
         $wpdb->insert($wpdb->prefix.'parsian_events',[
             'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>get_current_user_id(),
