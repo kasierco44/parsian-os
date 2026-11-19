@@ -152,7 +152,7 @@ final class Parsian_Final_Sync {
             $wpdb->query('ROLLBACK');
             return new WP_REST_Response(['code'=>'sync_operation_not_reviewable','status'=>$operation['status']],409);
         }
-        if (!in_array($operation['operation_type'], ['crm.lead.create', 'crm.lead.update', 'crm.task.complete'], true)) {
+        if (!in_array($operation['operation_type'], ['crm.lead.create', 'crm.lead.update', 'crm.task.complete', 'sales.proforma.draft'], true)) {
             $wpdb->query('ROLLBACK');
             return new WP_REST_Response(['code'=>'operation_handler_not_available','operation_type'=>$operation['operation_type']],422);
         }
