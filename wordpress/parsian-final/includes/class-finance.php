@@ -49,7 +49,7 @@ final class Parsian_Final_Finance {
         $perPage = min(100, max(1, absint($request->get_param('per_page') ?: 50)));
         $offset = ($page - 1) * $perPage;
         $rows = $wpdb->get_results($wpdb->prepare(
-            "SELECT id,direction,amount_toman,party_type,party_id,method,reference,status,created_by,created_at,updated_at,journal_entry_id
+            "SELECT id,direction,amount_toman,party_type,party_id,method,reference,status,created_by,created_at,COALESCE(updated_at,created_at) AS updated_at,journal_entry_id
              FROM {$wpdb->prefix}parsian_payments
              ORDER BY created_at DESC,id DESC LIMIT %d OFFSET %d",
             $perPage, $offset
