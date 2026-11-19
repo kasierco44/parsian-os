@@ -19,17 +19,17 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
  private val transport = SyncHttpTransport()
  private val jsonType = "application/json; charset=utf-8".toMediaType()
 
- private suspend fun execute(request: Request): SyncSyncHttpResult = withContext(Dispatchers.IO) {
+ private suspend fun execute(request: Request): SyncHttpResult = withContext(Dispatchers.IO) {
   transport.execute(request)
  }
 
- private suspend fun post(url: String, body: String, token: String): HttpResult {
+ private suspend fun post(url: String, body: String, token: String): SyncHttpResult {
   val builder = Request.Builder().url(url).header("Accept", "application/json").post(body.toRequestBody(jsonType))
   if (token.isNotBlank()) builder.header("Authorization", "Bearer " + token)
   return execute(builder.build())
  }
 
- private suspend fun get(url: String, token: String): HttpResult {
+ private suspend fun get(url: String, token: String): SyncHttpResult {
   val builder = Request.Builder().url(url).header("Accept", "application/json").get()
   if (token.isNotBlank()) builder.header("Authorization", "Bearer " + token)
   return execute(builder.build())
@@ -46,7 +46,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
   return access
  }
 
- private suspend fun authenticatedPost(apiRoot: String, path: String, body: String, initialToken: String, refreshToken: String): HttpResult {
+ private suspend fun authenticatedPost(apiRoot: String, path: String, body: String, initialToken: String, refreshToken: String): SyncHttpResult {
   var result = post(apiRoot + path, body, initialToken)
   if (result.code == 401) {
    val renewed = refresh(apiRoot, refreshToken) ?: return result
@@ -55,7 +55,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
   return result
  }
 
- private suspend fun authenticatedGet(apiRoot: String, path: String, initialToken: String, refreshToken: String): HttpResult {
+ private suspend fun authenticatedGet(apiRoot: String, path: String, initialToken: String, refreshToken: String): SyncHttpResult {
   var result = get(apiRoot + path, initialToken)
   if (result.code == 401) {
    val renewed = refresh(apiRoot, refreshToken) ?: return result
