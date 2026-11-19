@@ -311,3 +311,33 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Added `class-panels.php` and registered a PARSIAN OS menu page in WordPress for users with `parsian_access_core`.
 - The plugin now enqueues its bundled panel CSS/JavaScript only on that page and injects the canonical REST API root plus a WordPress REST nonce through `wp_localize_script`. This resolves the same-origin nonce wiring for the WordPress-hosted browser panels.
 - The plugin page includes the role-aware dashboard and read-only CRM/finance views; server endpoints continue to enforce permissions. PHP syntax check passed locally for the new `class-panels.php` file only. Full-plugin lint, staging activation, browser tests and runtime API verification remain unconfirmed.
+
+
+## Role-specific apps, Windows auth and backup foundation (2026-11-19)
+
+### WordPress web panels
+- The same-origin WordPress admin panel now renders role-specific manager, accountant and seller modules. The customer role has separate self-service read views for invoices, proformas and incoming payment records.
+- Added manager-only seller-to-customer assignment and customer-account linking endpoints. Seller customer queries remain constrained by the assigned-customer usermeta relation; customer self-service queries are constrained to the customer ID linked to the authenticated customer account.
+- The panel bundle is synchronized between web/parsian-panels and the WordPress plugin assets. The web CI now checks JavaScript syntax and exact bundle equality.
+
+### Android
+- Seller and customer are separate Gradle product flavors with distinct application IDs and labels.
+- Added HTTPS WordPress token login, encrypted token storage, SQLCipher-backed Room storage, durable outbox/inbox, persisted delta cursor, WorkManager scheduling, refresh-token rotation, and role-specific dashboard data retrieval.
+- Seller can create a local lead draft; the server currently accepts it into pending_review and does not auto-create/post it. Customer can view only the linked customer's invoices, proformas and incoming payments.
+- Logout attempts device revocation, cancels queued work, clears account-specific outbox/inbox/cursor data and removes session tokens while retaining the local database encryption key.
+- No APK is claimed: Android source has not yet passed a verifiable CI build or physical-device test.
+
+### Windows
+- Tauri shell now has a bearer-token login flow against a supplied HTTPS WordPress Staging URL, token refresh, device revocation on logout, and Windows Credential Manager storage via the keyring crate.
+- WordPress REST CORS is restricted to configured Tauri origins (with local Tauri defaults); the server continues to enforce bearer identity and route capabilities.
+- The Windows installer workflow exists but MSI/NSIS artifacts have not been verified. Desktop local SQLite/outbox, offline conflict handling, backup/restore, signing and clean-VM install tests remain outstanding.
+
+### Backup
+- Added manager-only JSON snapshot export for the selected core business tables and customer/seller assignment metadata, with SHA-256 checksum. Export is limited to 10,000 rows per table and 20 MiB.
+- Added non-destructive checksum/structure validation. It does not restore records and excludes WordPress uploads/media, users/passwords and authentication tokens. Full production backup still requires host-level database plus files backup.
+
+### Database and validation
+- Fixed a missing schema migration: the token authentication table is now created by the plugin installer before bearer token issuance.
+- Local PHP 8.4 syntax checks passed for the two newly added classes (customer portal and backup). This is not a whole-plugin lint run.
+- Previous GitHub Actions records still showed failed web, Android and PHP jobs with no exposed steps/logs. No successful latest CI run, APK, MSI/EXE, or staging DB acceptance result is confirmed in this status.
+- Staging migration and WP-CLI acceptance tests remain required. Production remains untouched and PR #21 remains unmerged.
