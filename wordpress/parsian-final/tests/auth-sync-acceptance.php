@@ -212,7 +212,7 @@ try {
     $_SERVER['HTTP_AUTHORIZATION']='Bearer '.$refreshData['access_token']['token'];
     $assert((int)$auth->authenticate_bearer(0)===0,'revoked device access token is rejected');
 
-    WP_CLI::success('Auth/sync acceptance passed: login, access token, refresh rotation/reuse rejection, device-bound idempotent sync, payload conflict, manager lead approval/rejection, seller event visibility and device revocation.');
+    WP_CLI::success('Auth/sync acceptance passed: token lifecycle, idempotent sync, namespaced operation types, manager lead/task/proforma approval, seller event isolation and device revocation.');
 } finally {
     if($oldAuthorization===null)unset($_SERVER['HTTP_AUTHORIZATION']);else $_SERVER['HTTP_AUTHORIZATION']=$oldAuthorization;
     if($userId){
