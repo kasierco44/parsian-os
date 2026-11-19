@@ -54,6 +54,10 @@ private fun ParsianMobileApp(context: Context) {
     var apiRoot by remember { mutableStateOf("") }
     var leadName by remember { mutableStateOf("") }
     var leadPhone by remember { mutableStateOf("") }
+    var proformaCustomerId by remember { mutableStateOf("") }
+    var proformaProductId by remember { mutableStateOf("") }
+    var proformaQuantity by remember { mutableStateOf("1") }
+    var proformaUnitPrice by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
@@ -123,6 +127,36 @@ private fun ParsianMobileApp(context: Context) {
                             },
                             modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
                         ) { Text("ثبت سرنخ در صف آفلاین") }
+                        OutlinedTextField(value = proformaCustomerId, onValueChange = { proformaCustomerId = it }, label = { Text("شناسه مشتری تخصیص‌یافته") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                        OutlinedTextField(value = proformaProductId, onValueChange = { proformaProductId = it }, label = { Text("شناسه محصول فعال") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+                        OutlinedTextField(value = proformaQuantity, onValueChange = { proformaQuantity = it }, label = { Text("تعداد") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+                        OutlinedTextField(value = proformaUnitPrice, onValueChange = { proformaUnitPrice = it }, label = { Text("قیمت واحد به تومان") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+                        Button(
+                            enabled = proformaCustomerId.toLongOrNull()?.let { it > 0 } == true &&
+                                proformaProductId.toLongOrNull()?.let { it > 0 } == true &&
+                                proformaQuantity.toLongOrNull()?.let { it > 0 } == true &&
+                                proformaUnitPrice.toLongOrNull()?.let { it >= 0 } == true,
+                            onClick = {
+                                scope.launch {
+                                    try {
+                                        val line = JSONObject()
+                                            .put("product_id", proformaProductId.toLong())
+                                            .put("quantity", proformaQuantity.toLong())
+                                            .put("unit_price_toman", proformaUnitPrice.toLong())
+                                        val payload = JSONObject()
+                                            .put("customer_id", proformaCustomerId.toLong())
+                                            .put("items", JSONArray().put(line))
+                                        Outbox.enqueue(context, "sales.proforma.draft", payload)
+                                        proformaCustomerId = ""; proformaProductId = ""; proformaQuantity = "1"; proformaUnitPrice = ""
+                                        message = "پیش‌نویس پیش‌فاکتور در صف آفلاین قرار گرفت؛ پس از همگام‌سازی باید به تأیید مدیر برسد."
+                                        SyncScheduler.enqueue(context)
+                                    } catch (error: Exception) {
+                                        message = error.message ?: "ثبت پیش‌نویس انجام نشد."
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                        ) { Text("ثبت پیش‌فاکتور آفلاین") }
                     }
                     if (busy) CircularProgressIndicator(modifier = Modifier.padding(12.dp))
                     dashboard?.let { data ->
@@ -143,6 +177,7 @@ private fun ParsianMobileApp(context: Context) {
                             } else {
                                 item { portalSection(data, "customers", "مشتریان تخصیص‌یافته", listOf("display_name", "province", "status")) }
                                 item { portalSection(data, "leads", "سرنخ‌های فروش من", listOf("display_name", "phone", "province", "status")) }
+                                item { taskSection(data, context) { message = "تکمیل وظیفه به صف آفلاین اضافه شد؛ پس از تأیید مدیر قطعی می‌شود."; SyncScheduler.enqueue(context) } }
                                 item { portalSection(data, "proformas", "پیش‌فاکتورهای من", listOf("document_number", "total_toman", "status")) }
                             }
                         }
@@ -180,6 +215,33 @@ private fun ParsianMobileApp(context: Context) {
                 }
                 if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 12.dp))
                 Text("نسخه توسعه 0.1.0 · دسترسی‌ها در سمت سرور کنترل می‌شوند.", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 14.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun taskSection(data: JSONObject, context: Context, onQueued: () -> Unit) {
+    val tasks = data.optJSONObject("tasks")?.optJSONArray("items") ?: JSONArray()
+    Text("وظایف من", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
+    if (tasks.length() == 0) {
+        Text("وظیفه‌ای به شما تخصیص داده نشده است.", style = MaterialTheme.typography.bodySmall)
+    } else {
+        for (index in 0 until tasks.length()) {
+            val task = tasks.optJSONObject(index) ?: JSONObject()
+            val taskId = task.optLong("id", 0L)
+            val status = task.optString("status")
+            Text(task.optString("title"), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+            Text("وضعیت: " + if (status == "completed") "تکمیل‌شده" else "باز", style = MaterialTheme.typography.bodySmall)
+            if (status == "open" && taskId > 0L) {
+                Button(onClick = {
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                        try {
+                            Outbox.enqueue(context, "crm.task.complete", JSONObject().put("task_id", taskId).put("completed", true))
+                            onQueued()
+                        } catch (_: Exception) { }
+                    }
+                }, modifier = Modifier.fillMaxWidth()) { Text("ثبت تکمیل آفلاین") }
             }
         }
     }
