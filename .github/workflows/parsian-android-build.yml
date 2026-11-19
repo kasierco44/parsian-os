@@ -1,4 +1,4 @@
-name: PARSIAN FINAL Android debug builds
+name: PARSIAN ONE Android debug builds
 
 on:
   push:
