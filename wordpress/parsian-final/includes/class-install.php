@@ -344,6 +344,64 @@ final class Parsian_Final_Install {
             ) $charset;"
         ];
         foreach ($financeLifecycleTables as $sql) { dbDelta($sql); }
+        $bankReconciliationTables = [
+            "CREATE TABLE {$p}bank_accounts (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                account_ref varchar(80) NOT NULL,
+                bank_name varchar(120) NOT NULL DEFAULT '',
+                account_title varchar(190) NOT NULL DEFAULT '',
+                account_number_masked varchar(80) NOT NULL DEFAULT '',
+                ledger_account_id bigint unsigned NOT NULL DEFAULT 0,
+                currency varchar(8) NOT NULL DEFAULT 'IRR',
+                opening_balance_toman bigint NOT NULL DEFAULT 0,
+                opening_balance_date date NULL,
+                is_active tinyint(1) NOT NULL DEFAULT 1,
+                created_by bigint unsigned NOT NULL DEFAULT 0,
+                created_at datetime NOT NULL,
+                PRIMARY KEY  (id),
+                UNIQUE KEY account_ref (account_ref),
+                KEY active_bank (is_active,bank_name)
+            ) $charset;",
+            "CREATE TABLE {$p}bank_import_batches (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                bank_account_id bigint unsigned NOT NULL,
+                source_name varchar(190) NOT NULL DEFAULT '',
+                file_sha256 char(64) NOT NULL DEFAULT '',
+                row_count int unsigned NOT NULL DEFAULT 0,
+                accepted_count int unsigned NOT NULL DEFAULT 0,
+                duplicate_count int unsigned NOT NULL DEFAULT 0,
+                rejected_count int unsigned NOT NULL DEFAULT 0,
+                status varchar(20) NOT NULL DEFAULT 'received',
+                imported_by bigint unsigned NOT NULL,
+                created_at datetime NOT NULL,
+                PRIMARY KEY  (id),
+                KEY account_created (bank_account_id,created_at),
+                KEY file_hash (file_sha256)
+            ) $charset;",
+            "CREATE TABLE {$p}bank_reconciliation_matches (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                statement_line_id bigint unsigned NOT NULL,
+                journal_entry_id bigint unsigned NOT NULL,
+                matched_amount_toman bigint unsigned NOT NULL,
+                match_group_uuid char(36) NOT NULL,
+                matched_by bigint unsigned NOT NULL,
+                matched_at datetime NOT NULL,
+                PRIMARY KEY  (id),
+                UNIQUE KEY line_journal_once (statement_line_id,journal_entry_id),
+                KEY match_group (match_group_uuid),
+                KEY journal_entry (journal_entry_id)
+            ) $charset;"
+        ];
+        foreach ($bankReconciliationTables as $sql) { dbDelta($sql); }
+        $bankLineColumns = [
+            'bank_account_id' => "ALTER TABLE {$p}bank_statement_lines ADD COLUMN bank_account_id bigint unsigned NOT NULL DEFAULT 0",
+            'import_batch_id' => "ALTER TABLE {$p}bank_statement_lines ADD COLUMN import_batch_id bigint unsigned NOT NULL DEFAULT 0"
+        ];
+        foreach ($bankLineColumns as $column => $sql) {
+            if (!$wpdb->get_var($wpdb->prepare("SHOW COLUMNS FROM {$p}bank_statement_lines LIKE %s", $column))) {
+                $wpdb->query($sql);
+            }
+        }
         $allocationColumns = [
             'status' => "ALTER TABLE {$p}payment_allocations ADD COLUMN status varchar(20) NOT NULL DEFAULT 'active'",
             'reversed_at' => "ALTER TABLE {$p}payment_allocations ADD COLUMN reversed_at datetime NULL",
