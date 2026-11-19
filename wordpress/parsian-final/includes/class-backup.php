@@ -5,6 +5,7 @@ if (!defined('ABSPATH')) { exit; }
 final class Parsian_Final_Backup {
     private const MAX_ROWS_PER_TABLE = 10000;
     private const MAX_BACKUP_BYTES = 20971520;
+    private const MAX_BACKUP_ROWS_TOTAL = 100000;
 
     private function tables(): array {
         return ['devices','sync_ops','customers','suppliers','leads','tasks','products','stock_movements','stock_ledger','stock_reservations','proformas','proforma_items','invoices','invoice_items','payments','payment_allocations','cheques','cheque_events','ledger_accounts','journal_entries','journal_lines','bank_accounts','bank_statement_lines','bank_import_batches','bank_reconciliation_matches','events'];
@@ -55,7 +56,8 @@ final class Parsian_Final_Backup {
         $canonical=wp_json_encode($backup,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
         if(!is_string($canonical)||strlen($canonical)>self::MAX_BACKUP_BYTES)return new WP_REST_Response(['valid'=>false,'code'=>'backup_size_limit_exceeded'],413);
         if(!hash_equals(hash('sha256',$canonical),$checksum))return new WP_REST_Response(['valid'=>false,'code'=>'backup_checksum_mismatch'],422);
-        $expected=$this->tables();$provided=array_keys($backup['tables']);sort($expected);sort($provided);\n        $expectedExcluded=['auth_tokens'=>['reason'=>'credential material is intentionally excluded; revoke and re-register devices after disaster recovery']];\n        if($backup['excluded_tables']!==$expectedExcluded)return new WP_REST_Response(['valid'=>false,'code'=>'backup_exclusion_manifest_mismatch'],422);
+        $expected=$this->tables();$provided=array_keys($backup['tables']);sort($expected);sort($provided);
+        $expectedExcluded=['auth_tokens'=>['reason'=>'credential material is intentionally excluded; revoke and re-register devices after disaster recovery']];\n        if($backup['excluded_tables']!==$expectedExcluded)return new WP_REST_Response(['valid'=>false,'code'=>'backup_exclusion_manifest_mismatch'],422);
         if($expected!==$provided)return new WP_REST_Response(['valid'=>false,'code'=>'backup_table_set_mismatch'],422);
         foreach($backup['tables'] as $name=>$rows){
             if(!is_array($rows)||count($rows)>self::MAX_ROWS_PER_TABLE)return new WP_REST_Response(['valid'=>false,'code'=>'backup_table_shape_invalid','table'=>$name],422);
