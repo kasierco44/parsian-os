@@ -219,27 +219,51 @@ final class Parsian_Final_Sync {
 
     public function pull(WP_REST_Request $request): WP_REST_Response {
         global $wpdb;
-        $sinceRaw=$request->get_param('since_id');
-        if($sinceRaw!==null && (!is_numeric($sinceRaw)|| (int)$sinceRaw<0))
-            return new WP_REST_Response(['code'=>'invalid_cursor'],400);
-        $since=min(PHP_INT_MAX,absint($sinceRaw));
-        $limit=200;
-        $table=$wpdb->prefix.'parsian_events';
-        if(current_user_can('parsian_manage_users')||current_user_can('parsian_finance_read')){
-            $rows=$wpdb->get_results($wpdb->prepare(
-                "SELECT id,event_uuid,event_type,aggregate_type,aggregate_id,payload,created_at
-                 FROM {$table} WHERE id>%d ORDER BY id ASC LIMIT %d",$since,$limit
-            ),ARRAY_A);
-        } else {
-            // Never expose another user's event stream to seller/customer clients.
-            $rows=$wpdb->get_results($wpdb->prepare(
-                "SELECT id,event_uuid,event_type,aggregate_type,aggregate_id,payload,created_at
-                 FROM {$table} WHERE id>%d AND actor_user_id=%d ORDER BY id ASC LIMIT %d",
-                $since,get_current_user_id(),$limit
-            ),ARRAY_A);
+        $sinceRaw = $request->get_param('since_id');
+        if ($sinceRaw !== null && (!is_numeric($sinceRaw) || (string)(int)$sinceRaw !== (string)$sinceRaw || (int)$sinceRaw < 0)) {
+            return new WP_REST_Response(['code'=>'invalid_cursor'], 400);
         }
-        $last=$since;
-        foreach((array)$rows as $row)$last=max($last,(int)$row['id']);
-        return new WP_REST_Response(['items'=>$rows?:[],'next_cursor'=>$last,'has_more'=>count((array)$rows)===$limit],200);
+
+        $since = $sinceRaw === null ? 0 : (int)$sinceRaw;
+        $limit = 200;
+        $table = $wpdb->prefix . 'parsian_events';
+
+        // Read a bounded global page so the cursor can advance across events
+        // belonging to other users. Filtering in SQL by actor_user_id would
+        // otherwise leave a seller's cursor stuck whenever only foreign events
+        // were created after their last sync.
+        $scanned = $wpdb->get_results($wpdb->prepare(
+            "SELECT id,event_uuid,event_type,aggregate_type,aggregate_id,actor_user_id,payload,created_at
+             FROM {$table} WHERE id>%d ORDER BY id ASC LIMIT %d",
+            $since, $limit
+        ), ARRAY_A);
+
+        $isManager = current_user_can('parsian_manage_users');
+        $isFinance = current_user_can('parsian_finance_read');
+        $userId = get_current_user_id();
+        $visible = [];
+        $last = $since;
+
+        foreach ((array) $scanned as $event) {
+            $last = max($last, (int) $event['id']);
+            $eventType = (string) $event['event_type'];
+            $financeEvent = str_starts_with($eventType, 'finance.')
+                || str_starts_with($eventType, 'accounting.')
+                || str_starts_with($eventType, 'payment.')
+                || str_starts_with($eventType, 'cheque.')
+                || str_starts_with($eventType, 'bank.')
+                || str_starts_with($eventType, 'stock.');
+
+            if ($isManager || ($isFinance && $financeEvent) || (int) $event['actor_user_id'] === $userId) {
+                unset($event['actor_user_id']);
+                $visible[] = $event;
+            }
+        }
+
+        return new WP_REST_Response([
+            'items' => $visible,
+            'next_cursor' => $last,
+            'has_more' => count((array) $scanned) === $limit
+        ], 200);
     }
 }
