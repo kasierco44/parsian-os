@@ -60,7 +60,7 @@ interface SyncOperationDao {
   clearMetadataKey("offline_stale_" + resourceType)
  }
  @Transaction
- suspend fun persistInboxPage(events: List<SyncEventEntity>, cursor: Long, staleResources: Set<String> = emptySet()) {
+ suspend fun persistInboxPage(events: List<SyncEventEntity>, cursor: Long, staleResources: Set<String> = emptySet(), acknowledgements: List<SyncOperationAcknowledgement> = emptyList()) {
   val newEvents = ArrayList<SyncEventEntity>()
   val pageById = HashMap<Long, SyncEventEntity>()
   val pageByUuid = HashMap<String, SyncEventEntity>()
@@ -84,6 +84,11 @@ interface SyncOperationDao {
   staleResources.forEach { resource ->
    require(resource in setOf("customers", "leads", "tasks", "proformas", "invoices", "payments"))
    saveMetadata(SyncMetadataEntity("offline_stale_" + resource, cursor.toString()))
+  }
+  acknowledgements.distinctBy { it.operationUuid }.forEach { ack ->
+   require(ack.operationUuid.isNotBlank())
+   require(ack.status in setOf("applied", "rejected", "conflict"))
+   updateStatus(ack.operationUuid, ack.status, ack.error)
   }
  }
 }
