@@ -246,6 +246,9 @@ final class Parsian_Final_Finance {
             $ok=$wpdb->insert($table,['payment_id'=>$paymentId,'invoice_id'=>$invoiceId,'customer_id'=>(int)$invoice['customer_id'],'amount_toman'=>$amount,'allocated_by'=>get_current_user_id(),'allocated_at'=>current_time('mysql',true)],['%d','%d','%d','%d','%d','%s']);
         }
         if(!$ok){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'allocation_write_failed'],409);}
+        $now = current_time('mysql',true);
+        $wpdb->update($wpdb->prefix.'parsian_invoices',['updated_at'=>$now],['id'=>$invoiceId],['%s'],['%d']);
+        $wpdb->update($wpdb->prefix.'parsian_payments',['updated_at'=>$now],['id'=>$paymentId],['%d'],['%d']);
         $newAllocated=$invoiceAllocated+$amount; $newBalance=(int)$invoice['total_toman']-$newAllocated;
         $wpdb->insert($wpdb->prefix.'parsian_events',['event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>get_current_user_id(),'event_type'=>'finance.payment.allocated','aggregate_type'=>'invoice','aggregate_id'=>$invoiceId,'payload'=>wp_json_encode(['payment_id'=>$paymentId,'amount_toman'=>$amount,'remaining_toman'=>$newBalance]),'created_at'=>current_time('mysql',true)],['%s','%d','%s','%s','%d','%s','%s']);
         $wpdb->query('COMMIT');
