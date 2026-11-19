@@ -454,6 +454,42 @@ try {
     $_SERVER['HTTP_AUTHORIZATION']='Bearer '.$refreshData['access_token']['token'];
     $assert((int)$auth->authenticate_bearer(0)===0,'revoked device access token is rejected');
 
+    // Backup snapshot validation is deliberately non-destructive: it verifies format,
+    // complete table coverage and checksum without writing to the database.
+    $backupService = new Parsian_Final_Backup();
+    $backupReflection = new ReflectionClass($backupService);
+    $tablesMethod = $backupReflection->getMethod('tables');
+    $tablesMethod->setAccessible(true);
+    $backupTables = [];
+    foreach ($tablesMethod->invoke($backupService) as $tableName) {
+        $backupTables[$tableName] = [];
+    }
+    $backupPayload = [
+        'format' => 'PARSIAN_FINAL_BACKUP',
+        'format_version' => 1,
+        'plugin_version' => PARSIAN_FINAL_VERSION,
+        'schema_version' => get_option('parsian_final_schema_version', 'unknown'),
+        'source_site' => home_url('/'),
+        'created_at_utc' => gmdate('c'),
+        'tables' => $backupTables,
+        'user_customer_assignments' => [],
+    ];
+    $backupCanonical = wp_json_encode($backupPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $backupPayload['checksum_sha256'] = hash('sha256', $backupCanonical);
+    $backupRequest = new WP_REST_Request('POST', '/parsian-final/v1/backup/validate');
+    $backupRequest->set_header('content-type', 'application/json');
+    $backupRequest->set_body(wp_json_encode($backupPayload));
+    $backupValidated = $backupService->validate_snapshot($backupRequest);
+    $assert($backupValidated->get_status() === 200 && ($backupValidated->get_data()['valid'] ?? false) === true, 'complete backup snapshot with valid checksum passes non-destructive validation');
+    $assert(($backupValidated->get_data()['restored'] ?? true) === false, 'backup validation never claims that data was restored');
+    $tamperedBackup = $backupPayload;
+    $tamperedBackup['tables']['customers'][] = ['id' => 999999, 'display_name' => 'tampered'];
+    $tamperedRequest = new WP_REST_Request('POST', '/parsian-final/v1/backup/validate');
+    $tamperedRequest->set_header('content-type', 'application/json');
+    $tamperedRequest->set_body(wp_json_encode($tamperedBackup));
+    $tamperedResult = $backupService->validate_snapshot($tamperedRequest);
+    $assert($tamperedResult->get_status() === 422 && ($tamperedResult->get_data()['code'] ?? '') === 'backup_checksum_mismatch', 'tampered backup content is rejected by checksum validation');
+
     WP_CLI::success('PARSIAN ONE auth/sync acceptance passed: idempotency, lead/customer/proforma/invoice/payment revisions, manager conflict decisions, task/proforma review, seller isolation and device revocation.');
 } finally {
     if($oldAuthorization===null)unset($_SERVER['HTTP_AUTHORIZATION']);else $_SERVER['HTTP_AUTHORIZATION']=$oldAuthorization;
