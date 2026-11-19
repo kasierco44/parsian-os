@@ -217,11 +217,23 @@ private fun itemsPlaceholder(array: JSONArray, fields: List<String>) {
                     else -> field
                 }
                 val value = row.opt(field).toString()
-                label + ": " + if (field.endsWith("_toman")) money(value.toLongOrNull() ?: 0L) + " تومان" else value
+                label + ": " + when { field.endsWith("_toman") -> money(value.toLongOrNull() ?: 0L) + " تومان"; field.endsWith("_date") || field.endsWith("_at") -> jalaliDate(value); else -> value }
             }
         }
         Text(values.joinToString(" · "), style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp))
     }
+}
+
+private fun jalaliDate(value: String): String {
+    return try {
+        val date = java.time.LocalDate.parse(value.take(10))
+        val persian = android.icu.util.PersianCalendar(android.icu.util.TimeZone.getTimeZone("UTC"))
+        persian.timeInMillis = date.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+        val digits = java.text.NumberFormat.getIntegerInstance(java.util.Locale("fa", "IR"))
+        digits.format(persian.get(android.icu.util.Calendar.YEAR)) + "/" +
+            digits.format(persian.get(android.icu.util.Calendar.MONTH) + 1) + "/" +
+            digits.format(persian.get(android.icu.util.Calendar.DAY_OF_MONTH))
+    } catch (_: Exception) { value }
 }
 
 private fun money(value: Long): String = java.text.NumberFormat.getInstance(java.util.Locale("fa", "IR")).format(value)
