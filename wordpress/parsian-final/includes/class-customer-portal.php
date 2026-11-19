@@ -55,7 +55,11 @@ final class Parsian_Final_Customer_Portal {
                 'total_toman'=>(int)$row['total_toman'],'status'=>(string)$row['status'],
                 'due_date'=>(string)($row['due_date']??''),'created_at'=>(string)$row['created_at'],
                 'updated_at'=>(string)($row['updated_at']??''),'customer_id'=>(int)$row['customer_id'],
-                'notes'=>(string)($row['notes']??''),'invoice_id'=>(int)$row['invoice_id'],'created_by'=>(int)$row['created_by']
+                'notes'=>(string)($row['notes']??''),'invoice_id'=>(int)$row['invoice_id'],'created_by'=>(int)$row['created_by'],
+                'items_revision'=>hash('sha256', wp_json_encode($wpdb->get_results($wpdb->prepare(
+                    "SELECT product_id,description,quantity,unit_price_toman,line_total_toman FROM {$wpdb->prefix}parsian_proforma_items WHERE proforma_id=%d ORDER BY id",
+                    (int)$row['id']
+                ), ARRAY_A) ?: [], JSON_UNESCAPED_UNICODE))
             ], JSON_UNESCAPED_UNICODE));
             unset($row['customer_id'], $row['notes'], $row['invoice_id'], $row['created_by']);
         }
