@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PARSIAN FINAL Core
  * Description: Central business platform for Parsian Ghat'e — identity, CRM, sales, finance, inventory and sync API.
- * Version: 0.1.0
+ * Version: 0.2.0
  * Requires at least: 6.2
  * Requires PHP: 8.0
  * Text Domain: parsian-final
@@ -25,6 +25,7 @@ require_once PARSIAN_FINAL_PATH . 'includes/class-auth.php';
 register_activation_hook(__FILE__, ['Parsian_Final_Install', 'activate']);
 register_deactivation_hook(__FILE__, ['Parsian_Final_Install', 'deactivate']);
 add_action('plugins_loaded', static function (): void {
+    Parsian_Final_Install::maybe_upgrade();
     Parsian_Final_Roles::register();
     (new Parsian_Final_REST())->register_routes();
     (new Parsian_Final_CRM())->register_routes();
