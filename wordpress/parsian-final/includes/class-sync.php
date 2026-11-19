@@ -791,7 +791,8 @@ final class Parsian_Final_Sync {
                 || str_starts_with($eventType, 'payment.')
                 || str_starts_with($eventType, 'cheque.')
                 || str_starts_with($eventType, 'bank.')
-                || str_starts_with($eventType, 'stock.');
+                || str_starts_with($eventType, 'stock.')
+                || (str_starts_with($eventType, 'sync.') && in_array((string)$event['aggregate_type'], ['invoice','payment'], true));
 
             if ($isManager || ($isFinance ? $financeEvent : (int) $event['actor_user_id'] === $userId)) {
                 unset($event['actor_user_id']);
