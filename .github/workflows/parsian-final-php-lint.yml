@@ -1,4 +1,4 @@
-name: PARSIAN ONE PHP lint
+name: PARSIAN ONE PHP lint and WordPress acceptance
 
 on:
   push:
@@ -22,7 +22,7 @@ permissions:
 jobs:
   wp-cli-acceptance:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     services:
       mysql:
         image: mysql:8.0
@@ -64,7 +64,13 @@ jobs:
           mkdir -p "$WP_PATH/wp-content/plugins"
           cp -R wordpress/parsian-final "$WP_PATH/wp-content/plugins/parsian-final"
           php wp-cli.phar --path="$WP_PATH" plugin activate parsian-final
-      - name: Run isolated auth and sync acceptance suite
+          php wp-cli.phar --path="$WP_PATH" core version
+          php wp-cli.phar --path="$WP_PATH" plugin is-active parsian-final
+      - name: Run schema acceptance suite
+        run: php wp-cli.phar --path="$WP_PATH" --require=wordpress/parsian-final/tests/enable-qa.php eval-file wordpress/parsian-final/tests/schema-acceptance.php
+      - name: Run finance and ledger acceptance suite
+        run: php wp-cli.phar --path="$WP_PATH" --require=wordpress/parsian-final/tests/enable-qa.php eval-file wordpress/parsian-final/tests/finance-ledger-acceptance.php
+      - name: Run auth, revision conflict, backup and sync acceptance suite
         run: php wp-cli.phar --path="$WP_PATH" --require=wordpress/parsian-final/tests/enable-qa.php eval-file wordpress/parsian-final/tests/auth-sync-acceptance.php
 
   php-lint:
