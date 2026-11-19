@@ -161,7 +161,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     }
     val nextCursor = body.optLong("next_cursor", cursor)
     if (nextCursor < cursor) return Result.failure()
-    // Persist inbox identities and cursor first; only acknowledge outbox items after that transaction commits.
+    // Inbox identities, cursor, stale markers and outbox acknowledgements commit as one Room transaction.
     dao.persistInboxPage(events, nextCursor, staleResources, operationAcknowledgements)
     cursor = nextCursor
     morePages = body.optBoolean("has_more", false)
