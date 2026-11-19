@@ -3,6 +3,7 @@ package ir.pgtparts.parsian.data
 import android.content.Context
 import ir.pgtparts.parsian.BuildConfig
 import ir.pgtparts.parsian.security.SessionStore
+import ir.pgtparts.parsian.sync.SyncScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -72,6 +73,11 @@ object DashboardRepository {
         if (session != null) {
             try { request(session.apiRoot + "/auth/logout", "POST", session.accessToken, "{}") } catch (_: Exception) { }
         }
+        SyncScheduler.cancel(context)
+        val dao = ParsianDatabase.get(context).syncOperations()
+        dao.clearOutbox()
+        dao.clearInbox()
+        dao.clearMetadata()
         SessionStore.clear(context)
     }
 }
