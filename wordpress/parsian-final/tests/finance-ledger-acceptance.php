@@ -72,10 +72,15 @@ try {
     $agingResponse=$ledger->receivables_aging($agingRequest);
     $aging=$agingResponse->get_data();
     $assert($agingResponse->get_status()===200,'receivables aging returns HTTP 200');
-    $assert((int)$aging['total_outstanding_toman']===5000,'aging outstanding equals 5,000');
+    $customerAging=null;
+    foreach((array)$aging['customers'] as $customerRow){
+        if((int)$customerRow['customer_id']===$customerId){$customerAging=$customerRow;break;}
+    }
+    $assert(is_array($customerAging),'aging report includes the synthetic customer');
+    $assert((int)$customerAging['total_outstanding_toman']===5000,'synthetic customer outstanding equals 5,000');
     $expected=['not_due'=>1000,'1_30'=>1000,'31_60'=>1000,'61_90'=>1000,'over_90'=>1000];
     foreach($expected as $bucket=>$amount){
-        $assert((int)$aging['totals_toman'][$bucket]===$amount,'aging bucket '.$bucket.' equals '.$amount);
+        $assert((int)$customerAging['buckets_toman'][$bucket]===$amount,'synthetic customer aging bucket '.$bucket.' equals '.$amount);
     }
     WP_CLI::success('Ledger acceptance passed: opening, period debit/credit, closing, running balance and all five aging buckets.');
 } finally {
