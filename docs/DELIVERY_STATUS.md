@@ -179,3 +179,17 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Receivables aging now uses days past due, with buckets: not due, 1–30, 31–60, 61–90, and over 90 days.
 - Legacy invoices without a due_date use issued_at date as a clearly disclosed fallback. Their aging is therefore an estimate until due dates are backfilled.
 - These code changes have not yet passed PHP lint or database migration/integration tests. The latest Actions workflow run available for the ledger change is not present; a prior lint attempt failed without runner logs. Do not treat the change as validated.
+
+
+## Receivables aging correction (2026-11-19)
+
+- Fixed the customer-wide receivables aging totals to aggregate the same five buckets returned by the per-customer aging calculation: not due, 1–30, 31–60, 61–90, and over 90 days.
+- Corrected the report basis metadata to state that aging uses invoice due date, falling back to issue date when due date is absent.
+- Commit: 8579ef3b23c47daad7a45d0289c2660d2ccd59a2.
+- This is a targeted logic correction only. It has not yet been validated against a WordPress database or automated finance fixtures.
+
+## Remaining bank reconciliation work
+
+- Current bank statement intake is one normalized statement line per request; no CSV/Excel batch parser or import-batch audit trail exists yet.
+- Current matching permits one statement line to match one journal entry only. One-to-many and many-to-one allocations, bank account master records, opening/closing balance controls, bank fees/interest mappings, and period close remain outstanding.
+- Before production use, cheque/payment reversals, statement matching, and customer aging must pass integration tests against the actual schema and representative transaction fixtures.
