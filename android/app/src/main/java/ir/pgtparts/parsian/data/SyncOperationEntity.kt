@@ -11,3 +11,9 @@ data class SyncOperationEntity(
  val lastError: String? = null,
  val createdAtEpochMs: Long = System.currentTimeMillis()
 )
+
+data class SyncOperationAcknowledgement(
+ val operationUuid: String,
+ val status: String,
+ val error: String? = null
+)
