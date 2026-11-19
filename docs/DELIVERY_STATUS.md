@@ -363,3 +363,7 @@ Keep the existing live site and its database untouched until a staging backup, m
 ### WordPress panel style isolation (2026-11-19)
 - Scoped the shared panel stylesheet to a dedicated root class so it no longer applies generic body, main, aside, header, table or form styles across the surrounding WordPress admin UI. The standalone Tauri shell uses the same root class.
 - Plugin development version is now 0.4.14 and the plugin CSS bundle matches the standalone panel stylesheet.
+
+
+### Date formatter correction (2026-11-19)
+- Corrected escaped digit patterns in the web Jalali date parser and synchronized the corrected JavaScript into the plugin bundle. Plugin development version is 0.4.15.
