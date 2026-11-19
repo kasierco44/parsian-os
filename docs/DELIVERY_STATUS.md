@@ -138,3 +138,16 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Matching is exact amount + direction against one posted journal entry on ledger account 1210. It does not yet support partial or many-to-one matches.
 - Cheque transition endpoints are implemented but no live WordPress database, bank sandbox, or integration acceptance tests have been executed.
 - Payment allocation, cheque lifecycle, and bank reconciliation still require end-to-end tests for duplicate requests, concurrent transitions, bounced/returned scenarios, and GL/subledger tie-out.
+
+
+### Cheque lifecycle hardening update
+
+- Added a link-payment endpoint for pending cheques that were initially recorded before their posted payment; it validates amount, direction, method, party and posted status.
+- A cheque cannot be deposited/issued, cleared, bounced, returned from a posted state, or cancelled after issue without a matching posted cheque payment.
+- Returning a received cheque (whether before or after deposit), bouncing it, bouncing an issued cheque, or cancelling an issued cheque creates a reversing journal and marks the linked payment reversed with reversal timestamp and event reference.
+- Payment reversal is recorded against the cheque transition event; the original journal remains immutable.
+- Remaining: explicit cheque replacement/reissue workflow, endorsement/transfer, partial cheque collections, bank charges and a formal bank-account master/batch import workflow.
+
+### CI status after finance lifecycle changes
+- The GitHub Actions PHP lint and plugin packaging runs triggered by the latest commits returned failure before exposing any runner steps or job logs (logs_url is null). This is not evidence of a PHP syntax error or a successful check; CI execution is currently inconclusive and requires runner/workflow diagnostics.
+- No ZIP artifact from the current 0.4.0 branch has been verified. The earlier development ZIP belongs to an older code head and must not be used as the current build.
