@@ -394,3 +394,9 @@ Keep the existing live site and its database untouched until a staging backup, m
 ### Bank statement import UI (2026-11-19)
 - Added accountant/manager CSV and XLSX statement upload UI, using multipart form data and the existing bank import endpoint. Import is explicitly separate from reconciliation; no automatic matching is implied.
 - Plugin development version is now 0.4.21. Bank reconciliation UI and end-to-end CSV/XLSX fixtures still need completion and Staging validation.
+
+
+### Bank reconciliation workspace (2026-11-19)
+- Added a bank reconciliation screen with unmatched statement lines, posted bank-journal candidates, summary counts and a one-to-one match action. The existing server allocation engine now accepts one allocation as well as grouped multi-allocation requests.
+- Removed duplicate REST route registrations so statement-line listing and summary remain owned by the cheque/bank lifecycle class; class-bank owns the grouped reconcile and journal-candidate routes.
+- Plugin development version is now 0.4.22. Full DB integration tests for CSV/XLSX import and reconciliation are still required.
