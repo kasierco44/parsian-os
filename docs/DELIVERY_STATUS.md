@@ -65,3 +65,12 @@ The GitHub Actions run associated with the remote-sales Android workflow failed 
 ## Production safety
 
 Keep the existing live site and its database untouched until a staging backup, migration rehearsal, rollback rehearsal, and explicit acceptance test are complete.
+
+
+## Verification snapshot (2026-11-19)
+
+- PHP lint workflow completed successfully for code head `58bfcb54fcd91dd31ddb81383d204a7a499433e8`.
+- Development WordPress ZIP packaging workflow completed successfully for the same code head. Artifact: `parsian-final-wordpress-plugin-dev` (GitHub Actions run `44462986920`; artifact expires 2026-12-03).
+- The branch head has since advanced with documentation-only commit `a0ad4e2b82dcfe867e20dcb2a2ae174d483f0c41`; the plugin source included in the artifact matches the latest plugin code commit.
+- Android workflow still fails before Gradle because its configured working directory `mobile/remote-sales-crm` is absent from this branch. No APK artifact exists.
+- ZIP creation and PHP lint are verified; WordPress staging install, runtime/API integration, accounting acceptance tests, and backup/restore are not verified. Treat the ZIP as a development package only, not a production-ready accounting release.
