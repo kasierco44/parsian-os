@@ -11,6 +11,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import org.json.JSONArray
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -54,6 +55,43 @@ object DashboardRepository {
         return JSONObject(response.body)
     }
 
+    private suspend fun persistOfflineCollections(dao: SyncOperationDao, dashboard: JSONObject) {
+        val resources = if (BuildConfig.APP_ROLE == "customer") {
+            listOf("invoices", "proformas", "payments")
+        } else {
+            listOf("customers", "leads", "proformas", "tasks")
+        }
+        val now = System.currentTimeMillis()
+        for (resource in resources) {
+            val response = dashboard.optJSONObject(resource)
+                ?: throw IllegalStateException("پاسخ منبع آفلاین ناقص است: " + resource)
+            val items = response.optJSONArray("items")
+                ?: throw IllegalStateException("ساختار فهرست آفلاین نامعتبر است: " + resource)
+            val records = ArrayList<OfflineRecordEntity>()
+            for (index in 0 until items.length()) {
+                val item = items.optJSONObject(index)
+                    ?: throw IllegalStateException("رکورد نامعتبر در منبع: " + resource)
+                val id = item.optLong("id", 0L)
+                if (id <= 0L) throw IllegalStateException("شناسه رکورد نامعتبر در منبع: " + resource)
+                records.add(OfflineRecordEntity(resource, id, item.toString(), now))
+            }
+            dao.replaceOfflineResource(resource, records)
+        }
+    }
+
+    suspend fun loadOfflineResource(context: Context, resourceType: String): JSONArray {
+        val allowed = if (BuildConfig.APP_ROLE == "customer") {
+            setOf("invoices", "proformas", "payments")
+        } else {
+            setOf("customers", "leads", "proformas", "tasks")
+        }
+        require(resourceType in allowed) { "Unsupported offline resource" }
+        val records = ParsianDatabase.get(context).syncOperations().offlineRecords(resourceType)
+        val result = JSONArray()
+        records.forEach { result.put(JSONObject(it.payloadJson)) }
+        return result
+    }
+
     suspend fun load(context: Context): JSONObject {
         val dao = ParsianDatabase.get(context).syncOperations()
         return try {
@@ -69,6 +107,7 @@ object DashboardRepository {
                 result.put("proformas", authorized(context, "/proformas?per_page=50"))
                 result.put("tasks", authorized(context, "/tasks?per_page=50"))
             }
+            persistOfflineCollections(dao, result)
             dao.saveDashboardSnapshot(DashboardSnapshotEntity("dashboard", result.toString()))
             result.put("_offline", false)
             result
@@ -98,6 +137,7 @@ object DashboardRepository {
         dao.clearInbox()
         dao.clearMetadata()
         dao.clearDashboardSnapshots()
+        dao.clearOfflineRecords()
         SessionStore.clear(context)
     }
 }
