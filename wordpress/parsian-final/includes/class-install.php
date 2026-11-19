@@ -342,6 +342,16 @@ final class Parsian_Final_Install {
             ) $charset;"
         ];
         foreach ($financeLifecycleTables as $sql) { dbDelta($sql); }
+        $allocationColumns = [
+            'status' => "ALTER TABLE {$p}payment_allocations ADD COLUMN status varchar(20) NOT NULL DEFAULT 'active'",
+            'reversed_at' => "ALTER TABLE {$p}payment_allocations ADD COLUMN reversed_at datetime NULL",
+            'reversal_event_id' => "ALTER TABLE {$p}payment_allocations ADD COLUMN reversal_event_id bigint unsigned NOT NULL DEFAULT 0"
+        ];
+        foreach ($allocationColumns as $column => $sql) {
+            if (!$wpdb->get_var($wpdb->prepare("SHOW COLUMNS FROM {$p}payment_allocations LIKE %s", $column))) {
+                $wpdb->query($sql);
+            }
+        }
         $paymentLifecycleColumns = [
             'reversed_at' => "ALTER TABLE {$p}payments ADD COLUMN reversed_at datetime NULL",
             'reversal_event_id' => "ALTER TABLE {$p}payments ADD COLUMN reversal_event_id bigint unsigned NOT NULL DEFAULT 0"
