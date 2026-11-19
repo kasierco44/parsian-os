@@ -551,3 +551,4 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Credential-bearing auth_tokens are intentionally excluded. The backup carries an explicit exclusion manifest explaining that devices must be re-registered after disaster recovery; validation rejects a missing or altered exclusion manifest.
 - WP-CLI acceptance fixtures now cover the expanded table set, checksum tampering, and exclusion-manifest tampering.
 - This is still a development-only export/validation feature: no restore engine or real restore rehearsal exists, and the updated acceptance suite has not run on GitHub Actions.
+- Snapshot export now uses a read-only consistent database transaction, fails closed on table-read errors, and marks the sensitive response no-store/private. WP-CLI acceptance coverage now exercises a real export from the test database and validates its generated checksum and response headers.
