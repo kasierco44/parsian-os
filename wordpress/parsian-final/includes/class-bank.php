@@ -100,7 +100,7 @@ final class Parsian_Final_Bank {
         $sheet=$zip->getFromName('xl/worksheets/sheet1.xml'); $shared=$zip->getFromName('xl/sharedStrings.xml');
         if($sheet===false){$zip->close();return [[],[['row'=>0,'error'=>'xlsx_sheet_missing']]];}
         $strings=[];
-        if($shared!==false){$sx=@simplexml_load_string($shared); if($sx){foreach($sx->si as $si){$strings[]=(string)($si->t??implode('',array_map('strval',(array)$si->r)));}}}
+        if($shared!==false){$sx=@simplexml_load_string($shared); if($sx){foreach($sx->si as $si){$txt=(string)($si->t??'');if($txt===''){foreach($si->r as $run){$txt.=(string)$run->t;}}$strings[]=$txt;}}}
         $xml=@simplexml_load_string($sheet); $zip->close();
         if(!$xml)return [[],[['row'=>0,'error'=>'xlsx_xml_invalid']]];
         $matrix=[];
@@ -119,6 +119,7 @@ final class Parsian_Final_Bank {
     }
     private function normalize_row(array $r): array {
         $date=trim((string)($r['transaction_date']??$r['date']??''));
+        if(ctype_digit($date)&&(int)$date>20000&&(int)$date<80000){$date=gmdate('Y-m-d',(int)(($date-25569)*86400));}
         $direction=strtolower(trim((string)($r['direction']??'')));
         $amount=filter_var(str_replace([',',' '],'',(string)($r['amount_toman']??$r['amount']??'')),FILTER_VALIDATE_INT);
         $external=trim((string)($r['external_line_id']??$r['transaction_id']??$r['id']??''));
@@ -177,7 +178,7 @@ final class Parsian_Final_Bank {
             $journalSums[$journal]=($journalSums[$journal]??0)+(int)$amount;
         }
         sort($lineIds);sort($journalIds);
-        $lines=[];
+        $lines=[];$journalMeta=[];
         foreach($lineIds as $id){$row=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}parsian_bank_statement_lines WHERE id=%d FOR UPDATE",$id),ARRAY_A);
             if(!$row){$wpdb->query('ROLLBACK');return $this->error('statement_line_not_found',404);}
             $already=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(matched_amount_toman),0) FROM {$wpdb->prefix}parsian_bank_reconciliation_matches WHERE statement_line_id=%d",$id));
@@ -191,13 +192,18 @@ final class Parsian_Final_Bank {
             foreach($bankLines as $bl){if((int)$bl['debit_toman']>0){$capacity+=(int)$bl['debit_toman'];$entryDirection='in';}if((int)$bl['credit_toman']>0){$capacity+=(int)$bl['credit_toman'];$entryDirection='out';}}
             $used=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(matched_amount_toman),0) FROM {$wpdb->prefix}parsian_bank_reconciliation_matches WHERE journal_entry_id=%d",$id));
             if(!$capacity||$used+$journalSums[$id]>$capacity){$wpdb->query('ROLLBACK');return $this->error('journal_overallocated_or_not_bank_entry',409,['journal_entry_id'=>$id,'remaining_toman'=>$capacity-$used]);}
-            foreach($lines as $line){
-                $bankAccount=$wpdb->get_row($wpdb->prepare("SELECT ledger_account_id FROM {$wpdb->prefix}parsian_bank_accounts WHERE id=%d AND is_active=1",(int)$line['bank_account_id']),ARRAY_A);
-                $sameBankLedger=false;
-                foreach($bankLines as $bl){if($bankAccount && (int)$bl['account_id']===(int)$bankAccount['ledger_account_id']){$sameBankLedger=true;break;}}
-                if($line['direction']!==$entryDirection){$wpdb->query('ROLLBACK');return $this->error('transaction_direction_mismatch',409,['journal_entry_id'=>$id,'statement_line_id'=>(int)$line['id']]);}
-                if(!$sameBankLedger){$wpdb->query('ROLLBACK');return $this->error('bank_account_ledger_mismatch',409,['journal_entry_id'=>$id,'statement_line_id'=>(int)$line['id']]);}
+            $journalMeta[$id]=['direction'=>$entryDirection,'account_ids'=>array_map(static fn($bl)=>(int)$bl['account_id'],$bankLines)];
+        }
+        foreach($allocations as $a){
+            $line=$lines[(int)$a['statement_line_id']];$journal=(int)$a['journal_entry_id'];
+            $bankAccount=$wpdb->get_row($wpdb->prepare("SELECT ledger_account_id FROM {$wpdb->prefix}parsian_bank_accounts WHERE id=%d AND is_active=1",(int)$line['bank_account_id']),ARRAY_A);
+            if(!$bankAccount||$line['direction']!==$journalMeta[$journal]['direction']){
+                $wpdb->query('ROLLBACK');return $this->error('transaction_direction_or_bank_account_mismatch',409,['journal_entry_id'=>$journal,'statement_line_id'=>(int)$line['id']]);
             }
+            if(!in_array((int)$bankAccount['ledger_account_id'],$journalMeta[$journal]['account_ids'],true)){
+                $wpdb->query('ROLLBACK');return $this->error('bank_account_ledger_mismatch',409,['journal_entry_id'=>$journal,'statement_line_id'=>(int)$line['id']]);
+            }
+        }
         }
         foreach($allocations as $a){$ok=$wpdb->insert($this->table('bank_reconciliation_matches'),[
             'statement_line_id'=>absint($a['statement_line_id']),'journal_entry_id'=>absint($a['journal_entry_id']),
