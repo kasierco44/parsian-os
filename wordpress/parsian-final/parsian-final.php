@@ -1,14 +1,14 @@
 <?php
 /**
- * Plugin Name: PARSIAN FINAL Core
+ * Plugin Name: PARSIAN ONE Core
  * Description: Central business platform for Parsian Ghat'e — identity, CRM, sales, finance, inventory and sync API.
- * Version: 0.4.25
+ * Version: 0.4.26
  * Requires at least: 6.2
  * Requires PHP: 8.0
  * Text Domain: parsian-final
  */
 if (!defined('ABSPATH')) { exit; }
-define('PARSIAN_FINAL_VERSION', '0.4.25');
+define('PARSIAN_FINAL_VERSION', '0.4.26');
 define('PARSIAN_FINAL_FILE', __FILE__);
 define('PARSIAN_FINAL_PATH', plugin_dir_path(__FILE__));
 define('PARSIAN_FINAL_URL', plugin_dir_url(__FILE__));
