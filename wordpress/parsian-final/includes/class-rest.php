@@ -40,7 +40,7 @@ final class Parsian_Final_REST {
     public function health(WP_REST_Request $request): WP_REST_Response {
         return new WP_REST_Response([
             'status' => 'ok',
-            'product' => 'PARSIAN FINAL',
+            'product' => 'PARSIAN ONE',
             'version' => PARSIAN_FINAL_VERSION,
             'schema_version' => get_option('parsian_final_schema_version', 'not-installed'),
             'timestamp' => gmdate('c'),
