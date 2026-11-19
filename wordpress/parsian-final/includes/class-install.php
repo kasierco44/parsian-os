@@ -251,6 +251,61 @@ final class Parsian_Final_Install {
             $wpdb->query("ALTER TABLE {$p}payments ADD COLUMN journal_entry_id bigint unsigned NOT NULL DEFAULT 0");
         }
 
+        $inventoryTables = [
+            "CREATE TABLE {$p}stock_ledger (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                product_id bigint unsigned NOT NULL,
+                source_type varchar(30) NOT NULL,
+                source_id bigint unsigned NOT NULL,
+                quantity_delta bigint NOT NULL,
+                unit_cost_toman bigint unsigned NOT NULL DEFAULT 0,
+                value_delta_toman bigint NOT NULL,
+                created_by bigint unsigned NOT NULL,
+                created_at datetime NOT NULL,
+                PRIMARY KEY  (id),
+                UNIQUE KEY source_once (source_type,source_id,product_id),
+                KEY product_created (product_id,created_at)
+            ) $charset;",
+            "CREATE TABLE {$p}stock_reservations (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                reference_type varchar(24) NOT NULL,
+                reference_id bigint unsigned NOT NULL,
+                product_id bigint unsigned NOT NULL,
+                quantity bigint unsigned NOT NULL,
+                status varchar(20) NOT NULL DEFAULT 'reserved',
+                created_by bigint unsigned NOT NULL,
+                created_at datetime NOT NULL,
+                released_at datetime NULL,
+                PRIMARY KEY  (id),
+                UNIQUE KEY reference_product (reference_type,reference_id,product_id),
+                KEY product_status (product_id,status),
+                KEY reference_lookup (reference_type,reference_id)
+            ) $charset;"
+        ];
+        foreach ($inventoryTables as $sql) { dbDelta($sql); }
+        $movementColumns = [
+            'unit_cost_toman' => "ALTER TABLE {$p}stock_movements ADD COLUMN unit_cost_toman bigint unsigned NOT NULL DEFAULT 0",
+            'supplier_id' => "ALTER TABLE {$p}stock_movements ADD COLUMN supplier_id bigint unsigned NOT NULL DEFAULT 0",
+            'approved_by' => "ALTER TABLE {$p}stock_movements ADD COLUMN approved_by bigint unsigned NOT NULL DEFAULT 0",
+            'approved_at' => "ALTER TABLE {$p}stock_movements ADD COLUMN approved_at datetime NULL",
+            'ledger_entry_id' => "ALTER TABLE {$p}stock_movements ADD COLUMN ledger_entry_id bigint unsigned NOT NULL DEFAULT 0"
+        ];
+        foreach ($movementColumns as $column => $sql) {
+            if (!$wpdb->get_var($wpdb->prepare("SHOW COLUMNS FROM {$p}stock_movements LIKE %s", $column))) {
+                $wpdb->query($sql);
+            }
+        }
+        $inventoryAccounts = [
+            ['1300','موجودی کالا','asset'],
+            ['5100','بهای تمام‌شده کالای فروش‌رفته','expense']
+        ];
+        foreach ($inventoryAccounts as $account) {
+            $wpdb->query($wpdb->prepare(
+                "INSERT IGNORE INTO {$p}ledger_accounts (account_code,account_name,account_type,is_active) VALUES (%s,%s,%s,1)",
+                $account[0], $account[1], $account[2]
+            ));
+        }
+
         update_option('parsian_final_schema_version', PARSIAN_FINAL_VERSION, false);
         Parsian_Final_Roles::register();
     }
