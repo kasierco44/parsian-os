@@ -32,10 +32,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import ir.pgtparts.parsian.data.DashboardRepository
+import ir.pgtparts.parsian.data.Outbox
 import ir.pgtparts.parsian.security.AuthRepository
 import ir.pgtparts.parsian.security.SessionStore
 import ir.pgtparts.parsian.sync.SyncScheduler
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -51,6 +53,8 @@ private fun ParsianMobileApp(context: Context) {
     val seller = BuildConfig.APP_ROLE == "seller"
     val title = if (seller) "پارسیان‌یار فروشنده" else "پارسیان قطعه | مشتریان"
     var apiRoot by remember { mutableStateOf("") }
+    var leadName by remember { mutableStateOf("") }
+    var leadPhone by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
@@ -62,6 +66,7 @@ private fun ParsianMobileApp(context: Context) {
 
     LaunchedEffect(loggedIn, reload) {
         if (loggedIn) {
+            SyncScheduler.enqueue(context)
             busy = true
             try {
                 dashboard = DashboardRepository.load(context)
@@ -99,6 +104,26 @@ private fun ParsianMobileApp(context: Context) {
                                 message = "از حساب خارج شدید."
                             }
                         }, modifier = Modifier.fillMaxWidth()) { Text("خروج امن") }
+                    }
+                    if (seller) {
+                        OutlinedTextField(value = leadName, onValueChange = { leadName = it }, label = { Text("نام سرنخ جدید") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                        OutlinedTextField(value = leadPhone, onValueChange = { leadPhone = it }, label = { Text("شماره تماس") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+                        Button(
+                            enabled = leadName.isNotBlank(),
+                            onClick = {
+                                scope.launch {
+                                    try {
+                                        Outbox.enqueue(context, "crm.lead.create", JSONObject().put("name", leadName.trim()).put("phone", leadPhone.trim()))
+                                        leadName = ""; leadPhone = ""
+                                        message = "سرنخ به صف آفلاین اضافه شد؛ پس از همگام‌سازی برای بررسی سرور ارسال می‌شود و هنوز ثبت قطعی نیست."
+                                        SyncScheduler.enqueue(context)
+                                    } catch (error: Exception) {
+                                        message = error.message ?: "ثبت پیش‌نویس انجام نشد."
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                        ) { Text("ثبت سرنخ در صف آفلاین") }
                     }
                     if (busy) CircularProgressIndicator(modifier = Modifier.padding(12.dp))
                     dashboard?.let { data ->
