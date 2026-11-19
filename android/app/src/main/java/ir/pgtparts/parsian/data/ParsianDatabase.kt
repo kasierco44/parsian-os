@@ -20,6 +20,7 @@ abstract class ParsianDatabase : RoomDatabase() {
   }
   @Volatile private var INSTANCE: ParsianDatabase? = null
   fun get(context: Context): ParsianDatabase = INSTANCE ?: synchronized(this) {
+   SQLiteDatabase.loadLibs(context)
    INSTANCE ?: Room.databaseBuilder(context.applicationContext, ParsianDatabase::class.java, "parsian-local.db")
     .openHelperFactory(SupportFactory(SQLiteDatabase.getBytes(SessionStore.databasePassphrase(context))))
     .addMigrations(MIGRATION_1_2)
