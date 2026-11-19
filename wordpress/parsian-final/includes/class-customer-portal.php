@@ -32,19 +32,51 @@ final class Parsian_Final_Customer_Portal {
     public function invoices(WP_REST_Request $request): WP_REST_Response {
         $customerId=$this->customer_id(); if(!$customerId)return $this->denied();
         global $wpdb;
-        $rows=$wpdb->get_results($wpdb->prepare("SELECT id,invoice_number,total_toman,status,due_date,issued_at FROM {$wpdb->prefix}parsian_invoices WHERE customer_id=%d ORDER BY issued_at DESC,id DESC LIMIT 100",$customerId),ARRAY_A);
+        $rows=$wpdb->get_results($wpdb->prepare("SELECT id,invoice_number,total_toman,status,due_date,issued_at,updated_at,journal_entry_id FROM {$wpdb->prefix}parsian_invoices WHERE customer_id=%d ORDER BY issued_at DESC,id DESC LIMIT 100",$customerId),ARRAY_A);
+        foreach ((array) $rows as &$row) {
+            $row['revision'] = hash('sha256', wp_json_encode([
+                'id'=>(int)$row['id'],'invoice_number'=>(string)$row['invoice_number'],
+                'total_toman'=>(int)$row['total_toman'],'status'=>(string)$row['status'],
+                'due_date'=>(string)($row['due_date']??''),'issued_at'=>(string)$row['issued_at'],
+                'updated_at'=>(string)($row['updated_at']??''),'journal_entry_id'=>(int)$row['journal_entry_id']
+            ], JSON_UNESCAPED_UNICODE));
+        }
+        unset($row);
         return new WP_REST_Response(['items'=>$rows?:[]],200);
     }
     public function proformas(WP_REST_Request $request): WP_REST_Response {
         $customerId=$this->customer_id(); if(!$customerId)return $this->denied();
         global $wpdb;
-        $rows=$wpdb->get_results($wpdb->prepare("SELECT id,document_number,total_toman,status,due_date,created_at FROM {$wpdb->prefix}parsian_proformas WHERE customer_id=%d ORDER BY created_at DESC,id DESC LIMIT 100",$customerId),ARRAY_A);
+        $rows=$wpdb->get_results($wpdb->prepare("SELECT id,document_number,total_toman,status,due_date,created_at,updated_at,customer_id,notes,invoice_id FROM {$wpdb->prefix}parsian_proformas WHERE customer_id=%d ORDER BY created_at DESC,id DESC LIMIT 100",$customerId),ARRAY_A);
+        foreach ((array) $rows as &$row) {
+            $row['revision'] = hash('sha256', wp_json_encode([
+                'id'=>(int)$row['id'],'document_number'=>(string)$row['document_number'],
+                'total_toman'=>(int)$row['total_toman'],'status'=>(string)$row['status'],
+                'due_date'=>(string)($row['due_date']??''),'created_at'=>(string)$row['created_at'],
+                'updated_at'=>(string)($row['updated_at']??''),'customer_id'=>(int)$row['customer_id'],
+                'notes'=>(string)($row['notes']??''),'invoice_id'=>(int)$row['invoice_id']
+            ], JSON_UNESCAPED_UNICODE));
+            unset($row['customer_id'], $row['notes'], $row['invoice_id']);
+        }
+        unset($row);
         return new WP_REST_Response(['items'=>$rows?:[]],200);
     }
     public function payments(WP_REST_Request $request): WP_REST_Response {
         $customerId=$this->customer_id(); if(!$customerId)return $this->denied();
         global $wpdb;
-        $rows=$wpdb->get_results($wpdb->prepare("SELECT id,amount_toman,method,reference,status,created_at FROM {$wpdb->prefix}parsian_payments WHERE party_type='customer' AND party_id=%d AND direction='in' ORDER BY created_at DESC,id DESC LIMIT 100",$customerId),ARRAY_A);
+        $rows=$wpdb->get_results($wpdb->prepare("SELECT id,amount_toman,method,reference,status,created_at,updated_at,direction,party_type,party_id,created_by,journal_entry_id FROM {$wpdb->prefix}parsian_payments WHERE party_type='customer' AND party_id=%d AND direction='in' ORDER BY created_at DESC,id DESC LIMIT 100",$customerId),ARRAY_A);
+        foreach ((array) $rows as &$row) {
+            $row['revision'] = hash('sha256', wp_json_encode([
+                'id'=>(int)$row['id'],'amount_toman'=>(int)$row['amount_toman'],
+                'method'=>(string)$row['method'],'reference'=>(string)$row['reference'],
+                'status'=>(string)$row['status'],'created_at'=>(string)$row['created_at'],
+                'updated_at'=>(string)($row['updated_at']??''),'direction'=>(string)$row['direction'],
+                'party_type'=>(string)$row['party_type'],'party_id'=>(int)$row['party_id'],
+                'created_by'=>(int)$row['created_by'],'journal_entry_id'=>(int)$row['journal_entry_id']
+            ], JSON_UNESCAPED_UNICODE));
+            unset($row['direction'], $row['party_type'], $row['party_id'], $row['created_by'], $row['journal_entry_id']);
+        }
+        unset($row);
         return new WP_REST_Response(['items'=>$rows?:[]],200);
     }
 }
