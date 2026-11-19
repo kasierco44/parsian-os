@@ -8,7 +8,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import net.sqlcipher.database.SQLiteDatabase
 import net.sqlcipher.database.SupportFactory
 import ir.pgtparts.parsian.security.SessionStore
-@Database(entities = [SyncOperationEntity::class, SyncEventEntity::class, SyncMetadataEntity::class, DashboardSnapshotEntity::class], version = 3, exportSchema = true)
+
+@Database(entities = [SyncOperationEntity::class, SyncEventEntity::class, SyncMetadataEntity::class, DashboardSnapshotEntity::class], version = 4, exportSchema = true)
 abstract class ParsianDatabase : RoomDatabase() {
  abstract fun syncOperations(): SyncOperationDao
  companion object {
@@ -23,12 +24,17 @@ abstract class ParsianDatabase : RoomDatabase() {
     database.execSQL("CREATE TABLE IF NOT EXISTS dashboard_snapshots (snapshotKey TEXT NOT NULL PRIMARY KEY, payloadJson TEXT NOT NULL, updatedAtEpochMs INTEGER NOT NULL)")
    }
   }
+  private val MIGRATION_3_4 = object : Migration(3, 4) {
+   override fun migrate(database: SupportSQLiteDatabase) {
+    database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_sync_inbox_eventUuid ON sync_inbox(eventUuid)")
+   }
+  }
   @Volatile private var INSTANCE: ParsianDatabase? = null
   fun get(context: Context): ParsianDatabase = INSTANCE ?: synchronized(this) {
    SQLiteDatabase.loadLibs(context)
    INSTANCE ?: Room.databaseBuilder(context.applicationContext, ParsianDatabase::class.java, "parsian-local.db")
     .openHelperFactory(SupportFactory(SQLiteDatabase.getBytes(SessionStore.databasePassphrase(context))))
-    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
     .build().also { INSTANCE = it }
   }
  }
