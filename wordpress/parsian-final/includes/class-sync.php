@@ -161,7 +161,7 @@ final class Parsian_Final_Sync {
             'invoice' => [
                 'table'=>$p.'invoices',
                 'select'=>"SELECT id,invoice_number,proforma_id,customer_id,status,total_toman,due_date,issued_by,issued_at,COALESCE(updated_at,issued_at) AS updated_at,journal_entry_id FROM {$p}invoices",
-                'fields'=>['id','invoice_number','proforma_id','customer_id','status','total_toman','due_date','issued_by','issued_at','updated_at','journal_entry_id'],
+                'fields'=>['id','invoice_number','status','total_toman','due_date','issued_at','updated_at','journal_entry_id'],
                 'owner'=>'issued_by'
             ],
             'payment' => [
