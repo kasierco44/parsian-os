@@ -143,9 +143,9 @@ private fun ParsianMobileApp(context: Context) {
                             } else {
                                 item { portalSection(data, "customers", "مشتریان تخصیص‌یافته", listOf("display_name", "province", "status")) }
                                 item { portalSection(data, "leads", "سرنخ‌های فروش من", listOf("display_name", "phone", "province", "status")) }
-                                item { taskSection(data, context) { message = "تکمیل وظیفه به صف آفلاین اضافه شد؛ پس از تأیید مدیر قطعی می‌شود."; SyncScheduler.enqueue(context) } }
-                                item { leadUpdateSection(context) { message = "ویرایش سرنخ به صف آفلاین اضافه شد؛ پس از تأیید مدیر اعمال می‌شود."; SyncScheduler.enqueue(context) } }
-                                item { proformaDraftSection(context) { message = "پیش‌نویس پیش‌فاکتور به صف آفلاین اضافه شد؛ تأیید مدیر لازم است."; SyncScheduler.enqueue(context) } }
+                                item { taskSection(data, context) { result -> message = result; if (result.startsWith("تکمیل وظیفه")) SyncScheduler.enqueue(context) } }
+                                item { leadUpdateSection(context) { result -> message = result; if (result.startsWith("ویرایش سرنخ")) SyncScheduler.enqueue(context) } }
+                                item { proformaDraftSection(context) { result -> message = result; if (result.startsWith("پیش‌نویس پیش‌فاکتور")) SyncScheduler.enqueue(context) } }
                                 item { portalSection(data, "proformas", "پیش‌فاکتورهای من", listOf("document_number", "total_toman", "status")) }
                             }
                         }
@@ -189,7 +189,7 @@ private fun ParsianMobileApp(context: Context) {
 }
 
 @Composable
-private fun taskSection(data: JSONObject, context: Context, onQueued: () -> Unit) {
+private fun taskSection(data: JSONObject, context: Context, onQueued: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val tasks = data.optJSONObject("tasks")?.optJSONArray("items") ?: JSONArray()
     Text("وظایف من", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
@@ -207,8 +207,8 @@ private fun taskSection(data: JSONObject, context: Context, onQueued: () -> Unit
                     scope.launch {
                         try {
                             Outbox.enqueue(context, "crm.task.complete", JSONObject().put("task_id", taskId).put("completed", true))
-                            onQueued()
-                        } catch (_: Exception) { }
+                            onQueued("تکمیل وظیفه به صف آفلاین اضافه شد؛ پس از تأیید مدیر قطعی می‌شود.")
+                        } catch (error: Exception) { onQueued(error.message ?: "ثبت تکمیل وظیفه ناموفق بود.") }
                     }
                 }, modifier = Modifier.fillMaxWidth()) { Text("ثبت تکمیل آفلاین") }
             }
@@ -217,7 +217,7 @@ private fun taskSection(data: JSONObject, context: Context, onQueued: () -> Unit
 }
 
 @Composable
-private fun leadUpdateSection(context: Context, onQueued: () -> Unit) {
+private fun leadUpdateSection(context: Context, onQueued: (String) -> Unit) {
     var leadId by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
@@ -241,15 +241,15 @@ private fun leadUpdateSection(context: Context, onQueued: () -> Unit) {
                     if (notes.isNotBlank()) payload.put("notes", notes.trim())
                     Outbox.enqueue(context, "crm.lead.update", payload)
                     leadId = ""; name = ""; phone = ""; province = ""; notes = ""
-                    onQueued()
-                } catch (_: Exception) { }
+                    onQueued("ویرایش سرنخ به صف آفلاین اضافه شد؛ پس از تأیید مدیر اعمال می‌شود.")
+                } catch (error: Exception) { onQueued(error.message ?: "ثبت ویرایش سرنخ ناموفق بود.") }
             }
         }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
     ) { Text("ثبت ویرایش در صف آفلاین") }
 }
 
 @Composable
-private fun proformaDraftSection(context: Context, onQueued: () -> Unit) {
+private fun proformaDraftSection(context: Context, onQueued: (String) -> Unit) {
     var customerId by remember { mutableStateOf("") }
     var productId by remember { mutableStateOf("") }
     var quantity by remember { mutableStateOf("1") }
@@ -273,8 +273,8 @@ private fun proformaDraftSection(context: Context, onQueued: () -> Unit) {
                     val payload = JSONObject().put("customer_id", customerId.toLong()).put("items", JSONArray().put(line))
                     Outbox.enqueue(context, "sales.proforma.draft", payload)
                     customerId = ""; productId = ""; quantity = "1"; unitPrice = ""
-                    onQueued()
-                } catch (_: Exception) { }
+                    onQueued("پیش‌نویس پیش‌فاکتور به صف آفلاین اضافه شد؛ تأیید مدیر لازم است.")
+                } catch (error: Exception) { onQueued(error.message ?: "ثبت پیش‌نویس پیش‌فاکتور ناموفق بود.") }
             }
         },
         modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
