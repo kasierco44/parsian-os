@@ -26,7 +26,7 @@ Do not distribute debug builds as production apps. Release signing material must
 
 ## Native app screens (2026-11-19)
 
-- Seller flavor now loads assigned customers, owned leads and the seller's proformas from the authenticated REST API. It can queue a new lead draft locally while offline; the server response remains pending review and is not treated as a committed lead.
+- Seller flavor now loads assigned customers, owned leads and the seller's proformas from the authenticated REST API. It can queue a new lead draft locally while offline; the server places it in pending review. A manager can approve the lead from the web review queue, after which the seller receives a delta event and the local outbox status changes to applied.
 - Customer flavor now loads only the linked customer's overview, invoices, proformas and incoming payment records. The WordPress customer account must be linked to a customer record through the manager-only /customers/{id}/link-user endpoint.
 - API site URLs entered on login are normalized to /wp-json/parsian-final/v1 and HTTPS is mandatory.
 - API dates are rendered with Android ICU PersianCalendar and common workflow states are translated into Persian.
