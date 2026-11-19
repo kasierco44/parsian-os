@@ -243,3 +243,10 @@ Keep the existing live site and its database untouched until a staging backup, m
 
 - The finance aging acceptance harness was corrected to assert against its own synthetic customer rather than assuming the entire staging database contains no other receivables.
 - Latest follow-up commits: `df9cd318e064da767c615778f000f39333c9b914` (remove duplicate lint workflow) and `341032dc5030832011fd0cd3d611b0542aa3d137` (scope aging test assertions).
+
+
+## Local syntax check detail (2026-11-19)
+
+- PHP CLI 8.4 was available in the working environment. Manual `php -l` checks passed for the current source copies of `class-auth.php`, `class-sync.php`, `parsian-final.php`, `tests/auth-sync-acceptance.php`, and `tests/finance-ledger-acceptance.php`.
+- This is a targeted syntax check, **not** a full-plugin lint: the modified installer and bank reconciliation source were not linted in the local CLI session. The GitHub Actions lint runs still failed before exposing job steps/logs, so whole-plugin lint remains unverified.
+- The working environment has no WP-CLI, MySQL client, or PHP MySQL driver available. Consequently the migration and database acceptance harnesses cannot be executed here. They require an isolated WordPress + MySQL staging environment.
