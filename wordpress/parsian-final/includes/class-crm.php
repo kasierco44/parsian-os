@@ -7,6 +7,16 @@ final class Parsian_Final_CRM {
             'callback' => [$this, 'customers'],
             'permission_callback' => static function (): bool { return is_user_logged_in() && current_user_can('parsian_crm_read'); },
         ]);
+        register_rest_route('parsian-final/v1', '/customers/(?P<id>\\d+)/assign-seller', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'assign_seller'],
+            'permission_callback' => static function (): bool { return is_user_logged_in() && current_user_can('parsian_manage_users'); },
+        ]);
+        register_rest_route('parsian-final/v1', '/customers/(?P<id>\\d+)/link-user', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'link_customer_user'],
+            'permission_callback' => static function (): bool { return is_user_logged_in() && current_user_can('parsian_manage_users'); },
+        ]);
         register_rest_route('parsian-final/v1', '/leads', [
             [
                 'methods' => WP_REST_Server::READABLE,
@@ -105,6 +115,67 @@ final class Parsian_Final_CRM {
         ], ['%s','%d','%s','%s','%d','%s','%s']);
         return new WP_REST_Response(['id' => $id, 'status' => 'new'], 201);
     }
+
+    public function assign_seller(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $customerId = absint($request['id']);
+        $sellerId = absint($request->get_param('seller_user_id'));
+        $customer = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$wpdb->prefix}parsian_customers WHERE id=%d",
+            $customerId
+        ));
+        $seller = $sellerId ? get_user_by('id', $sellerId) : false;
+        if (!$customer || !$seller || !in_array('parsian_seller', (array) $seller->roles, true)) {
+            return new WP_REST_Response(['code' => 'customer_or_seller_not_found'], 404);
+        }
+        $metaKey = 'parsian_customer_' . $customerId;
+        $assign = rest_sanitize_boolean($request->get_param('assigned') ?? true);
+        if ($assign) {
+            update_user_meta($sellerId, $metaKey, '1');
+        } else {
+            delete_user_meta($sellerId, $metaKey);
+        }
+        $wpdb->insert($wpdb->prefix . 'parsian_events', [
+            'event_uuid' => wp_generate_uuid4(),
+            'actor_user_id' => get_current_user_id(),
+            'event_type' => $assign ? 'crm.customer.seller_assigned' : 'crm.customer.seller_unassigned',
+            'aggregate_type' => 'customer',
+            'aggregate_id' => $customerId,
+            'payload' => wp_json_encode(['seller_user_id' => $sellerId]),
+            'created_at' => current_time('mysql', true),
+        ], ['%s','%d','%s','%s','%d','%s','%s']);
+        return new WP_REST_Response(['customer_id' => $customerId, 'seller_user_id' => $sellerId, 'assigned' => $assign], 200);
+    }
+
+    public function link_customer_user(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $customerId = absint($request['id']);
+        $customerUserId = absint($request->get_param('customer_user_id'));
+        $customer = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$wpdb->prefix}parsian_customers WHERE id=%d",
+            $customerId
+        ));
+        $customerUser = $customerUserId ? get_user_by('id', $customerUserId) : false;
+        if (!$customer || !$customerUser || !in_array('parsian_customer', (array) $customerUser->roles, true)) {
+            return new WP_REST_Response(['code' => 'customer_or_user_not_found'], 404);
+        }
+        $existing = absint(get_user_meta($customerUserId, 'parsian_customer_id', true));
+        if ($existing && $existing !== $customerId) {
+            return new WP_REST_Response(['code' => 'customer_user_already_linked'], 409);
+        }
+        update_user_meta($customerUserId, 'parsian_customer_id', $customerId);
+        $wpdb->insert($wpdb->prefix . 'parsian_events', [
+            'event_uuid' => wp_generate_uuid4(),
+            'actor_user_id' => get_current_user_id(),
+            'event_type' => 'crm.customer.portal_linked',
+            'aggregate_type' => 'customer',
+            'aggregate_id' => $customerId,
+            'payload' => wp_json_encode(['customer_user_id' => $customerUserId]),
+            'created_at' => current_time('mysql', true),
+        ], ['%s','%d','%s','%s','%d','%s','%s']);
+        return new WP_REST_Response(['customer_id' => $customerId, 'customer_user_id' => $customerUserId, 'linked' => true], 200);
+    }
+
     public function create_proforma(WP_REST_Request $request): WP_REST_Response {
         $body = $request->get_json_params();
         if (!is_array($body) || empty($body['items']) || !is_array($body['items'])) {
