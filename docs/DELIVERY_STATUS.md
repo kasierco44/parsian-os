@@ -373,3 +373,9 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Added a manager-only queue for pending device operations. Managers can approve supported offline lead creation (which writes a lead under the originating seller and records an event visible to that seller) or reject an operation with a reason.
 - The current server-side apply handler intentionally supports only crm.lead.create. Other queued operation types remain pending until a matching domain-safe processor is implemented. The acceptance harness now includes approval, rejection and seller event visibility assertions; these still need to run against isolated Staging.
 - Plugin development version is now 0.4.17.
+
+
+### Offline outbox completion events (2026-11-19)
+- The manager approval/rejection endpoints now write the review event in the same database transaction as the operation status. Events are attributed to the originating seller for their restricted delta stream, with the reviewing manager recorded in the payload.
+- Android now updates the local outbox item to applied/rejected when the matching review event arrives; duplicate push responses marked applied are also handled as applied.
+- Plugin development version is now 0.4.18. This review lifecycle still requires the WP-CLI acceptance harness to pass on Staging.
