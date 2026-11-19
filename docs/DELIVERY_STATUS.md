@@ -118,3 +118,23 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Allocation is a subledger operation only: it intentionally does not create another GL journal because the receipt has already credited trade receivables when posted.
 - Invoice status is not overwritten by collection status; inventory fulfillment remains an independent state transition.
 - PHP lint/package workflows on the newest finance commits reported failure before producing runner step details (job logs unavailable). The last confirmed successful PHP lint and development package were on code head 7b1a6c65321e68b43dfb82d4ee9ceef445ff60c0, before the payment-allocation change. Re-run validation is required; do not treat the newer commits as verified.
+
+
+## Cheque lifecycle and bank reconciliation foundation (2026-11-19)
+
+- Added cheque event history table and bank statement line table, plus safe schema migrations for cheque party/payment linkage and lifecycle metadata.
+- Bumped WordPress plugin/schema version to 0.4.0 and registered the cheque/reconciliation service.
+- Cheque creation now requires explicit party mapping (received/customer; issued/supplier); optional payment linkage is validated against a posted cheque-method payment with matching direction, party and amount.
+- Added explicit state transition endpoint and append-only cheque event history.
+- Supported received-cheque states: pending -> deposited -> cleared/bounced, with return paths. Supported issued-cheque states: pending -> issued -> presented -> cleared/bounced, plus cancellation before presentation.
+- Clearing a received cheque transfers value from cheques receivable (1220) to bank (1210). Bouncing/returning a deposited received cheque restores customer receivable (1100) against cheque receivable (1220).
+- Clearing an issued cheque settles cheque payable (2200) against bank (1210). Bouncing/cancelling an issued cheque restores supplier payable (2100) against cheque payable (2200).
+- All financial state transitions use row locks, a cheque event ID as the unique journal source, and an audit event in the same DB transaction.
+- Added manual bank statement line intake, exact amount/direction matching to a posted journal's bank account (1210), duplicate-match protection and reconciliation summary.
+- API routes: POST /cheques/{id}/transition; GET /cheques/{id}/history; POST/GET /bank/statement-lines; POST /bank/statement-lines/{id}/match; GET /bank/reconciliation-summary.
+
+### Current limitations (do not treat as full bank reconciliation release)
+- Statement intake currently accepts one normalized line per request; CSV/Excel upload parsing, bank-account master data, statement opening/closing balances, fees/interest mapping, split/combined transaction matching and period close are not implemented.
+- Matching is exact amount + direction against one posted journal entry on ledger account 1210. It does not yet support partial or many-to-one matches.
+- Cheque transition endpoints are implemented but no live WordPress database, bank sandbox, or integration acceptance tests have been executed.
+- Payment allocation, cheque lifecycle, and bank reconciliation still require end-to-end tests for duplicate requests, concurrent transitions, bounced/returned scenarios, and GL/subledger tie-out.
