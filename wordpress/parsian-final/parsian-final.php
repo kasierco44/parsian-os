@@ -8,7 +8,7 @@
  * Text Domain: parsian-final
  */
 if (!defined('ABSPATH')) { exit; }
-define('PARSIAN_FINAL_VERSION', '0.4.24');
+define('PARSIAN_FINAL_VERSION', '0.4.25');
 define('PARSIAN_FINAL_FILE', __FILE__);
 define('PARSIAN_FINAL_PATH', plugin_dir_path(__FILE__));
 define('PARSIAN_FINAL_URL', plugin_dir_url(__FILE__));
