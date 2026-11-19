@@ -231,9 +231,12 @@ final class Parsian_Final_Sync {
                 "SELECT umeta_id FROM {$wpdb->usermeta} WHERE user_id=%d AND meta_key=%s AND meta_value='1' LIMIT 1",
                 $ownerId, 'parsian_customer_' . $recordId
             ));
-        } else {
-            $ownerField = $resource === 'invoice' ? 'issued_by' : ($resource === 'payment' ? 'created_by' : 'created_by');
-            $assigned = (int)($row[$ownerField] ?? 0) === $ownerId;
+        } elseif ($resource === 'proforma') {
+            $assigned = (int)($row['created_by'] ?? 0) === $ownerId;
+        } elseif (in_array($resource, ['invoice','payment'], true)) {
+            // Finance capability and accountant role are checked at intake/approval.
+            // Existing posted invoices and pending payments may have been created by another authorized role.
+            $assigned = true;
         }
         if (!$assigned) {
             $wpdb->query('ROLLBACK');
