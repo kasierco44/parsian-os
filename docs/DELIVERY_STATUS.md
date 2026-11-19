@@ -437,3 +437,13 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Source verification confirms the new event mapping is present. No Android compilation or device-level sync test is claimed.
 - GitHub Actions runs triggered by the latest commits for PHP lint and Android debug build both concluded `failure`, but GitHub returned no job steps/logs (`logs_url=null`). This is inconclusive runner/workflow evidence, not a verified compiler or PHP syntax error. No current APK or current plugin ZIP artifact is approved for distribution.
 - The installation guide is documentation only. WordPress Staging installation, DB migrations, WP-CLI acceptance tests, Android/Windows builds and clean-environment installation, backup/restore rehearsal, and Production approval remain release blockers.
+
+
+## Offline task and proforma completion (2026-11-19, plugin 0.4.24)
+
+- Added `parsian_tasks` migration table. Managers can create and assign seller tasks via `POST /tasks`; sellers can list only tasks assigned to their own user via `GET /tasks`.
+- Implemented manager-reviewed `crm.task.complete`: locks the task row, verifies the originating seller is the assignee and task is open, then updates task, operation result and event in one transaction.
+- Implemented manager-reviewed `sales.proforma.draft`: verifies seller capability and customer assignment, validates active products, quantity, price, due date and total bounds, then creates a draft proforma and items transactionally. It does not issue an invoice or reserve stock; invoice conversion remains a separate manager action.
+- Added acceptance-harness coverage for dotted operation type names, manager task assignment/completion and offline proforma draft approval. Added tasks to schema acceptance and backup snapshot export.
+- Added manager/seller task workspace and approval actions for offline lead create/update, task completion and proforma draft to the web panel; mirrored JS bundle and Android event acknowledgement.
+- These changes are source-level only until Staging acceptance runs. Do not infer database migration, runtime behavior or APK build success from source presence.
