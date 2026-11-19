@@ -504,3 +504,13 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Inbox inserts now use ABORT rather than REPLACE. Before advancing the pull cursor, the Room transaction checks both server `eventId` and `eventUuid`: an exact replay is ignored, while an ID/UUID collision aborts the transaction and leaves the cursor unchanged.
 - This closes a duplicate-delivery/identity-overwrite gap in inbox persistence. It is not yet aggregate-level conflict resolution: applying event payloads to customer, lead, task, and proforma read models remains outstanding.
 - Source changes only. Gradle compilation, Room migration execution on device, and duplicate/collision instrumentation tests have not been run because GitHub Actions runner allocation remains unverified.
+
+
+## Android offline resource projections (2026-11-19)
+
+- Added SQLCipher-backed Room `offline_records` with a composite key (`resourceType`, `recordId`) and a non-destructive schema migration from version 4 to 5.
+- After a complete successful role-scoped dashboard fetch, the Android repository atomically replaces local resource snapshots for seller resources (`customers`, `leads`, `proformas`, `tasks`) or customer resources (`invoices`, `proformas`, `payments`). Each row stores the exact JSON record returned by the WordPress REST API, keyed by its server ID; no fields are inferred from event payloads.
+- Added a role-allowlisted local resource reader. Logout clears these projections together with the existing dashboard cache and sync state.
+- Sync event handling now commits the inbox page and cursor before applying corresponding outbox acknowledgements. A failed inbox identity/cursor transaction therefore cannot prematurely mark the related local operation as applied or rejected.
+- The WordPress event payloads were inspected: several events carry identifiers and operation UUIDs, not complete entity snapshots. Consequently, this stage hydrates projections from the role-scoped REST collection responses rather than guessing full records from partial event payloads.
+- This is source-level work only. It does not yet implement event-driven per-record reconciliation, stale-record UI indicators, conflict resolution against server revisions, or pagination beyond the first dashboard page. Gradle compilation, Room migration execution, and Android device tests remain unverified while Actions runner allocation is unresolved.
