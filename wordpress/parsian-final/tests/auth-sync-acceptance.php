@@ -27,12 +27,14 @@ try {
     $password=wp_generate_password(32,true,true);
     $userId=wp_insert_user([
         'user_login'=>'parsian_qa_'.$suffix,'user_pass'=>$password,
-        'user_email'=>'parsian-qa-'.$suffix.'@example.invalid','role'=>'subscriber'
+        'user_email'=>'parsian-qa-'.$suffix.'@example.invalid','role'=>'parsian_seller'
     ]);
     if(is_wp_error($userId))throw new RuntimeException($userId->get_error_message());
     $user=new WP_User($userId);
     $user->add_cap('parsian_access_core');
     $user->add_cap('parsian_sync_use');
+    // Test fixture has manager review capability so the queue processor can be exercised.
+    $user->add_cap('parsian_manage_users');
 
     $login=new WP_REST_Request('POST','/parsian-final/v1/auth/login');
     $login->set_param('username','parsian_qa_'.$suffix);
@@ -84,6 +86,40 @@ try {
     $conflict=$sync->push($push)->get_data();
     $assert(($conflict['results'][0]['code']??'')==='operation_uuid_conflict','same operation UUID with changed payload is rejected');
 
+    $leadOperation=wp_generate_uuid4();
+    $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
+        'operation_uuid'=>$leadOperation,'type'=>'crm.lead.create',
+        'payload'=>['name'=>'Offline QA Lead','phone'=>'09120000000','province'=>'QA']
+    ]]]));
+    $leadQueued=$sync->push($push)->get_data();
+    $assert(($leadQueued['results'][0]['status']??'')==='pending_review','offline lead is queued for manager review');
+    $leadOperationId=(int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_sync_ops WHERE operation_uuid=%s",$leadOperation));
+    $approveRequest=new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$leadOperationId.'/approve');
+    $approveRequest->set_param('id',$leadOperationId);
+    $approved=$sync->approve_operation($approveRequest);
+    $approvedData=$approved->get_data();
+    $assert($approved->get_status()===201&&($approvedData['status']??'')==='applied','manager review applies offline lead exactly once');
+    $createdLead=(int)($approvedData['lead_id']??0);
+    $assert($createdLead>0&&(int)$wpdb->get_var($wpdb->prepare("SELECT owner_user_id FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead))===(int)$userId,'approved offline lead remains owned by its originating seller');
+
+    $pullRequest=new WP_REST_Request('GET','/parsian-final/v1/sync/pull');
+    $pullRequest->set_param('since_id',0);
+    $pulled=$sync->pull($pullRequest)->get_data();
+    $assert((bool)array_filter($pulled['items']??[],static fn($event)=>($event['event_type']??'')==='crm.lead.created.offline'),'originating seller can pull the offline approval event');
+
+    $rejectOperation=wp_generate_uuid4();
+    $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
+        'operation_uuid'=>$rejectOperation,'type'=>'crm.task.complete',
+        'payload'=>['task_id'=>987654322,'completed'=>true]
+    ]]]));
+    $sync->push($push);
+    $rejectId=(int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_sync_ops WHERE operation_uuid=%s",$rejectOperation));
+    $rejectRequest=new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$rejectId.'/reject');
+    $rejectRequest->set_param('id',$rejectId);
+    $rejectRequest->set_param('reason','QA rejection');
+    $rejected=$sync->reject_operation($rejectRequest);
+    $assert($rejected->get_status()===200&&($rejected->get_data()['status']??'')==='rejected','manager can reject unsupported offline operation');
+
     $revoke=new WP_REST_Request('POST','/parsian-final/v1/auth/revoke-device');
     $revoke->set_param('device_uuid',$device);
     $revoked=$auth->revoke_device($revoke);
@@ -91,13 +127,15 @@ try {
     $_SERVER['HTTP_AUTHORIZATION']='Bearer '.$refreshData['access_token']['token'];
     $assert((int)$auth->authenticate_bearer(0)===0,'revoked device access token is rejected');
 
-    WP_CLI::success('Auth/sync acceptance passed: login, access token, refresh rotation/reuse rejection, device-bound idempotent sync, payload conflict and device revocation.');
+    WP_CLI::success('Auth/sync acceptance passed: login, access token, refresh rotation/reuse rejection, device-bound idempotent sync, payload conflict, manager lead approval/rejection, seller event visibility and device revocation.');
 } finally {
     if($oldAuthorization===null)unset($_SERVER['HTTP_AUTHORIZATION']);else $_SERVER['HTTP_AUTHORIZATION']=$oldAuthorization;
     if($userId){
         $wpdb->delete($wpdb->prefix.'parsian_auth_tokens',['user_id'=>$userId],['%d']);
         $wpdb->delete($wpdb->prefix.'parsian_sync_ops',['user_id'=>$userId],['%d']);
         $wpdb->delete($wpdb->prefix.'parsian_devices',['user_id'=>$userId],['%d']);
+        $wpdb->delete($wpdb->prefix.'parsian_leads',['owner_user_id'=>$userId],['%d']);
+        $wpdb->delete($wpdb->prefix.'parsian_events',['actor_user_id'=>$userId],['%d']);
         require_once ABSPATH.'wp-admin/includes/user.php';
         wp_delete_user($userId);
     }
