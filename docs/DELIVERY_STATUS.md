@@ -458,3 +458,11 @@ Keep the existing live site and its database untouched until a staging backup, m
 - No PHP lint, WP-CLI/MySQL migration, finance acceptance, Android APK build, Windows MSI/NSIS build, web JS check, Staging install, backup restore rehearsal, or security penetration test is claimed as passed.
 - Windows still lacks encrypted local SQLite/outbox and a complete offline queue; Android offline data models/conflict resolution remain incomplete. Backup restore is not implemented in the plugin. These are explicit release blockers.
 - PR #21 remains Draft and Production remains untouched. Do not tag or distribute a final release until the Staging acceptance runbook passes and all required artifacts are produced from the same release commit.
+
+
+## Android seller offline workflow UI (2026-11-19)
+
+- Seller dashboard now loads assigned tasks from `GET /tasks`.
+- Seller Android UI exposes offline lead creation, lead update, task completion, and single-line proforma draft queueing. Each operation is stored in the encrypted local outbox and requires server-side review where configured.
+- DashboardRepository now includes assigned seller tasks. SyncWorker acknowledges approved lead create/update, task completion and proforma draft events.
+- Android source was reviewed for balanced Compose block delimiters and expected operation mappings. This is not a substitute for Gradle compilation or device testing; current Android build artifact remains unverified due the GitHub runner allocation failure.
