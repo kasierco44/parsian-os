@@ -38,3 +38,5 @@ Development UI scaffold only; not production-ready.
 - Manager role has a database snapshot export and checksum validation workspace, customer/seller assignment controls, and an offline-operation review queue. The only currently executable offline approval handler is lead creation; other operation types can be rejected but are not applied. The manager review queue shows pending operations and writes review events back to the originating seller's delta stream. Validation is non-destructive; backup restore is not implemented. The export is capped at 10,000 rows per table and 20 MiB and excludes WordPress uploads/media and authentication tokens.
 - Windows Tauri uses a separate bearer-token login path; the WordPress admin panel continues to use same-origin cookie + REST nonce authentication.
 - Web tables use Persian digits, Jalali dates and Persian labels for common workflow states.
+
+- Accountant and manager roles also have a paginated payment register with a server-authorized approval action and a cheque register. Payment posting still occurs only in the WordPress finance endpoint and creates the balanced journal there.
