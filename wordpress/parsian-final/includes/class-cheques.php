@@ -57,7 +57,7 @@ final class Parsian_Final_Cheques {
         }
         $partyType=(string)$cheque['party_type']; $partyId=(int)$cheque['party_id'];
         $amount=(int)$cheque['amount_toman']; $journalId=0;
-        if(in_array($to,['cleared','bounced'],true)||($direction==='issued'&&$from==='issued'&&$to==='cancelled')){
+        if(in_array($to,['cleared','bounced'],true)||($direction==='issued'&&$from==='issued'&&$to==='cancelled')||($direction==='received'&&$from==='deposited'&&$to==='returned')){
             $paymentId=(int)$cheque['payment_id'];
             $payment=$paymentId>0?$wpdb->get_row($wpdb->prepare("SELECT id,status,method,amount_toman FROM {$wpdb->prefix}parsian_payments WHERE id=%d FOR UPDATE",$paymentId),ARRAY_A):null;
             if(!$payment||$payment['status']!=='posted'||$payment['method']!=='cheque'||(int)$payment['amount_toman']!==$amount){
