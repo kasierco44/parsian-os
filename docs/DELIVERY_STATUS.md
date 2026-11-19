@@ -304,3 +304,10 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Added manager-only proforma approval action in the UI; the server's `parsian_sales_approve` capability remains the authoritative gate. Table values are inserted as text nodes rather than HTML, reducing stored/reflected XSS risk.
 - Corrected WordPress role slug mapping and verified the current web JavaScript with local Node.js `node --check` (passed).
 - The panel still depends on authenticated WordPress cookie + REST nonce on the same origin. No browser integration, live staging data, CRUD forms, payment/cheque operations or reconciliation UI has been validated.
+
+
+## WordPress-hosted web panel integration (2026-11-19, plugin 0.4.3)
+
+- Added `class-panels.php` and registered a PARSIAN OS menu page in WordPress for users with `parsian_access_core`.
+- The plugin now enqueues its bundled panel CSS/JavaScript only on that page and injects the canonical REST API root plus a WordPress REST nonce through `wp_localize_script`. This resolves the same-origin nonce wiring for the WordPress-hosted browser panels.
+- The plugin page includes the role-aware dashboard and read-only CRM/finance views; server endpoints continue to enforce permissions. PHP syntax check passed locally for the new `class-panels.php` file only. Full-plugin lint, staging activation, browser tests and runtime API verification remain unconfirmed.
