@@ -20,6 +20,7 @@ require_once PARSIAN_FINAL_PATH . 'includes/class-inventory.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-sync.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-finance.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-cheques.php';
+require_once PARSIAN_FINAL_PATH . 'includes/class-bank.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-ledger.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-sales.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-auth.php';
@@ -34,6 +35,7 @@ add_action('plugins_loaded', static function (): void {
     (new Parsian_Final_Sync())->register_routes();
     (new Parsian_Final_Finance())->register_routes();
     (new Parsian_Final_Cheques())->register_routes();
+    (new Parsian_Final_Bank())->register_routes();
     (new Parsian_Final_Sales())->register_routes();
     (new Parsian_Final_Ledger())->register_routes();
     (new Parsian_Final_Auth())->register_routes();
