@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun ParsianMobileApp(context: Context) {
     val seller = BuildConfig.APP_ROLE == "seller"
-    val title = if (seller) "پارسیان‌یار فروشنده" else "پارسیان قطعه | مشتریان"
+    val title = if (seller) "پارسیان وان | فروشنده" else "پارسیان وان | مشتریان"
     var apiRoot by remember { mutableStateOf("") }
     var leadName by remember { mutableStateOf("") }
     var leadPhone by remember { mutableStateOf("") }
@@ -86,7 +86,7 @@ private fun ParsianMobileApp(context: Context) {
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("PARSIAN FINAL", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text("PARSIAN ONE", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
                 if (loggedIn) {
                     Text("نشست امن این دستگاه", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
@@ -148,6 +148,8 @@ private fun ParsianMobileApp(context: Context) {
                                 item { portalSection(data, "leads", "سرنخ‌های فروش من", listOf("display_name", "phone", "province", "status")) }
                                 item { taskSection(data, context) { result -> message = result; if (result.startsWith("تکمیل وظیفه")) SyncScheduler.enqueue(context) } }
                                 item { leadUpdateSection(context) { result -> message = result; if (result.startsWith("ویرایش سرنخ")) SyncScheduler.enqueue(context) } }
+                                item { customerUpdateSection(context) { result -> message = result; if (result.startsWith("ویرایش مشتری")) SyncScheduler.enqueue(context) } }
+                                item { proformaUpdateSection(context) { result -> message = result; if (result.startsWith("ویرایش پیش‌فاکتور")) SyncScheduler.enqueue(context) } }
                                 item { proformaDraftSection(context) { result -> message = result; if (result.startsWith("پیش‌نویس پیش‌فاکتور")) SyncScheduler.enqueue(context) } }
                                 item { portalSection(data, "proformas", "پیش‌فاکتورهای من", listOf("document_number", "total_toman", "status")) }
                             }
@@ -265,6 +267,80 @@ private fun leadUpdateSection(context: Context, onQueued: (String) -> Unit) {
             }
         }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
     ) { Text("ثبت ویرایش در صف آفلاین") }
+}
+
+@Composable
+private fun customerUpdateSection(context: Context, onQueued: (String) -> Unit) {
+    var customerId by remember { mutableStateOf("") }
+    var displayName by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var province by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    Text("ویرایش مشتری آفلاین", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
+    OutlinedTextField(value = customerId, onValueChange = { customerId = it }, label = { Text("شناسه مشتری تخصیص‌یافته") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text("نام مشتری جدید") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("تلفن جدید") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(value = province, onValueChange = { province = it }, label = { Text("استان جدید") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("یادداشت جدید") }, modifier = Modifier.fillMaxWidth())
+    Button(enabled = customerId.toLongOrNull()?.let { it > 0 } == true && (displayName.isNotBlank() || phone.isNotBlank() || province.isNotBlank() || notes.isNotBlank()),
+        onClick = {
+            scope.launch {
+                try {
+                    val id = customerId.toLong()
+                    val rows = DashboardRepository.loadOfflineResource(context, "customers")
+                    var baseUpdatedAt = ""; var baseRevision = ""
+                    for (index in 0 until rows.length()) {
+                        val row = rows.optJSONObject(index) ?: continue
+                        if (row.optLong("id", 0L) == id) { baseUpdatedAt = row.optString("updated_at"); baseRevision = row.optString("revision"); break }
+                    }
+                    if (baseUpdatedAt.isBlank() || baseRevision.isBlank()) throw IllegalStateException("نسخه مبنای مشتری در گوشی موجود نیست؛ ابتدا همگام‌سازی کنید.")
+                    val payload = JSONObject().put("customer_id", id).put("base_updated_at", baseUpdatedAt).put("base_revision", baseRevision)
+                    if (displayName.isNotBlank()) payload.put("display_name", displayName.trim())
+                    if (phone.isNotBlank()) payload.put("phone", phone.trim())
+                    if (province.isNotBlank()) payload.put("province", province.trim())
+                    if (notes.isNotBlank()) payload.put("notes", notes.trim())
+                    Outbox.enqueue(context, "crm.customer.update", payload)
+                    customerId = ""; displayName = ""; phone = ""; province = ""; notes = ""
+                    onQueued("ویرایش مشتری با نسخه مبنای سرور در صف آفلاین قرار گرفت؛ تغییر هم‌زمان برای تصمیم مدیر متوقف می‌شود.")
+                } catch (error: Exception) { onQueued(error.message ?: "ثبت ویرایش مشتری ناموفق بود.") }
+            }
+        }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+    ) { Text("ثبت ویرایش مشتری آفلاین") }
+}
+
+@Composable
+private fun proformaUpdateSection(context: Context, onQueued: (String) -> Unit) {
+    var proformaId by remember { mutableStateOf("") }
+    var dueDate by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    Text("ویرایش پیش‌فاکتور پیش‌نویس آفلاین", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
+    OutlinedTextField(value = proformaId, onValueChange = { proformaId = it }, label = { Text("شناسه پیش‌فاکتور") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(value = dueDate, onValueChange = { dueDate = it }, label = { Text("سررسید جدید (YYYY-MM-DD)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("یادداشت جدید") }, modifier = Modifier.fillMaxWidth())
+    Button(enabled = proformaId.toLongOrNull()?.let { it > 0 } == true && (dueDate.isNotBlank() || notes.isNotBlank()),
+        onClick = {
+            scope.launch {
+                try {
+                    val id = proformaId.toLong()
+                    val rows = DashboardRepository.loadOfflineResource(context, "proformas")
+                    var baseUpdatedAt = ""; var baseRevision = ""
+                    for (index in 0 until rows.length()) {
+                        val row = rows.optJSONObject(index) ?: continue
+                        if (row.optLong("id", 0L) == id) { baseUpdatedAt = row.optString("updated_at"); baseRevision = row.optString("revision"); break }
+                    }
+                    if (baseUpdatedAt.isBlank() || baseRevision.isBlank()) throw IllegalStateException("نسخه مبنای پیش‌فاکتور در گوشی موجود نیست؛ ابتدا همگام‌سازی کنید.")
+                    val payload = JSONObject().put("proforma_id", id).put("base_updated_at", baseUpdatedAt).put("base_revision", baseRevision)
+                    if (dueDate.isNotBlank()) payload.put("due_date", dueDate.trim())
+                    if (notes.isNotBlank()) payload.put("notes", notes.trim())
+                    Outbox.enqueue(context, "sales.proforma.update", payload)
+                    proformaId = ""; dueDate = ""; notes = ""
+                    onQueued("ویرایش پیش‌فاکتور با نسخه مبنای سرور در صف قرار گرفت؛ فقط پیش‌نویس قابل ویرایش است.")
+                } catch (error: Exception) { onQueued(error.message ?: "ثبت ویرایش پیش‌فاکتور ناموفق بود.") }
+            }
+        }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+    ) { Text("ثبت ویرایش پیش‌فاکتور آفلاین") }
 }
 
 @Composable
