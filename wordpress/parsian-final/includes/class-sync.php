@@ -461,8 +461,8 @@ final class Parsian_Final_Sync {
         }
         $ok = $wpdb->insert($wpdb->prefix . 'parsian_leads', [
             'display_name'=>$name,'phone'=>$phone,'province'=>$province,'notes'=>$notes,
-            'owner_user_id'=>$ownerId,'status'=>'new','created_at'=>current_time('mysql',true)
-        ], ['%s','%s','%s','%s','%d','%s','%s']);
+            'owner_user_id'=>$ownerId,'status'=>'new','created_at'=>current_time('mysql',true),'updated_at'=>current_time('mysql',true)
+        ], ['%s','%s','%s','%s','%d','%s','%s','%s']);
         if (!$ok) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'offline_lead_create_failed'],500); }
         $leadId = (int) $wpdb->insert_id;
         $result = ['lead_id'=>$leadId,'operation_uuid'=>$operation['operation_uuid']];
