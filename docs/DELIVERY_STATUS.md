@@ -389,3 +389,8 @@ Keep the existing live site and its database untouched until a staging backup, m
 ### Accountant registers (2026-11-19)
 - Added a paginated read endpoint for payments and role-aware payment/cheque registers in the accountant and manager panels. The approve action calls the existing server-side payment posting transaction; it does not post client-side journal entries.
 - Plugin development version is now 0.4.20. Creation forms, cheque lifecycle UI and bank statement import/reconciliation screens remain to be completed.
+
+
+### Bank statement import UI (2026-11-19)
+- Added accountant/manager CSV and XLSX statement upload UI, using multipart form data and the existing bank import endpoint. Import is explicitly separate from reconciliation; no automatic matching is implied.
+- Plugin development version is now 0.4.21. Bank reconciliation UI and end-to-end CSV/XLSX fixtures still need completion and Staging validation.
