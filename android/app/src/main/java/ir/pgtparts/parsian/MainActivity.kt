@@ -37,7 +37,6 @@ import ir.pgtparts.parsian.security.AuthRepository
 import ir.pgtparts.parsian.security.SessionStore
 import ir.pgtparts.parsian.sync.SyncScheduler
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 import org.json.JSONArray
 import org.json.JSONObject
 
