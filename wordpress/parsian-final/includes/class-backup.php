@@ -24,12 +24,15 @@ final class Parsian_Final_Backup {
         // produce a backup assembled from different points in time.
         if($wpdb->query('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY')===false)
             return new WP_REST_Response(['code'=>'backup_snapshot_transaction_failed'],500);
+        $totalRows=0;
         foreach($this->tables() as $suffix){
             $table=$wpdb->prefix.'parsian_'.$suffix;
             $exists=$wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$table));
             if($exists!==$table){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'backup_table_missing','table'=>$suffix],500);}
             $count=(int)$wpdb->get_var("SELECT COUNT(*) FROM {$table}");
             if($count>self::MAX_ROWS_PER_TABLE){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'backup_table_limit_exceeded','table'=>$suffix,'row_count'=>$count,'limit'=>self::MAX_ROWS_PER_TABLE,'message'=>'برای پایگاه‌های بزرگ از پشتیبان کامل هاست و دیتابیس استفاده کنید.'],413);}
+            $totalRows+=$count;
+            if($totalRows>self::MAX_BACKUP_ROWS_TOTAL){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'backup_total_row_limit_exceeded','row_count'=>$totalRows,'limit'=>self::MAX_BACKUP_ROWS_TOTAL],413);}
             $rows=$wpdb->get_results("SELECT * FROM {$table} ORDER BY 1 ASC",ARRAY_A);
             if($wpdb->last_error){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'backup_table_read_failed','table'=>$suffix],500);}
             $tables[$suffix]=$rows?:[];
@@ -57,10 +60,14 @@ final class Parsian_Final_Backup {
         if(!is_string($canonical)||strlen($canonical)>self::MAX_BACKUP_BYTES)return new WP_REST_Response(['valid'=>false,'code'=>'backup_size_limit_exceeded'],413);
         if(!hash_equals(hash('sha256',$canonical),$checksum))return new WP_REST_Response(['valid'=>false,'code'=>'backup_checksum_mismatch'],422);
         $expected=$this->tables();$provided=array_keys($backup['tables']);sort($expected);sort($provided);
-        $expectedExcluded=['auth_tokens'=>['reason'=>'credential material is intentionally excluded; revoke and re-register devices after disaster recovery']];\n        if($backup['excluded_tables']!==$expectedExcluded)return new WP_REST_Response(['valid'=>false,'code'=>'backup_exclusion_manifest_mismatch'],422);
+        $expectedExcluded=['auth_tokens'=>['reason'=>'credential material is intentionally excluded; revoke and re-register devices after disaster recovery']];
+        if($backup['excluded_tables']!==$expectedExcluded)return new WP_REST_Response(['valid'=>false,'code'=>'backup_exclusion_manifest_mismatch'],422);
         if($expected!==$provided)return new WP_REST_Response(['valid'=>false,'code'=>'backup_table_set_mismatch'],422);
+        $totalRows=0;
         foreach($backup['tables'] as $name=>$rows){
             if(!is_array($rows)||count($rows)>self::MAX_ROWS_PER_TABLE)return new WP_REST_Response(['valid'=>false,'code'=>'backup_table_shape_invalid','table'=>$name],422);
+            $totalRows+=count($rows);
+            if($totalRows>self::MAX_BACKUP_ROWS_TOTAL)return new WP_REST_Response(['valid'=>false,'code'=>'backup_total_row_limit_exceeded','limit'=>self::MAX_BACKUP_ROWS_TOTAL],413);
             foreach($rows as $row)if(!is_array($row))return new WP_REST_Response(['valid'=>false,'code'=>'backup_row_invalid','table'=>$name],422);
         }
         return new WP_REST_Response(['valid'=>true,'restored'=>false,'format_version'=>1,'table_count'=>count($provided),'row_count'=>array_sum(array_map('count',$backup['tables'])),'message'=>'ساختار و checksum معتبر است؛ هیچ داده‌ای بازیابی یا تغییر داده نشد.'],200);
