@@ -160,3 +160,13 @@ Keep the existing live site and its database untouched until a staging backup, m
 - When a linked cheque is bounced, returned or cancelled, the corresponding payment is marked reversed and its active invoice allocations are reversed in the same transaction as the cheque reversal journal.
 - Added pending-cheque payment linking for workflows where the cheque record is entered after the payment journal.
 - This closes the key subledger error where a bounced cheque could otherwise leave an invoice incorrectly appearing paid.
+
+
+## Party ledger and receivables aging update (2026-11-19)
+
+- Extended GET /parsian-final/v1/ledger/party-statement with from_date/to_date filters, opening balance before the selected period, period debit/credit totals, closing balance, stable chronological running balance, and page/per_page pagination.
+- Added total item/page counts to the party statement response.
+- Added GET /parsian-final/v1/ledger/receivables-aging with invoice-level outstanding balances grouped into 0–30, 31–60, 61–90 and over-90-day buckets.
+- Aging currently measures elapsed days since invoice issue date because the invoice schema does not yet contain a contractual due_date. It must not be interpreted as overdue aging until due-date support is added.
+- Corrected trial balance aggregation so journal lines belonging to non-posted entries are excluded from debit/credit totals.
+- This update is source-level only at this point. PHP lint, migration/runtime checks, database-backed statement tests, and aging tie-out are still required before this module is accepted.
