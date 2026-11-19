@@ -117,6 +117,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
      return if (pull.code >= 500 || pull.code == 429 || pull.code == 401) Result.retry() else Result.failure()
     }
     val body = JSONObject(pull.body)
+    val previousCursor = cursor
     val items = body.optJSONArray("items") ?: JSONArray()
     val events = ArrayList<SyncEventEntity>()
     for (index in 0 until items.length()) {
@@ -138,7 +139,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     dao.persistInboxPage(events, nextCursor)
     cursor = nextCursor
     morePages = body.optBoolean("has_more", false)
-    if (!morePages || (events.isEmpty() && nextCursor == cursor)) break
+    if (!morePages || (events.isEmpty() && nextCursor == previousCursor)) break
    }
    if (morePages || dao.queuedCount() > 0) Result.retry() else Result.success()
   } catch (error: IOException) {
