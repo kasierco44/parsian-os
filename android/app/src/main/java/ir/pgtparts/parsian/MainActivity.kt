@@ -216,7 +216,20 @@ private fun itemsPlaceholder(array: JSONArray, fields: List<String>) {
                     "reference" -> "شناسه"
                     else -> field
                 }
-                val value = row.opt(field).toString()
+                val rawValue = row.opt(field).toString()
+                val value = if (field == "status") when (rawValue) {
+                    "posted" -> "ثبت‌شده"
+                    "draft" -> "پیش‌نویس"
+                    "approved" -> "تأییدشده"
+                    "pending_review" -> "در انتظار بررسی"
+                    "pending_approval" -> "در انتظار تأیید"
+                    "rejected" -> "ردشده"
+                    "new" -> "جدید"
+                    "active" -> "فعال"
+                    "paid" -> "تسویه‌شده"
+                    "partially_paid" -> "پرداخت جزئی"
+                    else -> rawValue
+                } else rawValue
                 label + ": " + when { field.endsWith("_toman") -> money(value.toLongOrNull() ?: 0L) + " تومان"; field.endsWith("_date") || field.endsWith("_at") -> jalaliDate(value); else -> value }
             }
         }
