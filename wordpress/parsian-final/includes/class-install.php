@@ -306,6 +306,55 @@ final class Parsian_Final_Install {
             ));
         }
 
+        $financeLifecycleTables = [
+            "CREATE TABLE {$p}cheque_events (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                cheque_id bigint unsigned NOT NULL,
+                from_status varchar(24) NOT NULL,
+                to_status varchar(24) NOT NULL,
+                event_note varchar(190) NOT NULL DEFAULT '',
+                journal_entry_id bigint unsigned NOT NULL DEFAULT 0,
+                actor_user_id bigint unsigned NOT NULL,
+                created_at datetime NOT NULL,
+                PRIMARY KEY  (id),
+                KEY cheque_events (cheque_id,id),
+                KEY journal_lookup (journal_entry_id)
+            ) $charset;",
+            "CREATE TABLE {$p}bank_statement_lines (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                bank_account_ref varchar(80) NOT NULL,
+                external_line_id varchar(120) NOT NULL,
+                transaction_date date NOT NULL,
+                direction varchar(8) NOT NULL,
+                amount_toman bigint unsigned NOT NULL,
+                reference varchar(190) NOT NULL DEFAULT '',
+                description varchar(190) NOT NULL DEFAULT '',
+                matched_journal_entry_id bigint unsigned NOT NULL DEFAULT 0,
+                match_status varchar(20) NOT NULL DEFAULT 'unmatched',
+                matched_by bigint unsigned NOT NULL DEFAULT 0,
+                matched_at datetime NULL,
+                created_by bigint unsigned NOT NULL,
+                created_at datetime NOT NULL,
+                PRIMARY KEY  (id),
+                UNIQUE KEY external_unique (bank_account_ref,external_line_id),
+                KEY match_status_date (match_status,transaction_date),
+                KEY journal_match (matched_journal_entry_id)
+            ) $charset;"
+        ];
+        foreach ($financeLifecycleTables as $sql) { dbDelta($sql); }
+        $chequeColumns = [
+            'party_type' => "ALTER TABLE {$p}cheques ADD COLUMN party_type varchar(24) NOT NULL DEFAULT 'other'",
+            'party_id' => "ALTER TABLE {$p}cheques ADD COLUMN party_id bigint unsigned NOT NULL DEFAULT 0",
+            'payment_id' => "ALTER TABLE {$p}cheques ADD COLUMN payment_id bigint unsigned NOT NULL DEFAULT 0",
+            'cleared_at' => "ALTER TABLE {$p}cheques ADD COLUMN cleared_at datetime NULL",
+            'last_event_id' => "ALTER TABLE {$p}cheques ADD COLUMN last_event_id bigint unsigned NOT NULL DEFAULT 0"
+        ];
+        foreach ($chequeColumns as $column => $sql) {
+            if (!$wpdb->get_var($wpdb->prepare("SHOW COLUMNS FROM {$p}cheques LIKE %s", $column))) {
+                $wpdb->query($sql);
+            }
+        }
+
         $allocationTable = "CREATE TABLE {$p}payment_allocations (
             id bigint unsigned NOT NULL AUTO_INCREMENT,
             payment_id bigint unsigned NOT NULL,
