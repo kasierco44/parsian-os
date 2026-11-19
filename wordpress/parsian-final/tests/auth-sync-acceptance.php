@@ -116,6 +116,63 @@ try {
     $proformaRow = $wpdb->get_row($wpdb->prepare("SELECT created_by,customer_id,status,total_toman FROM {$wpdb->prefix}parsian_proformas WHERE id=%d",$proformaId),ARRAY_A);
     $assert($proformaId>0 && (int)$proformaRow['created_by']===(int)$userId && (int)$proformaRow['customer_id']===$customerId && $proformaRow['status']==='draft' && (int)$proformaRow['total_toman']===2000,'offline proforma preserves seller ownership and validated line totals');
 
+    // Customer revision conflict: preserve server-side changes and allow explicit rebase.
+    $crm = new Parsian_Final_CRM();
+    $customerList = $crm->customers(new WP_REST_Request('GET','/parsian-final/v1/customers'))->get_data();
+    $customerSnapshot = null;
+    foreach (($customerList['items']??[]) as $candidate) if ((int)$candidate['id']===$customerId) {$customerSnapshot=$candidate;break;}
+    $assert(is_array($customerSnapshot) && !empty($customerSnapshot['revision']) && !empty($customerSnapshot['updated_at']),'customer API exposes revision and timestamp');
+    $customerUpdateUuid = wp_generate_uuid4();
+    $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
+        'operation_uuid'=>$customerUpdateUuid,'type'=>'crm.customer.update',
+        'payload'=>['customer_id'=>$customerId,'notes'=>'Offline customer note','base_updated_at'=>$customerSnapshot['updated_at'],'base_revision'=>$customerSnapshot['revision']]
+    ]]]));
+    $customerQueued = $sync->push($push)->get_data();
+    $assert(($customerQueued['results'][0]['status']??'')==='pending_review','offline customer update enters review queue');
+    $customerOperationId = (int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_sync_ops WHERE operation_uuid=%s",$customerUpdateUuid));
+    $wpdb->update($wpdb->prefix.'parsian_customers',['province'=>'Server Province','updated_at'=>gmdate('Y-m-d H:i:s',time()+30)],['id'=>$customerId],['%s','%s'],['%d']);
+    $customerApprove = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$customerOperationId.'/approve');
+    $customerApprove->set_param('id',$customerOperationId);
+    $customerConflict = $sync->approve_operation($customerApprove);
+    $assert($customerConflict->get_status()===409 && ($customerConflict->get_data()['status']??'')==='conflict','stale customer edit is flagged as a conflict');
+    $customerConflictRow = $wpdb->get_row($wpdb->prepare("SELECT result FROM {$wpdb->prefix}parsian_sync_ops WHERE id=%d",$customerOperationId),ARRAY_A);
+    $customerConflictData = json_decode((string)$customerConflictRow['result'],true);
+    $assert(($customerConflictData['server_record']['province']??'')==='Server Province','customer conflict includes the latest server value');
+    $customerRebase = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$customerOperationId.'/resolve-conflict');
+    $customerRebase->set_param('id',$customerOperationId);$customerRebase->set_param('decision','apply_device');
+    $assert($sync->resolve_conflict($customerRebase)->get_status()===200,'manager can rebase customer changes');
+    $customerApproveAgain = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$customerOperationId.'/approve');
+    $customerApproveAgain->set_param('id',$customerOperationId);
+    $customerApplied = $sync->approve_operation($customerApproveAgain);
+    $assert($customerApplied->get_status()===200 && $wpdb->get_var($wpdb->prepare("SELECT notes FROM {$wpdb->prefix}parsian_customers WHERE id=%d",$customerId))==='Offline customer note','rebased customer change applies only after manager approval');
+
+    // Proforma revision conflict includes line items in its digest and only edits drafts.
+    $sales = new Parsian_Final_Sales();
+    $proformaList = $sales->list_proformas(new WP_REST_Request('GET','/parsian-final/v1/proformas'))->get_data();
+    $proformaSnapshot = null;
+    foreach (($proformaList['items']??[]) as $candidate) if ((int)$candidate['id']===$proformaId) {$proformaSnapshot=$candidate;break;}
+    $assert(is_array($proformaSnapshot) && !empty($proformaSnapshot['revision']) && !empty($proformaSnapshot['updated_at']),'proforma API exposes revision and timestamp');
+    $proformaUpdateUuid = wp_generate_uuid4();
+    $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
+        'operation_uuid'=>$proformaUpdateUuid,'type'=>'sales.proforma.update',
+        'payload'=>['proforma_id'=>$proformaId,'notes'=>'Device proforma note','base_updated_at'=>$proformaSnapshot['updated_at'],'base_revision'=>$proformaSnapshot['revision']]
+    ]]]));
+    $proformaUpdateQueued = $sync->push($push)->get_data();
+    $assert(($proformaUpdateQueued['results'][0]['status']??'')==='pending_review','offline proforma update enters review queue');
+    $proformaUpdateId = (int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_sync_ops WHERE operation_uuid=%s",$proformaUpdateUuid));
+    $wpdb->update($wpdb->prefix.'parsian_proformas',['notes'=>'Server proforma note','updated_at'=>gmdate('Y-m-d H:i:s',time()+40)],['id'=>$proformaId],['%s','%s'],['%d']);
+    $proformaUpdateApprove = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$proformaUpdateId.'/approve');
+    $proformaUpdateApprove->set_param('id',$proformaUpdateId);
+    $proformaConflict = $sync->approve_operation($proformaUpdateApprove);
+    $assert($proformaConflict->get_status()===409 && ($proformaConflict->get_data()['status']??'')==='conflict','stale proforma edit is flagged as a conflict');
+    $proformaConflictRow = $wpdb->get_row($wpdb->prepare("SELECT result FROM {$wpdb->prefix}parsian_sync_ops WHERE id=%d",$proformaUpdateId),ARRAY_A);
+    $proformaConflictData = json_decode((string)$proformaConflictRow['result'],true);
+    $assert(($proformaConflictData['server_record']['notes']??'')==='Server proforma note','proforma conflict includes the current server notes');
+    $proformaKeep = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$proformaUpdateId.'/resolve-conflict');
+    $proformaKeep->set_param('id',$proformaUpdateId);$proformaKeep->set_param('decision','keep_server');
+    $assert($sync->resolve_conflict($proformaKeep)->get_status()===200,'manager can keep server proforma revision');
+    $assert($wpdb->get_var($wpdb->prepare("SELECT notes FROM {$wpdb->prefix}parsian_proformas WHERE id=%d",$proformaId))==='Server proforma note','keeping server does not overwrite proforma data');
+
     $leadOperation=wp_generate_uuid4();
     $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
         'operation_uuid'=>$leadOperation,'type'=>'crm.lead.create',
