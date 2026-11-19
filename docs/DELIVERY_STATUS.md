@@ -20,7 +20,7 @@ This repository state is a development baseline, not a production release. No pr
 - Added persisted proforma and line-item tables, invoice and invoice-line tables, chart of accounts, journal headers and journal lines.
 - Added seller-scoped draft creation/list/detail and manager-only approval. Approval locks the proforma, creates exactly one invoice, posts balanced debit receivables / credit sales journal lines, records audit events, and changes document state within one database transaction.
 - Added finance-authorized payment approval for customer receipts and supplier payments, with balanced journal posting and idempotent posted-state response.
-- Added journal register and trial-balance read endpoints.
+- Added journal register, trial-balance and customer/supplier party-statement read endpoints.
 - Added version-gated schema upgrade and baseline chart-of-account seeding.
 - PHP lint passed and a development ZIP package was built by GitHub Actions for the prior code head; rerun workflows for this latest schema-upgrade commit before distributing.
 
