@@ -59,11 +59,10 @@ try {
 
     wp_set_current_user($userId);
     $push=new WP_REST_Request('POST','/parsian-final/v1/sync/push');
-    $push->set_param('device_uuid',$device);
-    $push->set_param('operations',[[
+    $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
         'operation_uuid'=>$operation,'type'=>'crm.task.complete',
         'payload'=>['task_id'=>987654321,'completed'=>true]
-    ]]);
+    ]]]));
     $first=$sync->push($push);
     $firstData=$first->get_data();
     $assert($first->get_status()===202,'sync push accepts batch for review');
@@ -73,10 +72,10 @@ try {
     $secondData=$second->get_data();
     $assert(($secondData['results'][0]['duplicate']??false)===true,'identical operation retry is idempotent');
 
-    $push->set_param('operations',[[
+    $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
         'operation_uuid'=>$operation,'type'=>'crm.task.complete',
         'payload'=>['task_id'=>987654321,'completed'=>false]
-    ]]);
+    ]]]));
     $conflict=$sync->push($push)->get_data();
     $assert(($conflict['results'][0]['code']??'')==='operation_uuid_conflict','same operation UUID with changed payload is rejected');
 
