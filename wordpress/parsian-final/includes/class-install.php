@@ -108,6 +108,23 @@ final class Parsian_Final_Install {
                 KEY lead_created (created_at),
                 KEY lead_phone (phone)
             ) $charset;",
+            "CREATE TABLE {$p}tasks (
+                id bigint unsigned NOT NULL AUTO_INCREMENT,
+                title varchar(190) NOT NULL,
+                description text NULL,
+                assigned_user_id bigint unsigned NOT NULL,
+                status varchar(24) NOT NULL DEFAULT 'open',
+                due_at datetime NULL,
+                completed_at datetime NULL,
+                completed_by bigint unsigned NOT NULL DEFAULT 0,
+                created_by bigint unsigned NOT NULL,
+                created_at datetime NOT NULL,
+                updated_at datetime NULL,
+                PRIMARY KEY  (id),
+                KEY task_assignee_status (assigned_user_id,status),
+                KEY task_due_status (due_at,status),
+                KEY task_created (created_at)
+            ) $charset;",
             "CREATE TABLE {$p}products (
                 id bigint unsigned NOT NULL AUTO_INCREMENT,
                 sku varchar(80) NOT NULL DEFAULT '',
