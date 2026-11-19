@@ -428,3 +428,12 @@ Keep the existing live site and its database untouched until a staging backup, m
 - The operation status/result update and event insert occur in the same database transaction as the lead update. Repeated approval returns the stored operation result through the existing idempotency path.
 - Extended the WP-CLI auth/sync acceptance harness to enqueue and approve a lead update and verify the resulting values.
 - `crm.task.complete` and `sales.proforma.draft` remain queued but have no approval handler. This change does not implement those operation types, aggregate-version conflict resolution, or full client-side offline models. Staging execution remains required.
+
+
+## Installation handoff and Android sync follow-up (2026-11-19)
+
+- Added `docs/INSTALLATION_AND_SETUP_FA.md` with Staging-first installation, WordPress plugin packaging, role setup, Android/Windows build commands, backup limitations, and Production acceptance gates.
+- Updated Android `SyncWorker.kt` so both `crm.lead.created.offline` and `crm.lead.updated.offline` events mark their originating local operation as applied. This aligns the client acknowledgement with the manager-approved lead update handler.
+- Source verification confirms the new event mapping is present. No Android compilation or device-level sync test is claimed.
+- GitHub Actions runs triggered by the latest commits for PHP lint and Android debug build both concluded `failure`, but GitHub returned no job steps/logs (`logs_url=null`). This is inconclusive runner/workflow evidence, not a verified compiler or PHP syntax error. No current APK or current plugin ZIP artifact is approved for distribution.
+- The installation guide is documentation only. WordPress Staging installation, DB migrations, WP-CLI acceptance tests, Android/Windows builds and clean-environment installation, backup/restore rehearsal, and Production approval remain release blockers.
