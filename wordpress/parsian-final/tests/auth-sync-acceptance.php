@@ -132,12 +132,19 @@ try {
     $createdLead=(int)($approvedData['lead_id']??0);
     $assert($createdLead>0&&(int)$wpdb->get_var($wpdb->prepare("SELECT owner_user_id FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead))===(int)$userId,'approved offline lead remains owned by its originating seller');
 
-    $leadBaseUpdatedAt = (string)$wpdb->get_var($wpdb->prepare("SELECT updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead));
-    $assert($leadBaseUpdatedAt !== '', 'offline lead has a server modification timestamp');
+    $leadBaseRow = $wpdb->get_row($wpdb->prepare("SELECT id,display_name,phone,province,notes,status,updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead),ARRAY_A);
+    $leadBaseUpdatedAt = (string)($leadBaseRow['updated_at']??'');
+    $leadBaseRevision = hash('sha256', wp_json_encode([
+        'id'=>(int)$leadBaseRow['id'],'display_name'=>(string)$leadBaseRow['display_name'],
+        'phone'=>(string)$leadBaseRow['phone'],'province'=>(string)$leadBaseRow['province'],
+        'notes'=>(string)$leadBaseRow['notes'],'status'=>(string)$leadBaseRow['status'],
+        'updated_at'=>$leadBaseUpdatedAt
+    ], JSON_UNESCAPED_UNICODE));
+    $assert($leadBaseUpdatedAt !== '' && $leadBaseRevision !== '', 'offline lead has server revision and modification timestamp');
     $updateOperation = wp_generate_uuid4();
     $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
         'operation_uuid'=>$updateOperation,'type'=>'crm.lead.update',
-        'payload'=>['lead_id'=>$createdLead,'display_name'=>'Updated Offline QA Lead','province'=>'Tehran','base_updated_at'=>$leadBaseUpdatedAt]
+        'payload'=>['lead_id'=>$createdLead,'display_name'=>'Updated Offline QA Lead','province'=>'Tehran','base_updated_at'=>$leadBaseUpdatedAt,'base_revision'=>$leadBaseRevision]
     ]]]));
     $updateQueued = $sync->push($push)->get_data();
     $assert(($updateQueued['results'][0]['status']??'')==='pending_review','offline lead update is queued for manager review');
@@ -150,11 +157,18 @@ try {
     $assert(($updatedLeadRow['display_name']??'')==='Updated Offline QA Lead' && ($updatedLeadRow['province']??'')==='Tehran','offline lead update changes only the originating seller lead');
 
     // A concurrent server edit after the device snapshot must stop the stale patch.
-    $conflictBase = (string)$wpdb->get_var($wpdb->prepare("SELECT updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead));
+    $conflictBaseRow = $wpdb->get_row($wpdb->prepare("SELECT id,display_name,phone,province,notes,status,updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead),ARRAY_A);
+    $conflictBase = (string)$conflictBaseRow['updated_at'];
+    $conflictRevision = hash('sha256', wp_json_encode([
+        'id'=>(int)$conflictBaseRow['id'],'display_name'=>(string)$conflictBaseRow['display_name'],
+        'phone'=>(string)$conflictBaseRow['phone'],'province'=>(string)$conflictBaseRow['province'],
+        'notes'=>(string)$conflictBaseRow['notes'],'status'=>(string)$conflictBaseRow['status'],
+        'updated_at'=>$conflictBase
+    ], JSON_UNESCAPED_UNICODE));
     $conflictOperation = wp_generate_uuid4();
     $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
         'operation_uuid'=>$conflictOperation,'type'=>'crm.lead.update',
-        'payload'=>['lead_id'=>$createdLead,'display_name'=>'Stale Device Name','base_updated_at'=>$conflictBase]
+        'payload'=>['lead_id'=>$createdLead,'display_name'=>'Stale Device Name','base_updated_at'=>$conflictBase,'base_revision'=>$conflictRevision]
     ]]]));
     $conflictQueued = $sync->push($push)->get_data();
     $assert(($conflictQueued['results'][0]['status']??'')==='pending_review','concurrent edit fixture is queued');
