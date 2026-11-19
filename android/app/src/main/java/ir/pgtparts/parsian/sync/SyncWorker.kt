@@ -9,22 +9,18 @@ import ir.pgtparts.parsian.security.SessionStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
- private val client = OkHttpClient.Builder()
-  .connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).callTimeout(45, TimeUnit.SECONDS).build()
+ private val transport = SyncHttpTransport()
  private val jsonType = "application/json; charset=utf-8".toMediaType()
- private data class HttpResult(val code: Int, val body: String)
 
- private suspend fun execute(request: Request): HttpResult = withContext(Dispatchers.IO) {
-  client.newCall(request).execute().use { response -> HttpResult(response.code, response.body?.string().orEmpty()) }
+ private suspend fun execute(request: Request): SyncSyncHttpResult = withContext(Dispatchers.IO) {
+  transport.execute(request)
  }
 
  private suspend fun post(url: String, body: String, token: String): HttpResult {
@@ -174,7 +170,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
    if (morePages || dao.queuedCount() > 0) Result.retry() else Result.success()
   } catch (error: IOException) {
    pending.forEach { dao.recordRetry(it.operationUuid, error.javaClass.simpleName) }
-   Result.retry()
+   if (SyncRetryPolicy.shouldRetry(error)) Result.retry() else Result.failure()
   } catch (error: Exception) {
    pending.forEach { dao.recordRetry(it.operationUuid, error.javaClass.simpleName) }
    Result.failure()
