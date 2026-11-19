@@ -4,7 +4,6 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
-
 @Dao
 interface SyncOperationDao {
  @Insert(onConflict = OnConflictStrategy.ABORT)
@@ -41,7 +40,22 @@ interface SyncOperationDao {
  suspend fun dashboardSnapshot(key: String): DashboardSnapshotEntity?
  @Query("DELETE FROM dashboard_snapshots")
  suspend fun clearDashboardSnapshots()
-
+ @Query("DELETE FROM offline_records WHERE resourceType = :resourceType")
+ suspend fun deleteOfflineResource(resourceType: String)
+ @Insert(onConflict = OnConflictStrategy.REPLACE)
+ suspend fun saveOfflineRecords(records: List<OfflineRecordEntity>)
+ @Query("SELECT * FROM offline_records WHERE resourceType = :resourceType ORDER BY recordId DESC")
+ suspend fun offlineRecords(resourceType: String): List<OfflineRecordEntity>
+ @Query("DELETE FROM offline_records")
+ suspend fun clearOfflineRecords()
+ @Transaction
+ suspend fun replaceOfflineResource(resourceType: String, records: List<OfflineRecordEntity>) {
+  require(resourceType.isNotBlank())
+  require(records.all { it.resourceType == resourceType && it.recordId > 0L })
+  require(records.map { it.recordId }.distinct().size == records.size) { "Duplicate record id in resource snapshot" }
+  deleteOfflineResource(resourceType)
+  if (records.isNotEmpty()) saveOfflineRecords(records)
+ }
  @Transaction
  suspend fun persistInboxPage(events: List<SyncEventEntity>, cursor: Long) {
   val newEvents = ArrayList<SyncEventEntity>()
@@ -59,11 +73,8 @@ interface SyncOperationDao {
    pageByUuid[event.eventUuid] = event
    val byId = inboxEventById(event.eventId)
    val byUuid = inboxEventByUuid(event.eventUuid)
-   if (byId == null && byUuid == null) {
-    newEvents.add(event)
-   } else {
-    require(byId == event && byUuid == event) { "Server event identity collision" }
-   }
+   if (byId == null && byUuid == null) newEvents.add(event)
+   else require(byId == event && byUuid == event) { "Server event identity collision" }
   }
   if (newEvents.isNotEmpty()) saveEvents(newEvents)
   saveMetadata(SyncMetadataEntity("pull_cursor", cursor.toString()))
