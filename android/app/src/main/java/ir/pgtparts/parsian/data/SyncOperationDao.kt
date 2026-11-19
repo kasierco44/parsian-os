@@ -22,6 +22,8 @@ interface SyncOperationDao {
  suspend fun saveMetadata(metadata: SyncMetadataEntity)
  @Query("SELECT metaValue FROM sync_metadata WHERE metaKey = :key LIMIT 1")
  suspend fun metadata(key: String): String?
+ @Query("DELETE FROM sync_metadata WHERE metaKey = :key")
+ suspend fun clearMetadataKey(key: String)
  @Query("SELECT * FROM sync_inbox WHERE eventId = :id LIMIT 1")
  suspend fun inboxEventById(id: Long): SyncEventEntity?
  @Query("SELECT * FROM sync_inbox WHERE eventUuid = :uuid LIMIT 1")
@@ -55,9 +57,10 @@ interface SyncOperationDao {
   require(records.map { it.recordId }.distinct().size == records.size) { "Duplicate record id in resource snapshot" }
   deleteOfflineResource(resourceType)
   if (records.isNotEmpty()) saveOfflineRecords(records)
+  clearMetadataKey("offline_stale_" + resourceType)
  }
  @Transaction
- suspend fun persistInboxPage(events: List<SyncEventEntity>, cursor: Long) {
+ suspend fun persistInboxPage(events: List<SyncEventEntity>, cursor: Long, staleResources: Set<String> = emptySet()) {
   val newEvents = ArrayList<SyncEventEntity>()
   val pageById = HashMap<Long, SyncEventEntity>()
   val pageByUuid = HashMap<String, SyncEventEntity>()
@@ -78,5 +81,9 @@ interface SyncOperationDao {
   }
   if (newEvents.isNotEmpty()) saveEvents(newEvents)
   saveMetadata(SyncMetadataEntity("pull_cursor", cursor.toString()))
+  staleResources.forEach { resource ->
+   require(resource in setOf("customers", "leads", "tasks", "proformas", "invoices", "payments"))
+   saveMetadata(SyncMetadataEntity("offline_stale_" + resource, cursor.toString()))
+  }
  }
 }
