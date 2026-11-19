@@ -42,3 +42,5 @@ Development UI scaffold only; not production-ready.
 - Accountant and manager roles also have a paginated payment register with a server-authorized approval action and a cheque register. Payment posting still occurs only in the WordPress finance endpoint and creates the balanced journal there.
 
 - Accountant and manager roles can upload CSV/XLSX bank statements to a selected bank account. Import records are normalized and deduplicated; reconciliation remains a separate workflow and is not performed automatically by upload.
+
+- Bank reconciliation workspace now shows unmatched statement rows, posted journal candidates and summary counts, and can submit a one-to-one allocation. The server reconciliation API also supports grouped many-to-many allocations with over-allocation and bank-ledger checks.
