@@ -18,6 +18,8 @@ $assert=static function($condition,string $message):void {
     if(!$condition)throw new RuntimeException('ASSERTION FAILED: '.$message);
 };
 $userId=0;$device=wp_generate_uuid4();$operation=wp_generate_uuid4();
+$authTable=$wpdb->prefix.'parsian_auth_tokens';
+$assert($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$authTable))===$authTable,'token auth table exists after plugin migration');
 $auth=new Parsian_Final_Auth();$sync=new Parsian_Final_Sync();
 $oldAuthorization=$_SERVER['HTTP_AUTHORIZATION']??null;
 try {
@@ -42,6 +44,9 @@ try {
     $loginData=$loginResponse->get_data();
     $assert($loginResponse->get_status()===200,'login returns 200');
     $assert(!empty($loginData['access_token']['token'])&&!empty($loginData['refresh_token']['token']),'login issues access and refresh tokens');
+    $storedHash=$wpdb->get_var($wpdb->prepare("SELECT token_hash FROM {$authTable} WHERE user_id=%d AND token_type='access' ORDER BY id DESC LIMIT 1",$userId));
+    $assert(is_string($storedHash)&&hash_equals(hash('sha256',$loginData['access_token']['token']),$storedHash),'database stores only SHA-256 token hash');
+    $assert($storedHash!==$loginData['access_token']['token'],'raw access token is not stored in database');
 
     if(!defined('REST_REQUEST'))define('REST_REQUEST',true);
     $_SERVER['HTTP_AUTHORIZATION']='Bearer '.$loginData['access_token']['token'];
