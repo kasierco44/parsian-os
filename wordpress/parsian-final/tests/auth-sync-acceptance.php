@@ -514,9 +514,12 @@ try {
     $restorePlanRequest->set_body(wp_json_encode($exportedData));
     $restorePlan = $backupService->restore_plan($restorePlanRequest);
     $assert($restorePlan->get_status() === 200 && ($restorePlan->get_data()['ready'] ?? true) === false && ($restorePlan->get_data()['writes_performed'] ?? true) === false, 'restore preflight refuses to proceed without explicit target URL confirmation');
+    $confirmedBackup = $exportedData;
+    $confirmedBackup['target_site_confirmation'] = home_url('/');
+    unset($confirmedBackup['checksum_sha256']);
+    $confirmedBackup['checksum_sha256'] = hash('sha256', wp_json_encode($confirmedBackup, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
     $restorePlanConfirmedRequest = new WP_REST_Request('POST', '/parsian-final/v1/backup/restore-plan');
-    $restorePlanConfirmedRequest->set_body(wp_json_encode($exportedData));
-    $restorePlanConfirmedRequest->set_param('target_site_confirmation', home_url('/'));
+    $restorePlanConfirmedRequest->set_body(wp_json_encode($confirmedBackup));
     $restorePlanConfirmed = $backupService->restore_plan($restorePlanConfirmedRequest);
     $assert($restorePlanConfirmed->get_status() === 200 && ($restorePlanConfirmed->get_data()['ready'] ?? false) === true && ($restorePlanConfirmed->get_data()['restored'] ?? true) === false, 'staging restore preflight requires explicit target confirmation and performs no writes');
     $schemaTamperedBackup = $exportedData;
@@ -527,11 +530,11 @@ try {
     $assert($schemaTamperedTable !== null, 'backup QA fixture contains at least one persisted row for schema compatibility test');
     if ($schemaTamperedTable !== null) {
         $schemaTamperedBackup['tables'][$schemaTamperedTable][0]['qa_unexpected_column'] = 'must-not-be-restored';
+        $schemaTamperedBackup['target_site_confirmation'] = home_url('/');
         unset($schemaTamperedBackup['checksum_sha256']);
         $schemaTamperedBackup['checksum_sha256'] = hash('sha256', wp_json_encode($schemaTamperedBackup, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
         $schemaTamperedRequest = new WP_REST_Request('POST', '/parsian-final/v1/backup/restore-plan');
         $schemaTamperedRequest->set_body(wp_json_encode($schemaTamperedBackup));
-        $schemaTamperedRequest->set_param('target_site_confirmation', home_url('/'));
         $schemaTamperedPlan = $backupService->restore_plan($schemaTamperedRequest);
         $assert($schemaTamperedPlan->get_status() === 200 && ($schemaTamperedPlan->get_data()['ready'] ?? true) === false, 'restore preflight rejects unknown row columns even when checksum is recomputed');
     }
