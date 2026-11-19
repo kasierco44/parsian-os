@@ -32,5 +32,6 @@ add_action('plugins_loaded', static function (): void {
     (new Parsian_Final_Sync())->register_routes();
     (new Parsian_Final_Finance())->register_routes();
     (new Parsian_Final_Sales())->register_routes();
+    (new Parsian_Final_Ledger())->register_routes();
     (new Parsian_Final_Auth())->register_routes();
 });
