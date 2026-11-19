@@ -118,14 +118,14 @@ final class Parsian_Final_CRM {
         $offset = ($page - 1) * $per_page;
         if (current_user_can('parsian_manage_users') || current_user_can('parsian_finance_read')) {
             $rows = $wpdb->get_results($wpdb->prepare(
-                "SELECT id, display_name, phone, province, city, address, credit_limit_toman, notes, status, created_at, updated_at FROM {$table} ORDER BY id DESC LIMIT %d OFFSET %d",
+                "SELECT id, display_name, phone, province, city, address, credit_limit_toman, notes, status, created_at, COALESCE(updated_at,created_at) AS updated_at FROM {$table} ORDER BY id DESC LIMIT %d OFFSET %d",
                 $per_page, $offset
             ), ARRAY_A);
         } else {
             // Enforce assignment in SQL before pagination; never fetch unassigned customers.
             $user_id = get_current_user_id();
             $rows = $wpdb->get_results($wpdb->prepare(
-                "SELECT c.id, c.display_name, c.phone, c.province, c.city, c.address, c.credit_limit_toman, c.notes, c.status, c.created_at, c.updated_at
+                "SELECT c.id, c.display_name, c.phone, c.province, c.city, c.address, c.credit_limit_toman, c.notes, c.status, c.created_at, COALESCE(c.updated_at,c.created_at) AS updated_at
                  FROM {$table} c
                  INNER JOIN {$wpdb->usermeta} um
                    ON um.user_id = %d
