@@ -239,3 +239,7 @@ Keep the existing live site and its database untouched until a staging backup, m
 - **Verification status:** the GitHub Actions runs associated with the lint workflow returned failure before exposing any job steps/logs (`logs_url=null`, empty steps); retry behaved the same. Therefore PHP lint is **not confirmed passing**. No isolated WordPress/MySQL staging database is connected here, so neither WP-CLI acceptance harness nor dbDelta migration has been executed. No DB integration test is claimed.
 - **Remaining sync work:** domain-specific conflict resolution using aggregate versions, server-side processing/approval of pending operations, delta access scoping by assigned customer/representative, retention/cleanup and Android/Windows client persistence/retry tests remain outstanding.
 - Latest source commits include `82bc5a508cb2635ba165baa9f1c44d56dc59240b` (auth), `56dcfb9387fdfceb05e2c130a90475495a9f0510` (token schema), `ecffac3f4f7b6c515ca14cda4d9693d60514e3b7` (sync idempotency), `001cf3e5a2fb04c7692dd7b9ddc378c9df6be42d` (sync schema), `94d4b9f17fce33fd8778495fa245591f35358d2a` and `2d1e421d61a0267e0e55b6a926419230773eedc9` (auth/sync test harness).
+
+
+- The finance aging acceptance harness was corrected to assert against its own synthetic customer rather than assuming the entire staging database contains no other receivables.
+- Latest follow-up commits: `df9cd318e064da767c615778f000f39333c9b914` (remove duplicate lint workflow) and `341032dc5030832011fd0cd3d611b0542aa3d137` (scope aging test assertions).
