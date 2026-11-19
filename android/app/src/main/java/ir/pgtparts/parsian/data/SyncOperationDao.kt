@@ -45,8 +45,18 @@ interface SyncOperationDao {
  @Transaction
  suspend fun persistInboxPage(events: List<SyncEventEntity>, cursor: Long) {
   val newEvents = ArrayList<SyncEventEntity>()
+  val pageById = HashMap<Long, SyncEventEntity>()
+  val pageByUuid = HashMap<String, SyncEventEntity>()
   for (event in events) {
    require(event.eventId > 0L && event.eventUuid.isNotBlank()) { "Invalid server event identity" }
+   val pageIdMatch = pageById[event.eventId]
+   val pageUuidMatch = pageByUuid[event.eventUuid]
+   if (pageIdMatch != null || pageUuidMatch != null) {
+    require(pageIdMatch == event && pageUuidMatch == event) { "Conflicting duplicate inside server page" }
+    continue
+   }
+   pageById[event.eventId] = event
+   pageByUuid[event.eventUuid] = event
    val byId = inboxEventById(event.eventId)
    val byUuid = inboxEventByUuid(event.eventUuid)
    if (byId == null && byUuid == null) {
