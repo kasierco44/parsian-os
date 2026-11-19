@@ -1,4 +1,4 @@
-# PARSIAN FINAL — Web Panels
+# PARSIAN ONE — Web Panels
 
 Initial responsive Persian RTL shell for manager, accountant, seller, and customer workspaces.
 
