@@ -158,13 +158,13 @@ final class Parsian_Final_CRM {
         $offset = ($page - 1) * $per_page;
         if (current_user_can('parsian_manage_users')) {
             $rows = $wpdb->get_results($wpdb->prepare(
-                "SELECT id, display_name, phone, province, notes, owner_user_id, status, created_at, updated_at
+                "SELECT id, display_name, phone, province, notes, owner_user_id, status, created_at, COALESCE(updated_at,created_at) AS updated_at
                  FROM {$table} ORDER BY id DESC LIMIT %d OFFSET %d",
                 $per_page, $offset
             ), ARRAY_A);
         } else {
             $rows = $wpdb->get_results($wpdb->prepare(
-                "SELECT id, display_name, phone, province, notes, owner_user_id, status, created_at, updated_at
+                "SELECT id, display_name, phone, province, notes, owner_user_id, status, created_at, COALESCE(updated_at,created_at) AS updated_at
                  FROM {$table} WHERE owner_user_id = %d ORDER BY id DESC LIMIT %d OFFSET %d",
                 get_current_user_id(), $per_page, $offset
             ), ARRAY_A);
@@ -200,7 +200,7 @@ final class Parsian_Final_CRM {
             'status' => 'new',
             'created_at' => current_time('mysql', true),
             'updated_at' => current_time('mysql', true),
-        ], ['%s','%s','%s','%s','%d','%s','%s']);
+        ], ['%s','%s','%s','%s','%d','%s','%s','%s']);
         if (!$ok) { return new WP_REST_Response(['code'=>'lead_create_failed'], 500); }
         $id = (int) $wpdb->insert_id;
         $wpdb->insert($wpdb->prefix . 'parsian_events', [
