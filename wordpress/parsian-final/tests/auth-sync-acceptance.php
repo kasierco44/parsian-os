@@ -132,10 +132,12 @@ try {
     $createdLead=(int)($approvedData['lead_id']??0);
     $assert($createdLead>0&&(int)$wpdb->get_var($wpdb->prepare("SELECT owner_user_id FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead))===(int)$userId,'approved offline lead remains owned by its originating seller');
 
+    $leadBaseUpdatedAt = (string)$wpdb->get_var($wpdb->prepare("SELECT updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead));
+    $assert($leadBaseUpdatedAt !== '', 'offline lead has a server modification timestamp');
     $updateOperation = wp_generate_uuid4();
     $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
         'operation_uuid'=>$updateOperation,'type'=>'crm.lead.update',
-        'payload'=>['lead_id'=>$createdLead,'display_name'=>'Updated Offline QA Lead','province'=>'Tehran']
+        'payload'=>['lead_id'=>$createdLead,'display_name'=>'Updated Offline QA Lead','province'=>'Tehran','base_updated_at'=>$leadBaseUpdatedAt]
     ]]]));
     $updateQueued = $sync->push($push)->get_data();
     $assert(($updateQueued['results'][0]['status']??'')==='pending_review','offline lead update is queued for manager review');
@@ -146,6 +148,33 @@ try {
     $assert($updatedLeadResponse->get_status()===200 && ($updatedLeadResponse->get_data()['status']??'')==='applied','manager approval applies offline lead update');
     $updatedLeadRow = $wpdb->get_row($wpdb->prepare("SELECT display_name,province FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead),ARRAY_A);
     $assert(($updatedLeadRow['display_name']??'')==='Updated Offline QA Lead' && ($updatedLeadRow['province']??'')==='Tehran','offline lead update changes only the originating seller lead');
+
+    // A concurrent server edit after the device snapshot must stop the stale patch.
+    $conflictBase = (string)$wpdb->get_var($wpdb->prepare("SELECT updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead));
+    $conflictOperation = wp_generate_uuid4();
+    $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
+        'operation_uuid'=>$conflictOperation,'type'=>'crm.lead.update',
+        'payload'=>['lead_id'=>$createdLead,'display_name'=>'Stale Device Name','base_updated_at'=>$conflictBase]
+    ]]]));
+    $conflictQueued = $sync->push($push)->get_data();
+    $assert(($conflictQueued['results'][0]['status']??'')==='pending_review','concurrent edit fixture is queued');
+    $conflictId = (int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_sync_ops WHERE operation_uuid=%s",$conflictOperation));
+    $serverNewerAt = gmdate('Y-m-d H:i:s', time()+10);
+    $wpdb->update($wpdb->prefix.'parsian_leads',['display_name'=>'Server Newer Name','updated_at'=>$serverNewerAt],['id'=>$createdLead],['%s','%s'],['%d']);
+    $conflictApprove = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$conflictId.'/approve');
+    $conflictApprove->set_param('id',$conflictId);
+    $conflictResponse = $sync->approve_operation($conflictApprove);
+    $assert($conflictResponse->get_status()===409 && ($conflictResponse->get_data()['status']??'')==='conflict','stale device edit is preserved as a conflict, not applied');
+    $conflictRow = $wpdb->get_row($wpdb->prepare("SELECT status,result FROM {$wpdb->prefix}parsian_sync_ops WHERE id=%d",$conflictId),ARRAY_A);
+    $conflictData = json_decode((string)$conflictRow['result'],true);
+    $assert($conflictRow['status']==='conflict' && ($conflictData['server_record']['display_name']??'')==='Server Newer Name','manager conflict payload contains the newer server record');
+    $resolveKeep = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$conflictId.'/resolve-conflict');
+    $resolveKeep->set_param('id',$conflictId);
+    $resolveKeep->set_param('decision','keep_server');
+    $keptServer = $sync->resolve_conflict($resolveKeep);
+    $assert($keptServer->get_status()===200 && ($keptServer->get_data()['resolution']??'')==='kept_server','manager can explicitly keep the server version');
+    $finalLeadName = $wpdb->get_var($wpdb->prepare("SELECT display_name FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead));
+    $assert($finalLeadName==='Server Newer Name','stale device payload never overwrites the newer server value');
 
     $crm = new Parsian_Final_CRM();
     $taskRequest = new WP_REST_Request('POST','/parsian-final/v1/tasks');
