@@ -118,7 +118,11 @@ final class Parsian_Final_Sales {
                 'total_toman'=>(int)$row['total_toman'], 'due_date'=>(string)($row['due_date']??''),
                 'notes'=>(string)($row['notes']??''), 'created_by'=>(int)$row['created_by'],
                 'created_at'=>(string)$row['created_at'], 'updated_at'=>(string)$row['updated_at'],
-                'invoice_id'=>(int)$row['invoice_id']
+                'invoice_id'=>(int)$row['invoice_id'],
+                'items_revision'=>hash('sha256', wp_json_encode($wpdb->get_results($wpdb->prepare(
+                    "SELECT product_id,description,quantity,unit_price_toman,line_total_toman FROM {$wpdb->prefix}parsian_proforma_items WHERE proforma_id=%d ORDER BY id",
+                    (int)$row['id']
+                ), ARRAY_A) ?: [], JSON_UNESCAPED_UNICODE))
             ], JSON_UNESCAPED_UNICODE));
         }
         unset($row);
