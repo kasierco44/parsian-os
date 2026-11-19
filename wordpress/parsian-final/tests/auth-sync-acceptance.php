@@ -112,6 +112,8 @@ try {
     $assert($foreignEventOk===1,'foreign fixture event is inserted');
     $foreignEventId=(int)$wpdb->insert_id;
     $user->remove_cap('parsian_manage_users');
+    wp_set_current_user(0);
+    wp_set_current_user($userId); // Refresh the current user's capability snapshot.
 
     $pullRequest=new WP_REST_Request('GET','/parsian-final/v1/sync/pull');
     $pullRequest->set_param('since_id',0);
@@ -120,6 +122,8 @@ try {
     $assert(!(bool)array_filter($pulled['items']??[],static fn($event)=>($event['event_type']??'')==='crm.foreign.qa'),'seller cannot pull another user event');
     $assert((int)($pulled['next_cursor']??0)>=$foreignEventId,'seller delta cursor advances over filtered foreign events');
     $user->add_cap('parsian_manage_users');
+    wp_set_current_user(0);
+    wp_set_current_user($userId);
 
     $rejectOperation=wp_generate_uuid4();
     $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
