@@ -37,3 +37,4 @@ Development UI scaffold only; not production-ready.
 - Customer role now has read-only self-service views for its linked account's invoices, proformas and posted incoming payments.
 - Manager role has a database snapshot export and checksum validation workspace. Validation is non-destructive; restore is not implemented. The export is capped at 10,000 rows per table and 20 MiB and excludes WordPress uploads/media and authentication tokens.
 - Windows Tauri uses a separate bearer-token login path; the WordPress admin panel continues to use same-origin cookie + REST nonce authentication.
+- Web tables use Persian digits, Jalali dates and Persian labels for common workflow states.
