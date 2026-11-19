@@ -22,6 +22,8 @@ jobs:
   windows-bundle:
     runs-on: windows-latest
     timeout-minutes: 45
+    env:
+      RUST_BACKTRACE: full
     steps:
       - uses: actions/checkout@v4
       - name: Set up Rust
@@ -30,7 +32,7 @@ jobs:
         run: cargo install tauri-cli --version "^2" --locked
       - name: Build MSI and NSIS bundles
         working-directory: desktop
-        run: cargo tauri build --bundles msi,nsis
+        run: cargo tauri build --verbose --bundles msi,nsis
       - name: Upload Windows installers
         uses: actions/upload-artifact@v4
         with:
