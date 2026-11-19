@@ -40,7 +40,6 @@ final class Parsian_Final_Customer_Portal {
                 'due_date'=>(string)($row['due_date']??''),'issued_at'=>(string)$row['issued_at'],
                 'updated_at'=>(string)($row['updated_at']??''),'journal_entry_id'=>(int)$row['journal_entry_id'],'proforma_id'=>(int)$row['proforma_id'],'customer_id'=>(int)$row['customer_id'],'issued_by'=>(int)$row['issued_by']
             ], JSON_UNESCAPED_UNICODE));
-        }
             unset($row['proforma_id'], $row['customer_id'], $row['issued_by']);
         }
         unset($row);
@@ -56,9 +55,9 @@ final class Parsian_Final_Customer_Portal {
                 'total_toman'=>(int)$row['total_toman'],'status'=>(string)$row['status'],
                 'due_date'=>(string)($row['due_date']??''),'created_at'=>(string)$row['created_at'],
                 'updated_at'=>(string)($row['updated_at']??''),'customer_id'=>(int)$row['customer_id'],
-                'notes'=>(string)($row['notes']??''),'invoice_id'=>(int)$row['invoice_id']
+                'notes'=>(string)($row['notes']??''),'invoice_id'=>(int)$row['invoice_id'],'created_by'=>(int)$row['created_by']
             ], JSON_UNESCAPED_UNICODE));
-            unset($row['customer_id'], $row['notes'], $row['invoice_id']);
+            unset($row['customer_id'], $row['notes'], $row['invoice_id'], $row['created_by']);
         }
         unset($row);
         return new WP_REST_Response(['items'=>$rows?:[]],200);
