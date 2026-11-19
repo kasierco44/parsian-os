@@ -173,6 +173,27 @@ try {
     $assert($sync->resolve_conflict($proformaKeep)->get_status()===200,'manager can keep server proforma revision');
     $assert($wpdb->get_var($wpdb->prepare("SELECT notes FROM {$wpdb->prefix}parsian_proformas WHERE id=%d",$proformaId))==='Server proforma note','keeping server does not overwrite proforma data');
 
+    // A line-item-only server edit must change the proforma revision even if updated_at is unchanged.
+    $proformaListAfterKeep = $sales->list_proformas(new WP_REST_Request('GET','/parsian-final/v1/proformas'))->get_data();
+    $proformaSnapshotAfterKeep = null;
+    foreach (($proformaListAfterKeep['items']??[]) as $candidate) if ((int)$candidate['id']===$proformaId) {$proformaSnapshotAfterKeep=$candidate;break;}
+    $itemOnlyUuid = wp_generate_uuid4();
+    $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
+        'operation_uuid'=>$itemOnlyUuid,'type'=>'sales.proforma.update',
+        'payload'=>['proforma_id'=>$proformaId,'notes'=>'Stale item snapshot edit','base_updated_at'=>$proformaSnapshotAfterKeep['updated_at'],'base_revision'=>$proformaSnapshotAfterKeep['revision']]
+    ]]]));
+    $itemOnlyQueued = $sync->push($push)->get_data();
+    $assert(($itemOnlyQueued['results'][0]['status']??'')==='pending_review','line-item revision fixture is queued');
+    $itemOnlyOperationId = (int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_sync_ops WHERE operation_uuid=%s",$itemOnlyUuid));
+    $wpdb->update($wpdb->prefix.'parsian_proforma_items',['quantity'=>3,'line_total_toman'=>3000],['proforma_id'=>$proformaId],['%d','%d'],['%d']);
+    $itemOnlyApprove = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$itemOnlyOperationId.'/approve');
+    $itemOnlyApprove->set_param('id',$itemOnlyOperationId);
+    $itemOnlyConflict = $sync->approve_operation($itemOnlyApprove);
+    $assert($itemOnlyConflict->get_status()===409 && ($itemOnlyConflict->get_data()['status']??'')==='conflict','proforma line-item change is detected even without timestamp change');
+    $itemOnlyKeep = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$itemOnlyOperationId.'/resolve-conflict');
+    $itemOnlyKeep->set_param('id',$itemOnlyOperationId);$itemOnlyKeep->set_param('decision','keep_server');
+    $assert($sync->resolve_conflict($itemOnlyKeep)->get_status()===200,'manager can preserve line-item server revision');
+
     // Finance records use revision checks too; posted invoice facts are not mutable offline.
     $financeSuffix = wp_generate_password(10,false,false);
     $financeUserId = wp_insert_user([
