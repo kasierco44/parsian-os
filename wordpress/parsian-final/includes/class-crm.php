@@ -35,7 +35,80 @@ final class Parsian_Final_CRM {
                 ],
             ],
         ]);
+        register_rest_route('parsian-final/v1', '/tasks', [
+            [
+                'methods' => WP_REST_Server::READABLE,
+                'callback' => [$this, 'tasks'],
+                'permission_callback' => static function (): bool { return is_user_logged_in() && current_user_can('parsian_crm_read'); },
+            ],
+            [
+                'methods' => WP_REST_Server::CREATABLE,
+                'callback' => [$this, 'create_task'],
+                'permission_callback' => static function (): bool { return is_user_logged_in() && current_user_can('parsian_manage_users'); },
+            ],
+        ]);
 
+    }
+    public function tasks(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $table = $wpdb->prefix . 'parsian_tasks';
+        $limit = min(100, max(1, absint($request->get_param('per_page') ?: 50)));
+        if (current_user_can('parsian_manage_users')) {
+            $rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT id,title,description,assigned_user_id,status,due_at,completed_at,created_by,created_at
+                 FROM {$table} ORDER BY id DESC LIMIT %d", $limit
+            ), ARRAY_A);
+        } else {
+            $rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT id,title,description,assigned_user_id,status,due_at,completed_at,created_by,created_at
+                 FROM {$table} WHERE assigned_user_id=%d ORDER BY id DESC LIMIT %d",
+                get_current_user_id(), $limit
+            ), ARRAY_A);
+        }
+        return new WP_REST_Response(['items' => $rows ?: []], 200);
+    }
+    public function create_task(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $title = trim(sanitize_text_field((string) $request->get_param('title')));
+        $description = sanitize_textarea_field((string) $request->get_param('description'));
+        $assigneeId = absint($request->get_param('assigned_user_id'));
+        $assignee = $assigneeId ? get_user_by('id', $assigneeId) : false;
+        $dueAt = $request->get_param('due_at');
+        if ($title === '' || strlen($title) > 190 || !$assignee || !in_array('parsian_seller', (array) $assignee->roles, true)) {
+            return new WP_REST_Response(['code' => 'invalid_task'], 400);
+        }
+        if ($dueAt !== null && $dueAt !== '') {
+            $timestamp = is_string($dueAt) ? strtotime($dueAt) : false;
+            if ($timestamp === false) return new WP_REST_Response(['code' => 'invalid_task_due_at'], 400);
+            $dueAt = gmdate('Y-m-d H:i:s', $timestamp);
+        } else {
+            $dueAt = null;
+        }
+        $ok = $wpdb->insert($wpdb->prefix . 'parsian_tasks', [
+            'title' => $title,
+            'description' => $description,
+            'assigned_user_id' => $assigneeId,
+            'status' => 'open',
+            'due_at' => $dueAt,
+            'created_by' => get_current_user_id(),
+            'created_at' => current_time('mysql', true),
+        ], ['%s','%s','%d','%s','%s','%d','%s']);
+        if (!$ok) return new WP_REST_Response(['code' => 'task_create_failed'], 500);
+        $id = (int) $wpdb->insert_id;
+        $eventOk = $wpdb->insert($wpdb->prefix . 'parsian_events', [
+            'event_uuid' => wp_generate_uuid4(),
+            'actor_user_id' => get_current_user_id(),
+            'event_type' => 'crm.task.assigned',
+            'aggregate_type' => 'task',
+            'aggregate_id' => $id,
+            'payload' => wp_json_encode(['task_id' => $id, 'assigned_user_id' => $assigneeId]),
+            'created_at' => current_time('mysql', true),
+        ], ['%s','%d','%s','%s','%d','%s','%s']);
+        if (!$eventOk) {
+            $wpdb->delete($wpdb->prefix . 'parsian_tasks', ['id' => $id], ['%d']);
+            return new WP_REST_Response(['code' => 'task_event_write_failed'], 500);
+        }
+        return new WP_REST_Response(['id' => $id, 'status' => 'open'], 201);
     }
     public function customers(WP_REST_Request $request): WP_REST_Response {
         global $wpdb;
