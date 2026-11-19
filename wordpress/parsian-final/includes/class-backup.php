@@ -81,19 +81,23 @@ final class Parsian_Final_Backup {
                 $tablePlan[$suffix]=['exists'=>(bool)$status,'engine'=>$status['Engine']??null,'compatible'=>false];
                 continue;
             }
-            $columns=$wpdb->get_col("SHOW COLUMNS FROM {$table}",0);
-            if(!$columns){$allInnoDb=false;$tablePlan[$suffix]=['exists'=>true,'engine'=>'InnoDB','compatible'=>false,'reason'=>'table_columns_unavailable'];continue;}
+            $columnRows=$wpdb->get_results("SHOW COLUMNS FROM {$table}",ARRAY_A);
+            if(!$columnRows){$allInnoDb=false;$tablePlan[$suffix]=['exists'=>true,'engine'=>'InnoDB','compatible'=>false,'reason'=>'table_columns_unavailable'];continue;}
+            $columns=array_column($columnRows,'Field');
             $backupRows=$backup['tables'][$suffix]??[];
             $rowKeys=[];
             if(isset($backupRows[0])&&is_array($backupRows[0]))$rowKeys=array_keys($backupRows[0]);
             $unknown=array_values(array_diff($rowKeys,$columns));
-            $tablePlan[$suffix]=['exists'=>true,'engine'=>'InnoDB','rows'=>count($backupRows),'unknown_columns'=>$unknown,'compatible'=>count($unknown)===0];
-            if($unknown)$allInnoDb=false;
+            $missing=array_values(array_diff($columns,$rowKeys));
+            $shapeCompatible=count($backupRows)===0 || (!$unknown && !$missing);
+            $tablePlan[$suffix]=['exists'=>true,'engine'=>'InnoDB','rows'=>count($backupRows),'unknown_columns'=>$unknown,'missing_columns'=>$missing,'compatible'=>$shapeCompatible];
+            if(!$shapeCompatible)$allInnoDb=false;
         }
         $sourceSite=(string)($backup['source_site']??'');
         $targetSite=home_url('/');
         $sameSite=untrailingslashit($sourceSite)===untrailingslashit($targetSite);
-        $confirmedTarget=isset($request['target_site_confirmation']) && is_string($request['target_site_confirmation']) && hash_equals(untrailingslashit($targetSite),untrailingslashit($request['target_site_confirmation']));
+        $targetConfirmation=$request->get_param('target_site_confirmation');
+        $confirmedTarget=is_string($targetConfirmation) && hash_equals(untrailingslashit($targetSite),untrailingslashit($targetConfirmation));
         $ready=$allInnoDb&&$confirmedTarget;
         return new WP_REST_Response([
             'ready'=>$ready,
