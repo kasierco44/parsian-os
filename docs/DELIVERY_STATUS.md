@@ -473,3 +473,17 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Seller Android UI exposes offline lead creation, lead update, task completion, and single-line proforma draft queueing. Each operation is stored in the encrypted local outbox and requires server-side review where configured.
 - DashboardRepository now includes assigned seller tasks. SyncWorker acknowledges approved lead create/update, task completion and proforma draft events.
 - Android source was reviewed for balanced Compose block delimiters and expected operation mappings. This is not a substitute for Gradle compilation or device testing; current Android build artifact remains unverified due the GitHub runner allocation failure.
+
+
+## Latest continuation audit (2026-11-19, 10:25 UTC)
+
+- Current branch head observed: `eb05cd4fee6f51fd33e7581af1f8348d0a3f7781`. Pull request #21 remains draft and unmerged. Plugin version is `0.4.25`.
+- Rechecked the Android seller source: the outbox operation allowlist matches the four server-side namespaced operation handlers; the seller task endpoint response shape matches the Android `tasks.items` reader; Room uses SQLCipher-backed storage and has a version 1-to-2 migration for inbox and sync metadata.
+- This is a source inspection only. No Gradle/Kotlin compilation or device acceptance has been verified. Offline writes can be queued, but a complete offline read model/cache and deterministic conflict-resolution workflow are still outstanding.
+- Latest GitHub Actions attempts were checked directly:
+  - PHP lint run `44505393414`, job `135495537259`
+  - WordPress package run `44505393485`, job `135495537774`
+  - Android debug run `44505225288`, job `135494954274`
+  Each job reports `runner_id=0`, an empty runner name, and an empty steps array; each terminated before a workflow step executed. Therefore no fresh PHP lint, ZIP package, or APK result can be claimed from these runs.
+- The immediate external release blocker remains GitHub Actions runner allocation/account usage settings. Review repository Actions policy and account billing/usage budgets using the official [GitHub Actions troubleshooting guide](https://docs.github.com/en/actions/how-tos/troubleshoot-workflows).
+- Production remains untouched. Do not merge PR #21 or distribute a release artifact until CI, staging migrations, runtime acceptance, and restore rehearsal pass.
