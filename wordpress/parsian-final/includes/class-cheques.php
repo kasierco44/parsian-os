@@ -61,7 +61,7 @@ final class Parsian_Final_Cheques {
         }
         $partyType=(string)$cheque['party_type']; $partyId=(int)$cheque['party_id'];
         $amount=(int)$cheque['amount_toman']; $journalId=0;
-        if(in_array($to,['cleared','bounced'],true)||($direction==='issued'&&$from==='issued'&&$to==='cancelled')||($direction==='received'&&$from==='deposited'&&$to==='returned')){
+        if(in_array($to,['cleared','bounced'],true)||($direction==='issued'&&$to==='cancelled')||($direction==='received'&&$to==='returned')){
             $paymentId=(int)$cheque['payment_id'];
             $payment=$paymentId>0?$wpdb->get_row($wpdb->prepare("SELECT id,status,method,amount_toman FROM {$wpdb->prefix}parsian_payments WHERE id=%d FOR UPDATE",$paymentId),ARRAY_A):null;
             if(!$payment||$payment['status']!=='posted'||$payment['method']!=='cheque'||(int)$payment['amount_toman']!==$amount){
@@ -85,21 +85,18 @@ final class Parsian_Final_Cheques {
                 ['account_code'=>'2200','debit_toman'=>$amount,'credit_toman'=>0,'party_type'=>$partyType,'party_id'=>$partyId],
                 ['account_code'=>'1210','debit_toman'=>0,'credit_toman'=>$amount,'party_type'=>$partyType,'party_id'=>$partyId]
             ];
-        } elseif($direction==='issued'&&(($from==='presented'&&$to==='bounced')||($from==='issued'&&$to==='cancelled'))){
+        } elseif($direction==='issued'&&(($from==='presented'&&$to==='bounced')||$to==='cancelled')){
             if($partyType!=='supplier'||$partyId<1){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'supplier_mapping_required_for_bounce'],422);}
             $lines=[
                 ['account_code'=>'2200','debit_toman'=>$amount,'credit_toman'=>0,'party_type'=>'supplier','party_id'=>$partyId],
                 ['account_code'=>'2100','debit_toman'=>0,'credit_toman'=>$amount,'party_type'=>'supplier','party_id'=>$partyId]
             ];
         } elseif($to==='returned'&&$direction==='received'){
-            // Returning a received cheque is a liability/receivable workflow, not cash clearance.
             if($partyType!=='customer'||$partyId<1){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'customer_mapping_required_for_return'],422);}
-            if($from==='deposited'){
-                $lines=[
-                    ['account_code'=>'1100','debit_toman'=>$amount,'credit_toman'=>0,'party_type'=>'customer','party_id'=>$partyId],
-                    ['account_code'=>'1220','debit_toman'=>0,'credit_toman'=>$amount,'party_type'=>'customer','party_id'=>$partyId]
-                ];
-            }
+            $lines=[
+                ['account_code'=>'1100','debit_toman'=>$amount,'credit_toman'=>0,'party_type'=>'customer','party_id'=>$partyId],
+                ['account_code'=>'1220','debit_toman'=>0,'credit_toman'=>$amount,'party_type'=>'customer','party_id'=>$partyId]
+            ];
         }
         if(is_array($lines)){
             $eventWritten=$wpdb->insert($wpdb->prefix.'parsian_cheque_events',[
@@ -123,6 +120,12 @@ final class Parsian_Final_Cheques {
         if($to==='cleared')$data['cleared_at']=current_time('mysql',true);
         $updated=$wpdb->update($table,$data,['id'=>$id,'status'=>$from]);
         if($updated!==1){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'cheque_state_conflict'],409);}
+        if(in_array($to,['bounced','returned','cancelled'],true) && $journalId>0 && (int)$cheque['payment_id']>0){
+            $paymentUpdate=$wpdb->update($wpdb->prefix.'parsian_payments',[
+                'status'=>'reversed','reversed_at'=>current_time('mysql',true),'reversal_event_id'=>(int)$eventId
+            ],['id'=>(int)$cheque['payment_id'],'status'=>'posted'],['%s','%s','%d'],['%d','%s']);
+            if($paymentUpdate!==1){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'linked_payment_reversal_conflict'],409);}
+        }
         $this->event('finance.cheque.transitioned','cheque',$id,['from'=>$from,'to'=>$to,'journal_entry_id'=>$journalId,'event_id'=>(int)$eventId]);
         $wpdb->query('COMMIT');
         return new WP_REST_Response(['cheque_id'=>$id,'from'=>$from,'status'=>$to,'event_id'=>(int)$eventId,'journal_entry_id'=>$journalId],200);
