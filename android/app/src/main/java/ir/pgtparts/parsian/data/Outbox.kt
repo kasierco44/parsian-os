@@ -4,7 +4,7 @@ import ir.pgtparts.parsian.sync.SyncScheduler
 import org.json.JSONObject
 import java.util.UUID
 object Outbox {
- private val allowedTypes = setOf("crm.lead.create", "crm.lead.update", "crm.task.complete", "sales.proforma.draft")
+ private val allowedTypes = setOf("crm.lead.create", "crm.lead.update", "crm.customer.update", "crm.task.complete", "sales.proforma.draft", "sales.proforma.update")
  suspend fun enqueue(context: Context, type: String, payload: JSONObject): String {
   require(type in allowedTypes) { "این نوع عملیات هنوز در سرور مجاز نشده است." }
   val uuid = UUID.randomUUID().toString()
