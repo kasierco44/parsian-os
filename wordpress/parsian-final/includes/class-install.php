@@ -306,6 +306,16 @@ final class Parsian_Final_Install {
             ));
         }
 
+        $invoiceColumns = [
+            'cogs_toman' => "ALTER TABLE {$p}invoices ADD COLUMN cogs_toman bigint unsigned NOT NULL DEFAULT 0",
+            'cogs_journal_entry_id' => "ALTER TABLE {$p}invoices ADD COLUMN cogs_journal_entry_id bigint unsigned NOT NULL DEFAULT 0"
+        ];
+        foreach ($invoiceColumns as $column => $sql) {
+            if (!$wpdb->get_var($wpdb->prepare("SHOW COLUMNS FROM {$p}invoices LIKE %s", $column))) {
+                $wpdb->query($sql);
+            }
+        }
+
         update_option('parsian_final_schema_version', PARSIAN_FINAL_VERSION, false);
         Parsian_Final_Roles::register();
     }
