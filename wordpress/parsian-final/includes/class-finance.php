@@ -97,7 +97,7 @@ final class Parsian_Final_Finance {
             'reference'=>sanitize_text_field($p['reference'] ?? ''),
             'status'=>'pending_approval','created_by'=>get_current_user_id(),
             'created_at'=>current_time('mysql', true),'updated_at'=>current_time('mysql', true)
-        ], ['%s','%d','%s','%d','%s','%s','%s','%d','%s']);
+        ], ['%s','%d','%s','%d','%s','%s','%s','%d','%s','%s']);
         if (!$ok) return new WP_REST_Response(['code'=>'payment_create_failed'], 500);
         $id = (int) $wpdb->insert_id;
         $wpdb->insert($wpdb->prefix.'parsian_events', [
