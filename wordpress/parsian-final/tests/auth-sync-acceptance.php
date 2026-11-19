@@ -185,7 +185,7 @@ try {
     $financeUser->add_cap('parsian_finance_write');
     $financeUser->add_cap('parsian_finance_read');
     $invoiceOk = $wpdb->insert($wpdb->prefix.'parsian_invoices',[
-        'invoice_number'=>'QA-INV-'.$financeSuffix,'proforma_id'=>0,'customer_id'=>$customerId,
+        'invoice_number'=>'QA-INV-'.$financeSuffix,'proforma_id'=>$proformaId,'customer_id'=>$customerId,
         'status'=>'posted','currency'=>'IRR','total_toman'=>5000,'due_date'=>'2027-01-01',
         'issued_by'=>$financeUserId,'issued_at'=>current_time('mysql',true),'updated_at'=>current_time('mysql',true)
     ]);
@@ -430,6 +430,7 @@ try {
     if($financeUserId){
         $wpdb->delete($wpdb->prefix.'parsian_sync_ops',['user_id'=>$financeUserId],['%d']);
         $wpdb->delete($wpdb->prefix.'parsian_devices',['user_id'=>$financeUserId],['%d']);
+        $wpdb->delete($wpdb->prefix.'parsian_events',['actor_user_id'=>$financeUserId],['%d']);
         if ($invoiceId) $wpdb->delete($wpdb->prefix.'parsian_invoices',['id'=>$invoiceId],['%d']);
         if ($paymentId) $wpdb->delete($wpdb->prefix.'parsian_payments',['id'=>$paymentId],['%d']);
         require_once ABSPATH.'wp-admin/includes/user.php';
