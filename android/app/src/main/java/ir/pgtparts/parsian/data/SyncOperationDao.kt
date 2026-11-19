@@ -30,6 +30,12 @@ interface SyncOperationDao {
  suspend fun clearInbox()
  @Query("DELETE FROM sync_metadata")
  suspend fun clearMetadata()
+ @Insert(onConflict = OnConflictStrategy.REPLACE)
+ suspend fun saveDashboardSnapshot(snapshot: DashboardSnapshotEntity)
+ @Query("SELECT * FROM dashboard_snapshots WHERE snapshotKey = :key LIMIT 1")
+ suspend fun dashboardSnapshot(key: String): DashboardSnapshotEntity?
+ @Query("DELETE FROM dashboard_snapshots")
+ suspend fun clearDashboardSnapshots()
  @Transaction
  suspend fun persistInboxPage(events: List<SyncEventEntity>, cursor: Long) {
   if (events.isNotEmpty()) saveEvents(events)
