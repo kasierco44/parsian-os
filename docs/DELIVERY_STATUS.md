@@ -81,3 +81,29 @@ Keep the existing live site and its database untouched until a staging backup, m
 - PHP lint: passed, GitHub Actions run `44463175271`, code head `eb4263e5e00e9f5125eeb29d7f87622d5d1dab74`.
 - Development ZIP: built and uploaded successfully, GitHub Actions run `44463175263`, artifact `parsian-final-wordpress-plugin-dev`, artifact ID `14501425379`, SHA-256 `25c2d672c0a63c7a940bdbd067d27231c21f2d1d1449895e83495db51e4e2498` (expires 2026-12-03).
 - This confirms PHP syntax and packaging only. No live/staging WordPress runtime test or finance acceptance test has been run.
+
+
+## Inventory implementation update (2026-11-19, plugin schema 0.3.0)
+
+- Added append-only stock ledger and invoice-linked stock reservation tables.
+- Stock item responses now include on-hand, reserved, available, inventory value and weighted-average unit cost.
+- Inventory movements remain pending until an authorized user approves them. Incoming movements require a supplier identifier and unit acquisition cost; outgoing movement cost is calculated from the current weighted average.
+- Approved movements write a stock-ledger entry and a balanced journal entry (inventory/AP for receipts; expense/inventory for manual issues).
+- Added invoice reservation, incremental reservation, reservation release and invoice fulfillment endpoints.
+- Invoice fulfillment requires the full invoice quantity to be reserved, consumes the reservation, posts weighted-average COGS, credits inventory and debits COGS, and marks the invoice fulfilled in one database transaction.
+- Added inventory valuation report and GL accounts 1300 (inventory) and 5100 (cost of goods sold).
+- Plugin version/schema version bumped to 0.3.0. Existing schema changes use dbDelta and guarded column migrations.
+
+### Inventory API added
+- POST /parsian-final/v1/inventory/movements/{id}/approve
+- POST /parsian-final/v1/inventory/reservations
+- POST /parsian-final/v1/inventory/reservations/{id}/release
+- POST /parsian-final/v1/inventory/invoices/{id}/fulfill
+- GET /parsian-final/v1/inventory/valuation
+
+### Verification and remaining controls
+- GitHub Actions PHP lint passed on code head 7b1a6c65321e68b43dfb82d4ee9ceef445ff60c0 (run 44464189870).
+- PHP lint is syntax validation only. No WordPress staging install, DB migration execution, endpoint integration tests, concurrency tests, or inventory acceptance test has been run.
+- Stock supplier identifiers are currently numeric references; supplier master-data validation and purchase-order matching remain to be connected.
+- This is weighted-average inventory costing, not FIFO. Tax, landed-cost allocation, returns, stock counts/adjustments with approval policy, multi-warehouse locations, and automated reservation on invoice approval remain follow-up work.
+- No Android APK, Windows installer, or production release is claimed.
