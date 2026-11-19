@@ -552,3 +552,11 @@ Keep the existing live site and its database untouched until a staging backup, m
 - WP-CLI acceptance fixtures now cover the expanded table set, checksum tampering, and exclusion-manifest tampering.
 - This is still a development-only export/validation feature: no restore engine or real restore rehearsal exists, and the updated acceptance suite has not run on GitHub Actions.
 - Snapshot export now uses a read-only consistent database transaction, fails closed on table-read errors, and marks the sensitive response no-store/private. WP-CLI acceptance coverage now exercises a real export from the test database and validates its generated checksum and response headers.
+
+## Staging restore preflight (2026-11-19)
+
+- Added a staging-only, non-destructive restore-plan endpoint. It validates the snapshot checksum and table manifest, requires an exact target-site URL confirmation, checks schema-version compatibility, checks that every required table exists with InnoDB storage, and rejects unknown backup columns.
+- The preflight explicitly reports writes_performed=false and restored=false. No destructive restore endpoint has been enabled: transactional rollback and a complete restore rehearsal must be proven first.
+- Hardened export/validation with a total-row ceiling in addition to per-table and byte limits. The backup includes devices and sync_ops while explicitly excluding auth_tokens and documenting mandatory device re-registration after recovery.
+- WP-CLI acceptance assertions cover the real database export, no-store response, checksum/manifest tampering, and restore-plan refusal without exact target confirmation. These are test definitions only until the GitHub Actions job actually runs.
+- A source review caught and corrected an escaped-newline syntax defect in the backup validator before this commit. PHP lint and runtime results for the corrected code remain pending.
