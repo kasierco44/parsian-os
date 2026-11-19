@@ -57,6 +57,13 @@ final class Parsian_Final_Cheques {
         }
         $partyType=(string)$cheque['party_type']; $partyId=(int)$cheque['party_id'];
         $amount=(int)$cheque['amount_toman']; $journalId=0;
+        if(in_array($to,['cleared','bounced'],true)||($direction==='issued'&&$from==='issued'&&$to==='cancelled')){
+            $paymentId=(int)$cheque['payment_id'];
+            $payment=$paymentId>0?$wpdb->get_row($wpdb->prepare("SELECT id,status,method,amount_toman FROM {$wpdb->prefix}parsian_payments WHERE id=%d FOR UPDATE",$paymentId),ARRAY_A):null;
+            if(!$payment||$payment['status']!=='posted'||$payment['method']!=='cheque'||(int)$payment['amount_toman']!==$amount){
+                $wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'posted_cheque_payment_link_required'],422);
+            }
+        }
         $lines=null;
         if($direction==='received'&&$from==='deposited'&&$to==='cleared'){
             $lines=[
@@ -74,7 +81,7 @@ final class Parsian_Final_Cheques {
                 ['account_code'=>'2200','debit_toman'=>$amount,'credit_toman'=>0,'party_type'=>$partyType,'party_id'=>$partyId],
                 ['account_code'=>'1210','debit_toman'=>0,'credit_toman'=>$amount,'party_type'=>$partyType,'party_id'=>$partyId]
             ];
-        } elseif($direction==='issued'&&$from==='presented'&&$to==='bounced'){
+        } elseif($direction==='issued'&&(($from==='presented'&&$to==='bounced')||($from==='issued'&&$to==='cancelled'))){
             if($partyType!=='supplier'||$partyId<1){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'supplier_mapping_required_for_bounce'],422);}
             $lines=[
                 ['account_code'=>'2200','debit_toman'=>$amount,'credit_toman'=>0,'party_type'=>'supplier','party_id'=>$partyId],
@@ -91,20 +98,22 @@ final class Parsian_Final_Cheques {
             }
         }
         if(is_array($lines)){
-            $eventId=$wpdb->insert($wpdb->prefix.'parsian_cheque_events',[
+            $eventWritten=$wpdb->insert($wpdb->prefix.'parsian_cheque_events',[
                 'cheque_id'=>$id,'from_status'=>$from,'to_status'=>$to,'event_note'=>$note,
                 'actor_user_id'=>get_current_user_id(),'created_at'=>current_time('mysql',true)
             ],['%d','%s','%s','%s','%d','%s']);
-            if(!$eventId){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'cheque_event_failed'],500);}
-            $journalId=Parsian_Final_Ledger::create_entry('cheque_transition',(int)$wpdb->insert_id,'تغییر وضعیت چک '.$id.' از '.$from.' به '.$to,$lines,get_current_user_id());
+            if(!$eventWritten){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'cheque_event_failed'],500);}
+            $eventId=(int)$wpdb->insert_id;
+            $journalId=Parsian_Final_Ledger::create_entry('cheque_transition',$eventId,'تغییر وضعیت چک '.$id.' از '.$from.' به '.$to,$lines,get_current_user_id());
             if(!$journalId){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'cheque_journal_failed'],500);}
             $wpdb->update($wpdb->prefix.'parsian_cheque_events',['journal_entry_id'=>$journalId],['id'=>(int)$eventId],['%d'],['%d']);
         } else {
-            $eventId=$wpdb->insert($wpdb->prefix.'parsian_cheque_events',[
+            $eventWritten=$wpdb->insert($wpdb->prefix.'parsian_cheque_events',[
                 'cheque_id'=>$id,'from_status'=>$from,'to_status'=>$to,'event_note'=>$note,
                 'actor_user_id'=>get_current_user_id(),'created_at'=>current_time('mysql',true)
             ],['%d','%s','%s','%s','%d','%s']);
-            if(!$eventId){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'cheque_event_failed'],500);}
+            if(!$eventWritten){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'cheque_event_failed'],500);}
+            $eventId=(int)$wpdb->insert_id;
         }
         $data=['status'=>$to,'last_event_id'=>(int)$eventId];
         if($to==='cleared')$data['cleared_at']=current_time('mysql',true);
