@@ -9,8 +9,8 @@ final class Parsian_Final_Panels {
 
     public function register_menu(): void {
         add_menu_page(
-            'PARSIAN OS',
-            'پارسیان OS',
+            'PARSIAN ONE',
+            'پارسیان وان',
             'parsian_access_core',
             'parsian-final',
             [$this, 'render_page'],
@@ -46,7 +46,7 @@ final class Parsian_Final_Panels {
         }
         echo '<div class="wrap parsian-final-admin parsian-os-app">';
         echo '<div class="shell">';
-        echo '<aside><h1>پارسیان OS</h1><nav id="navigation" class="navigation"></nav><small id="api-status">در حال اتصال به هسته مرکزی...</small></aside>';
+        echo '<aside><h1>پارسیان وان</h1><nav id="navigation" class="navigation"></nav><small id="api-status">در حال اتصال به هسته مرکزی...</small></aside>';
         echo '<main><header><span id="role-chip">در حال شناسایی نقش</span><h2 id="page-title">داشبورد</h2><p id="user-name">کاربر</p></header>';
         echo '<section class="hero"><h2 id="welcome-title">خوش آمدید</h2><p id="welcome-copy">اطلاعات پس از احراز هویت نمایش داده می‌شوند.</p></section>';
         echo '<p id="notice" class="notice" role="status" aria-live="polite">در حال بررسی سامانه...</p>';
