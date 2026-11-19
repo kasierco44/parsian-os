@@ -26,6 +26,11 @@ jobs:
           node-version: '20'
       - name: Check JavaScript syntax
         run: node --check web/parsian-panels/app.js
+      - name: Check bundled plugin panel JavaScript
+        run: |
+          node --check wordpress/parsian-final/assets/panels/app.js
+          cmp web/parsian-panels/app.js wordpress/parsian-final/assets/panels/app.js
+          cmp web/parsian-panels/styles.css wordpress/parsian-final/assets/panels/styles.css
       - name: Check required panel assets
         run: |
           test -s web/parsian-panels/index.html
