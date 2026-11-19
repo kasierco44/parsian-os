@@ -204,8 +204,8 @@ final class Parsian_Final_Finance {
         }
         if(!in_array($invoice['status'],['posted','fulfilled'],true)){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'invoice_not_allocatable'],409);}
         $table=$wpdb->prefix.'parsian_payment_allocations';
-        $paymentAllocated=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(amount_toman),0) FROM {$table} WHERE payment_id=%d",$paymentId));
-        $invoiceAllocated=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(amount_toman),0) FROM {$table} WHERE invoice_id=%d",$invoiceId));
+        $paymentAllocated=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(amount_toman),0) FROM {$table} WHERE payment_id=%d AND status='active'",$paymentId));
+        $invoiceAllocated=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(amount_toman),0) FROM {$table} WHERE invoice_id=%d AND status='active'",$invoiceId));
         $paymentRemaining=(int)$payment['amount_toman']-$paymentAllocated;
         $invoiceRemaining=(int)$invoice['total_toman']-$invoiceAllocated;
         if($amount>$paymentRemaining||$amount>$invoiceRemaining){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'allocation_exceeds_remaining','payment_remaining_toman'=>$paymentRemaining,'invoice_remaining_toman'=>$invoiceRemaining],409);}
@@ -225,7 +225,7 @@ final class Parsian_Final_Finance {
         global $wpdb; $id=absint($request['id']);
         $invoice=$wpdb->get_row($wpdb->prepare("SELECT id,invoice_number,customer_id,total_toman,status FROM {$wpdb->prefix}parsian_invoices WHERE id=%d",$id),ARRAY_A);
         if(!$invoice)return new WP_REST_Response(['code'=>'invoice_not_found'],404);
-        $paid=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(amount_toman),0) FROM {$wpdb->prefix}parsian_payment_allocations WHERE invoice_id=%d",$id));
+        $paid=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(amount_toman),0) FROM {$wpdb->prefix}parsian_payment_allocations WHERE invoice_id=%d AND status='active'",$id));
         return new WP_REST_Response(['invoice'=>$invoice,'allocated_toman'=>$paid,'balance_toman'=>max(0,(int)$invoice['total_toman']-$paid),'payment_status'=>$paid<=0?'unpaid':($paid>=(int)$invoice['total_toman']?'paid':'partially_paid')],200);
     }
     public function customer_outstanding(WP_REST_Request $request): WP_REST_Response {
@@ -235,7 +235,7 @@ final class Parsian_Final_Finance {
                     COALESCE(a.allocated_toman,0) allocated_toman,
                     GREATEST(i.total_toman-COALESCE(a.allocated_toman,0),0) balance_toman
              FROM {$wpdb->prefix}parsian_invoices i
-             LEFT JOIN (SELECT invoice_id,SUM(amount_toman) allocated_toman FROM {$wpdb->prefix}parsian_payment_allocations GROUP BY invoice_id) a ON a.invoice_id=i.id
+             LEFT JOIN (SELECT invoice_id,SUM(amount_toman) allocated_toman FROM {$wpdb->prefix}parsian_payment_allocations WHERE status='active' GROUP BY invoice_id) a ON a.invoice_id=i.id
              WHERE i.customer_id=%d AND i.status IN ('posted','fulfilled')
              ORDER BY i.issued_at ASC,i.id ASC",$customerId
         ),ARRAY_A)?:[];
