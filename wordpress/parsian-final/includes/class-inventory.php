@@ -84,9 +84,18 @@ final class Parsian_Final_Inventory {
             'unit_cost_toman'=>$unit,'value_delta_toman'=>$valueDelta,'created_by'=>get_current_user_id(),'created_at'=>current_time('mysql',true)
         ],['%d','%s','%d','%d','%d','%d','%d','%s']);
         if(!$ok){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'stock_ledger_write_failed'],500);}
-        $updated=$wpdb->update($table,['status'=>'approved','approved_by'=>get_current_user_id(),'approved_at'=>current_time('mysql',true)],['id'=>$id,'status'=>'pending_approval'],['%s','%d','%s'],['%d','%s']);
+        $journalLines = $m['direction']==='in' ? [
+            ['account_code'=>'1300','debit_toman'=>$value,'credit_toman'=>0],
+            ['account_code'=>'2100','debit_toman'=>0,'credit_toman'=>$value,'party_type'=>'supplier','party_id'=>(int)$m['supplier_id']]
+        ] : [
+            ['account_code'=>'5100','debit_toman'=>$value,'credit_toman'=>0],
+            ['account_code'=>'1300','debit_toman'=>0,'credit_toman'=>$value]
+        ];
+        $journalId=Parsian_Final_Ledger::create_entry('stock_movement',$id,'ثبت گردش انبار '.$id,$journalLines,get_current_user_id());
+        if(!$journalId){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'inventory_journal_failed'],500);}
+        $updated=$wpdb->update($table,['status'=>'approved','approved_by'=>get_current_user_id(),'approved_at'=>current_time('mysql',true),'ledger_entry_id'=>$journalId],['id'=>$id,'status'=>'pending_approval'],['%s','%d','%s','%d'],['%d','%s']);
         if($updated!==1){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'movement_state_conflict'],409);}
-        $this->event('inventory.movement.posted','stock_movement',$id,['product_id'=>$pid,'quantity_delta'=>$delta,'unit_cost_toman'=>$unit,'value_delta_toman'=>$valueDelta]);
+        $this->event('inventory.movement.posted','stock_movement',$id,['product_id'=>$pid,'quantity_delta'=>$delta,'unit_cost_toman'=>$unit,'value_delta_toman'=>$valueDelta,'journal_entry_id'=>$journalId]);
         $wpdb->query('COMMIT');
         return new WP_REST_Response(['status'=>'approved','quantity_delta'=>$delta,'unit_cost_toman'=>$unit,'value_delta_toman'=>$valueDelta,'stock'=>$this->stock($pid)],201);
     }
