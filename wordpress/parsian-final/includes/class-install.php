@@ -232,6 +232,21 @@ final class Parsian_Final_Install {
             ) $charset;"
         ];
         foreach ($workflowTables as $sql) { dbDelta($sql); }
+        $defaultAccounts = [
+            ['1100','حساب‌های دریافتنی تجاری','asset'],
+            ['1200','صندوق','asset'],
+            ['1210','بانک','asset'],
+            ['1220','اسناد دریافتنی در جریان وصول','asset'],
+            ['2100','حساب‌های پرداختنی تجاری','liability'],
+            ['2200','اسناد پرداختنی','liability'],
+            ['4100','فروش کالا','revenue'],
+        ];
+        foreach ($defaultAccounts as $account) {
+            $wpdb->query($wpdb->prepare(
+                "INSERT IGNORE INTO {$p}ledger_accounts (account_code,account_name,account_type,is_active) VALUES (%s,%s,%s,1)",
+                $account[0], $account[1], $account[2]
+            ));
+        }
         if (!$wpdb->get_var($wpdb->prepare("SHOW COLUMNS FROM {$p}payments LIKE %s", 'journal_entry_id'))) {
             $wpdb->query("ALTER TABLE {$p}payments ADD COLUMN journal_entry_id bigint unsigned NOT NULL DEFAULT 0");
         }
