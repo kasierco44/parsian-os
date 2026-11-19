@@ -38,7 +38,7 @@ jobs:
           gradle-version: '8.7'
       - name: Assemble seller and customer debug APKs
         working-directory: android
-        run: gradle --no-daemon :app:assembleSellerDebug :app:assembleCustomerDebug
+        run: gradle --no-daemon --stacktrace :app:assembleSellerDebug :app:assembleCustomerDebug
       - name: Upload debug APKs
         uses: actions/upload-artifact@v4
         with:
