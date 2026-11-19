@@ -306,6 +306,20 @@ final class Parsian_Final_Install {
             ));
         }
 
+        $allocationTable = "CREATE TABLE {$p}payment_allocations (
+            id bigint unsigned NOT NULL AUTO_INCREMENT,
+            payment_id bigint unsigned NOT NULL,
+            invoice_id bigint unsigned NOT NULL,
+            customer_id bigint unsigned NOT NULL,
+            amount_toman bigint unsigned NOT NULL,
+            allocated_by bigint unsigned NOT NULL,
+            allocated_at datetime NOT NULL,
+            PRIMARY KEY  (id),
+            UNIQUE KEY payment_invoice (payment_id,invoice_id),
+            KEY invoice_lookup (invoice_id,customer_id),
+            KEY customer_allocated (customer_id,allocated_at)
+        ) $charset;";
+        dbDelta($allocationTable);
         $invoiceColumns = [
             'cogs_toman' => "ALTER TABLE {$p}invoices ADD COLUMN cogs_toman bigint unsigned NOT NULL DEFAULT 0",
             'cogs_journal_entry_id' => "ALTER TABLE {$p}invoices ADD COLUMN cogs_journal_entry_id bigint unsigned NOT NULL DEFAULT 0"
