@@ -6,7 +6,7 @@ final class Parsian_Final_Ledger {
             'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'journals'],
             'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_finance_read');}
         ]);
-        register_rest_route('parsian-final/v1','/ledger/trial-balance',[
+        register_rest_route('parsian-final/v1','/ledger/party-statement',[\n            'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'party_statement'],\n            'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_finance_read');}\n        ]);\n        register_rest_route('parsian-final/v1','/ledger/trial-balance',[
             'methods'=>WP_REST_Server::READABLE,'callback'=>[$this,'trial_balance'],
             'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_finance_read');}
         ]);
@@ -95,5 +95,29 @@ final class Parsian_Final_Ledger {
             if (!$ok) { return 0; }
         }
         return $entryId;
+    }
+    public function party_statement(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $partyType=sanitize_key($request->get_param('party_type')??'');
+        $partyId=absint($request->get_param('party_id'));
+        if(!in_array($partyType,['customer','supplier'],true)||$partyId<1)
+            return new WP_REST_Response(['code'=>'invalid_party'],400);
+        $rows=$wpdb->get_results($wpdb->prepare(
+            "SELECT e.id AS journal_entry_id,e.entry_number,e.source_type,e.source_id,e.memo,e.created_at,
+                    a.account_code,a.account_name,l.debit_toman,l.credit_toman,l.memo AS line_memo
+             FROM {$wpdb->prefix}parsian_journal_lines l
+             INNER JOIN {$wpdb->prefix}parsian_journal_entries e ON e.id=l.journal_entry_id AND e.status='posted'
+             INNER JOIN {$wpdb->prefix}parsian_ledger_accounts a ON a.id=l.account_id
+             WHERE l.party_type=%s AND l.party_id=%d
+             ORDER BY e.id ASC,l.id ASC",
+            $partyType,$partyId
+        ),ARRAY_A);
+        $debit=0;$credit=0;
+        foreach((array)$rows as $row){$debit+=(int)$row['debit_toman'];$credit+=(int)$row['credit_toman'];}
+        return new WP_REST_Response([
+            'party_type'=>$partyType,'party_id'=>$partyId,'items'=>$rows?:[],
+            'total_debit_toman'=>$debit,'total_credit_toman'=>$credit,
+            'net_debit_toman'=>$debit-$credit
+        ],200);
     }
 }
