@@ -122,11 +122,21 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     val items = body.optJSONArray("items") ?: JSONArray()
     val events = ArrayList<SyncEventEntity>()
     val operationAcknowledgements = ArrayList<Triple<String, String, String?>>()
+    val staleResources = linkedSetOf<String>()
     for (index in 0 until items.length()) {
      val item = items.optJSONObject(index) ?: continue
      val eventId = item.optLong("id", -1L)
      if (eventId <= 0L) continue
      val eventType = item.optString("event_type")
+     val aggregateType = item.optString("aggregate_type")
+     when (aggregateType) {
+      "customer" -> staleResources.add("customers")
+      "lead" -> staleResources.add("leads")
+      "task" -> staleResources.add("tasks")
+      "proforma" -> staleResources.add("proformas")
+      "invoice" -> staleResources.add("invoices")
+      "payment" -> staleResources.add("payments")
+     }
      val payloadJson = item.optString("payload", "{}")
      val eventPayload = try { JSONObject(payloadJson) } catch (_: Exception) { JSONObject() }
      val operationUuid = eventPayload.optString("operation_uuid")
@@ -142,7 +152,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
       eventId = eventId,
       eventUuid = item.optString("event_uuid"),
       eventType = eventType,
-      aggregateType = item.optString("aggregate_type"),
+      aggregateType = aggregateType,
       aggregateId = item.optLong("aggregate_id"),
       payloadJson = payloadJson,
       createdAt = item.optString("created_at")
@@ -151,7 +161,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     val nextCursor = body.optLong("next_cursor", cursor)
     if (nextCursor < cursor) return Result.failure()
     // Persist inbox identities and cursor first; only acknowledge outbox items after that transaction commits.
-    dao.persistInboxPage(events, nextCursor)
+    dao.persistInboxPage(events, nextCursor, staleResources)
     operationAcknowledgements.distinctBy { it.first }.forEach { ack ->
      dao.updateStatus(ack.first, ack.second, ack.third)
     }
