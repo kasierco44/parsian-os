@@ -149,7 +149,7 @@ private fun ParsianMobileApp(context: Context) {
                     }
                 } else {
                     Text("اتصال به محیط آزمایشی", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 20.dp))
-                    OutlinedTextField(value = apiRoot, onValueChange = { apiRoot = it }, label = { Text("آدرس HTTPS سرور آزمایشی") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
+                    OutlinedTextField(value = apiRoot, onValueChange = { apiRoot = it }, label = { Text("آدرس سایت آزمایشی با HTTPS") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
                     OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("نام کاربری") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
                     OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("رمز عبور") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
                     Button(
