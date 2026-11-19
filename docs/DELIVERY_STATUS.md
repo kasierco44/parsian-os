@@ -400,3 +400,10 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Added a bank reconciliation screen with unmatched statement lines, posted bank-journal candidates, summary counts and a one-to-one match action. The existing server allocation engine now accepts one allocation as well as grouped multi-allocation requests.
 - Removed duplicate REST route registrations so statement-line listing and summary remain owned by the cheque/bank lifecycle class; class-bank owns the grouped reconcile and journal-candidate routes.
 - Plugin development version is now 0.4.22. Full DB integration tests for CSV/XLSX import and reconciliation are still required.
+
+
+### Core business schema migration (2026-11-19)
+- Added dbDelta definitions for the previously missing core tables: customers, suppliers, leads, products, proformas/items, invoices/items, payments, cheques, ledger accounts, journal entries/lines, stock movements, stock ledger and stock reservations.
+- Seeded the required base chart of accounts (1100, 1200, 1210, 1220, 1300, 2100, 2200, 3100, 4100, 5100) with INSERT IGNORE so repeated upgrades do not overwrite customized account names.
+- Installer now defines 26 tables across core and lifecycle modules. This is a source-level schema inventory only; the migration has not yet been executed against Staging. Database backup and the acceptance runbook must be used before testing.
+- Backup snapshot now also includes supplier and cheque event history tables. Plugin development version is 0.4.23.
