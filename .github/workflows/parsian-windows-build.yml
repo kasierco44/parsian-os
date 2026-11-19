@@ -1,4 +1,4 @@
-name: PARSIAN FINAL Windows desktop bundle
+name: PARSIAN ONE Windows desktop bundle
 
 on:
   push:
@@ -21,7 +21,7 @@ permissions:
 jobs:
   windows-bundle:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     env:
       RUST_BACKTRACE: full
     steps:
@@ -30,13 +30,22 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
+      - name: Verify desktop manifest
+        working-directory: desktop/src-tauri
+        run: cargo metadata --locked --no-deps
       - name: Build MSI and NSIS bundles
         working-directory: desktop
         run: cargo tauri build --verbose --bundles msi,nsis
+      - name: Verify Windows installers
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path "desktop/src-tauri/target/release/bundle/msi" -Filter "*.msi" -ErrorAction Stop
+          $nsis = Get-ChildItem -Path "desktop/src-tauri/target/release/bundle/nsis" -Filter "*.exe" -ErrorAction Stop
+          if (-not $msi -or -not $nsis) { throw "Expected MSI and NSIS installers were not produced." }
       - name: Upload Windows installers
         uses: actions/upload-artifact@v4
         with:
-          name: parsian-windows-dev-installers
+          name: parsian-one-windows-dev-installers
           path: |
             desktop/src-tauri/target/release/bundle/msi/*.msi
             desktop/src-tauri/target/release/bundle/nsis/*.exe
