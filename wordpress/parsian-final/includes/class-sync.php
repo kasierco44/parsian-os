@@ -26,6 +26,10 @@ final class Parsian_Final_Sync {
             'methods'=>WP_REST_Server::CREATABLE,'callback'=>[$this,'reject_operation'],
             'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_manage_users');}
         ]);
+        register_rest_route('parsian-final/v1','/sync/operations/(?P<id>\\d+)/resolve-conflict',[
+            'methods'=>WP_REST_Server::CREATABLE,'callback'=>[$this,'resolve_conflict'],
+            'permission_callback'=>static function():bool{return is_user_logged_in()&&current_user_can('parsian_manage_users');}
+        ]);
     }
     public function list_devices(WP_REST_Request $request): WP_REST_Response {
         global $wpdb;
@@ -123,17 +127,59 @@ final class Parsian_Final_Sync {
         global $wpdb;
         $limit = min(100, max(1, absint($request->get_param('limit') ?: 50)));
         $rows = $wpdb->get_results($wpdb->prepare(
-            "SELECT id,operation_uuid,user_id,device_uuid,operation_type,payload,status,created_at
+            "SELECT id,operation_uuid,user_id,device_uuid,operation_type,payload,status,result,created_at
              FROM {$wpdb->prefix}parsian_sync_ops
-             WHERE status='pending_review'
-             ORDER BY id ASC LIMIT %d",
+             WHERE status IN ('pending_review','conflict')
+             ORDER BY id ASC LIMIT %d", 
             $limit
         ), ARRAY_A);
         foreach ((array) $rows as &$row) {
             $row['payload'] = json_decode((string) $row['payload'], true) ?: [];
+            $row['conflict'] = $row['status'] === 'conflict' ? (json_decode((string) ($row['result'] ?? ''), true) ?: []) : null;
+            unset($row['result']);
         }
         unset($row);
         return new WP_REST_Response(['items' => $rows ?: []], 200);
+    }
+
+    /**
+     * Manager resolution is explicit. keep_server rejects the stale device patch;
+     * apply_device rebases it to the exact current server timestamp and returns it
+     * to the review queue. Approval still re-checks the timestamp under row lock.
+     */
+    public function resolve_conflict(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $id = absint($request['id']);
+        $decision = sanitize_key((string) $request->get_param('decision'));
+        if (!in_array($decision, ['keep_server','apply_device'], true)) {
+            return new WP_REST_Response(['code'=>'invalid_conflict_decision'],400);
+        }
+        $table = $wpdb->prefix . 'parsian_sync_ops';
+        $wpdb->query('START TRANSACTION');
+        $operation = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d FOR UPDATE",$id),ARRAY_A);
+        if (!$operation || $operation['status'] !== 'conflict' || $operation['operation_type'] !== 'crm.lead.update') {
+            $wpdb->query('ROLLBACK');
+            return new WP_REST_Response(['code'=>'sync_conflict_not_found'],404);
+        }
+        if ($decision === 'keep_server') {
+            $updated = $wpdb->update($table,['status'=>'rejected','result'=>wp_json_encode(['resolution'=>'kept_server','resolved_by'=>get_current_user_id(),'resolved_at'=>current_time('mysql',true)])],['id'=>$id,'status'=>'conflict'],['%s','%s'],['%d','%s']);
+            if ($updated !== 1) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_conflict_state_changed'],409); }
+            $wpdb->query('COMMIT');
+            return new WP_REST_Response(['status'=>'rejected','resolution'=>'kept_server'],200);
+        }
+        $payload = json_decode((string)$operation['payload'],true);
+        $conflict = json_decode((string)$operation['result'],true);
+        $leadId = absint($payload['lead_id'] ?? 0);
+        $lead = $leadId ? $wpdb->get_row($wpdb->prepare("SELECT id,updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d FOR UPDATE",$leadId),ARRAY_A) : null;
+        if (!$lead || (string)($conflict['server_updated_at'] ?? '') !== (string)($lead['updated_at'] ?? '')) {
+            $wpdb->query('ROLLBACK');
+            return new WP_REST_Response(['code'=>'server_record_changed_again','message'=>'اطلاعات سرور دوباره تغییر کرده است؛ تعارض را تازه‌سازی کنید.'],409);
+        }
+        $payload['base_updated_at'] = (string)$lead['updated_at'];
+        $updated = $wpdb->update($table,['status'=>'pending_review','payload'=>wp_json_encode($payload),'result'=>null],['id'=>$id,'status'=>'conflict'],['%s','%s','%s'],['%d','%s']);
+        if ($updated !== 1) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_conflict_state_changed'],409); }
+        $wpdb->query('COMMIT');
+        return new WP_REST_Response(['status'=>'pending_review','resolution'=>'device_changes_rebased','message'=>'تغییرات گوشی به نسخه فعلی سرور مبناگذاری شد و برای تأیید نهایی مدیر برگشت.'],200);
     }
 
     public function approve_operation(WP_REST_Request $request): WP_REST_Response {
@@ -317,12 +363,35 @@ final class Parsian_Final_Sync {
         if ($operation['operation_type'] === 'crm.lead.update') {
             $leadId = absint($payload['lead_id'] ?? 0);
             $lead = $leadId ? $wpdb->get_row($wpdb->prepare(
-                "SELECT id, owner_user_id FROM {$wpdb->prefix}parsian_leads WHERE id=%d FOR UPDATE",
+                "SELECT id, owner_user_id, display_name, phone, province, notes, updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d FOR UPDATE",
                 $leadId
             ), ARRAY_A) : null;
             if (!$lead || (int) $lead['owner_user_id'] !== $ownerId) {
                 $wpdb->query('ROLLBACK');
                 return new WP_REST_Response(['code'=>'offline_lead_not_owned_by_actor'],403);
+            }
+
+            // Optimistic concurrency: an offline edit must carry the exact server timestamp
+            // from the snapshot it was based on. Missing/unknown bases fail closed.
+            $baseUpdatedAt = isset($payload['base_updated_at']) ? trim((string) $payload['base_updated_at']) : '';
+            $serverUpdatedAt = (string) ($lead['updated_at'] ?? '');
+            if ($baseUpdatedAt === '' || $serverUpdatedAt === '' || !hash_equals($serverUpdatedAt, $baseUpdatedAt)) {
+                $conflict = [
+                    'kind' => 'record_changed_on_server',
+                    'resource_type' => 'lead',
+                    'record_id' => $leadId,
+                    'base_updated_at' => $baseUpdatedAt,
+                    'server_updated_at' => $serverUpdatedAt,
+                    'server_record' => [
+                        'id' => (int) $lead['id'], 'display_name' => $lead['display_name'],
+                        'phone' => $lead['phone'], 'province' => $lead['province'],
+                        'notes' => $lead['notes'], 'updated_at' => $serverUpdatedAt
+                    ],
+                    'device_changes' => array_intersect_key($payload, array_flip(['display_name','phone','province','notes']))
+                ];
+                $wpdb->update($table, ['status'=>'conflict','result'=>wp_json_encode($conflict)], ['id'=>$id,'status'=>'pending_review'], ['%s','%s'], ['%d','%s']);
+                $wpdb->query('COMMIT');
+                return new WP_REST_Response(['status'=>'conflict','code'=>'record_changed_on_server','conflict'=>$conflict],409);
             }
 
             $changes = [];
