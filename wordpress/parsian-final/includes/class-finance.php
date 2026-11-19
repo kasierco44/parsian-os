@@ -83,29 +83,45 @@ final class Parsian_Final_Finance {
         if (!is_array($p)) { return new WP_REST_Response(['code'=>'invalid_cheque'], 400); }
         $amount=isset($p['amount_toman'])?filter_var($p['amount_toman'],FILTER_VALIDATE_INT):false;
         $date=sanitize_text_field($p['due_date']??'');
+        $direction=sanitize_key($p['direction']??'');
+        $partyType=sanitize_key($p['party_type']??'');
+        $partyId=absint($p['party_id']??0);
+        $paymentId=absint($p['payment_id']??0);
         if($amount===false || $amount<1 || $amount>1000000000000 ||
            !preg_match('/^\\d{4}-\\d{2}-\\d{2}$/',$date) ||
            !checkdate((int)substr($date,5,2),(int)substr($date,8,2),(int)substr($date,0,4)) ||
-           !in_array($p['direction']??'', ['received','issued'],true)) {
-            return new WP_REST_Response(['code'=>'invalid_cheque'],400);
+           !in_array($direction,['received','issued'],true) ||
+           ($direction==='received'&&$partyType!=='customer') ||
+           ($direction==='issued'&&$partyType!=='supplier') || $partyId<1) {
+            return new WP_REST_Response(['code'=>'invalid_cheque_or_party_mapping'],400);
         }
         global $wpdb;
+        if($paymentId>0){
+            $payment=$wpdb->get_row($wpdb->prepare("SELECT id,direction,amount_toman,method,status,party_type,party_id FROM {$wpdb->prefix}parsian_payments WHERE id=%d",$paymentId),ARRAY_A);
+            $expectedDirection=$direction==='received'?'in':'out';
+            if(!$payment||$payment['direction']!==$expectedDirection||(int)$payment['amount_toman']!==$amount||
+                $payment['method']!=='cheque'||$payment['status']!=='posted'||
+                $payment['party_type']!==$partyType||(int)$payment['party_id']!==$partyId){
+                return new WP_REST_Response(['code'=>'linked_payment_mismatch_or_not_posted'],409);
+            }
+        }
         $ok=$wpdb->insert($wpdb->prefix.'parsian_cheques',[
-            'direction'=>$p['direction'],'amount_toman'=>$amount,'due_date'=>$date,
+            'direction'=>$direction,'amount_toman'=>$amount,'due_date'=>$date,
             'bank_name'=>sanitize_text_field($p['bank_name']??''),
             'cheque_number'=>sanitize_text_field($p['cheque_number']??''),
             'party_name'=>sanitize_text_field($p['party_name']??''),
+            'party_type'=>$partyType,'party_id'=>$partyId,'payment_id'=>$paymentId,
             'status'=>'pending','created_by'=>get_current_user_id(),'created_at'=>current_time('mysql',true)
-        ],['%s','%d','%s','%s','%s','%s','%s','%d','%s']);
+        ],['%s','%d','%s','%s','%s','%s','%s','%d','%d','%s','%d','%s']);
         if(!$ok)return new WP_REST_Response(['code'=>'cheque_create_failed'],500);
         $id=(int)$wpdb->insert_id;
         $wpdb->insert($wpdb->prefix.'parsian_events',[
             'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>get_current_user_id(),
             'event_type'=>'finance.cheque.created','aggregate_type'=>'cheque',
-            'aggregate_id'=>$id,'payload'=>wp_json_encode(['cheque_id'=>$id,'status'=>'pending']),
+            'aggregate_id'=>$id,'payload'=>wp_json_encode(['cheque_id'=>$id,'status'=>'pending','payment_id'=>$paymentId]),
             'created_at'=>current_time('mysql',true)
         ],['%s','%d','%s','%s','%d','%s','%s']);
-        return new WP_REST_Response(['id'=>$id,'status'=>'pending'],201);
+        return new WP_REST_Response(['id'=>$id,'status'=>'pending','payment_id'=>$paymentId],201);
     }
     public function list_cheques(WP_REST_Request $request): WP_REST_Response {
         global $wpdb;
