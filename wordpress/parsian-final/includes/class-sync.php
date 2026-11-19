@@ -264,6 +264,13 @@ final class Parsian_Final_Sync {
             $wpdb->update($wpdb->prefix.'parsian_sync_ops',[
                 'status'=>'conflict','result'=>wp_json_encode($conflict)
             ],['id'=>(int)$operation['id'],'status'=>'pending_review'],['%s','%s'],['%d','%s']);
+            $eventOk = $wpdb->insert($wpdb->prefix.'parsian_events',[
+                'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>$ownerId,
+                'event_type'=>'sync.operation.conflict','aggregate_type'=>$resource,'aggregate_id'=>$recordId,
+                'payload'=>wp_json_encode(['operation_uuid'=>$operation['operation_uuid'],'resource_type'=>$resource,'record_id'=>$recordId,'reason'=>'record_changed_on_server']),
+                'created_at'=>current_time('mysql',true)
+            ],['%s','%d','%s','%s','%d','%s','%s']);
+            if (!$eventOk) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_conflict_event_write_failed'],500); }
             $wpdb->query('COMMIT');
             return new WP_REST_Response(['status'=>'conflict','code'=>'record_changed_on_server','conflict'=>$conflict],409);
         }
@@ -344,8 +351,18 @@ final class Parsian_Final_Sync {
             return new WP_REST_Response(['code'=>'sync_conflict_not_found'],404);
         }
         if ($decision === 'keep_server') {
+            $conflictData = json_decode((string)$operation['result'],true) ?: [];
+            $resource = sanitize_key((string)($conflictData['resource_type'] ?? 'unknown'));
+            $recordId = absint($conflictData['record_id'] ?? 0);
             $updated = $wpdb->update($table,['status'=>'rejected','result'=>wp_json_encode(['resolution'=>'kept_server','resolved_by'=>get_current_user_id(),'resolved_at'=>current_time('mysql',true)])],['id'=>$id,'status'=>'conflict'],['%s','%s'],['%d','%s']);
             if ($updated !== 1) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_conflict_state_changed'],409); }
+            $eventOk = $wpdb->insert($wpdb->prefix.'parsian_events',[
+                'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>(int)$operation['user_id'],
+                'event_type'=>'sync.operation.rejected','aggregate_type'=>$resource,'aggregate_id'=>$recordId,
+                'payload'=>wp_json_encode(['operation_uuid'=>$operation['operation_uuid'],'reason'=>'kept_server']),
+                'created_at'=>current_time('mysql',true)
+            ],['%s','%d','%s','%s','%d','%s','%s']);
+            if (!$eventOk) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_conflict_resolution_event_failed'],500); }
             $wpdb->query('COMMIT');
             return new WP_REST_Response(['status'=>'rejected','resolution'=>'kept_server'],200);
         }
@@ -611,6 +628,13 @@ final class Parsian_Final_Sync {
                     'device_changes' => array_intersect_key($payload, array_flip(['display_name','phone','province','notes']))
                 ];
                 $wpdb->update($table, ['status'=>'conflict','result'=>wp_json_encode($conflict)], ['id'=>$id,'status'=>'pending_review'], ['%s','%s'], ['%d','%s']);
+                $eventOk = $wpdb->insert($wpdb->prefix.'parsian_events',[
+                    'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>$ownerId,
+                    'event_type'=>'sync.operation.conflict','aggregate_type'=>'lead','aggregate_id'=>$leadId,
+                    'payload'=>wp_json_encode(['operation_uuid'=>$operation['operation_uuid'],'resource_type'=>'lead','record_id'=>$leadId,'reason'=>'record_changed_on_server']),
+                    'created_at'=>current_time('mysql',true)
+                ],['%s','%d','%s','%s','%d','%s','%s']);
+                if (!$eventOk) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_conflict_event_write_failed'],500); }
                 $wpdb->query('COMMIT');
                 return new WP_REST_Response(['status'=>'conflict','code'=>'record_changed_on_server','conflict'=>$conflict],409);
             }
