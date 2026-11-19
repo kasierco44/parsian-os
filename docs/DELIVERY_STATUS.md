@@ -266,3 +266,12 @@ Keep the existing live site and its database untouched until a staging backup, m
 2. Implement Android seller and customer clients using the same API, encrypted local storage, durable outbox and WorkManager.
 3. Implement Windows role workspaces, offline persistence, backup/restore and installer validation.
 4. Keep all client builds behind staging, integration, security and recovery tests. Do not merge PR #21 or deploy to production without explicit acceptance.
+
+
+## Android client scaffold update (2026-11-19)
+
+- Added `android/` Gradle project with two product flavors: `seller` and `customer`, producing distinct application IDs and role-specific Compose launch screens.
+- Added declared Room, WorkManager, Retrofit and OkHttp dependencies as the base for local persistence and API integration. Encrypted Room storage, durable outbox/inbox, token vault, sync worker, real application flows and API wiring are not implemented yet.
+- Added `.github/workflows/parsian-android-build.yml` to assemble both debug variants and upload APK artifacts. The workflow has been added but its first result has not yet been inspected; no APK build success or downloadable APK is claimed.
+- Added `.github/workflows/parsian-web-checks.yml` to run Node syntax validation and verify required web panel assets. Its result also remains to be inspected.
+- Android minimum SDK is currently API 26 as a provisional baseline; confirm supported devices before release. Debug builds are not production-signed.
