@@ -1,49 +1,54 @@
 # PARSIAN FINAL — WordPress Core
 
-Initial central-platform implementation scaffold for the PARSIAN FINAL suite.
+Central WordPress plugin source for the PARSIAN FINAL platform. Plugin source version: **0.4.2**.
 
-## Implemented source modules
-- Activation-time custom schema: audit events, registered devices, sync operations, customers, leads, payments, cheques, products and stock movements.
-- Manager, accountant, seller and customer roles with capability registration.
-- REST endpoints:
-  - `GET /parsian-final/v1/health` — public service health.
-  - `GET /parsian-final/v1/me` — current user and granted capabilities.
-  - `POST /parsian-final/v1/auth/login`, `POST /auth/logout` — WordPress cookie/session based login/logout (not mobile bearer-token auth).
-  - `GET /customers`, `POST /leads`, `POST /proformas` — early CRM endpoints. Proforma currently validates a draft payload only.
-  - `POST /payments`, `POST /cheques`, `GET /cheques` — records finance entries as pending; no ledger posting.
-  - `GET /inventory/items`, `POST /inventory/movements` — stock movement requests remain pending; no stock balance mutation.
-  - `POST /sync/devices`, `POST /sync/push`, `GET /sync/pull` — early authenticated device enrollment and sync queue.
-- Deactivation intentionally preserves business data.
+## Architecture
+- WordPress REST API is the single system-of-record boundary for web, Android and Windows clients.
+- Clients must never connect directly to the WordPress MySQL database.
+- All writes require server-side capability checks, record-level scope, validation and auditability.
+- Install and test only on an isolated staging WordPress site until migrations, rollback, security and acceptance tests pass.
+
+## Implemented source areas
+- Schema/install and version-gated upgrades.
+- Roles and capabilities: manager, accountant, seller, customer.
+- CRM customer/lead endpoints with seller scoping in server-side queries.
+- Persisted proformas, manager approval, invoice conversion and balanced sales/receivable journal posting.
+- Payment approval, customer receipt allocations and party statements.
+- Double-entry journal register, trial balance and customer/supplier subledger reporting.
+- Inventory movement approval, stock ledger, weighted-average costing, invoice reservations and fulfillment/COGS posting.
+- Cheque lifecycle and event history.
+- Bank account, statement import batch and reconciliation allocation source.
+- Opaque Bearer access/refresh token issuance, rotation, token-family revocation and device revocation.
+- Initial offline sync device registration, operation allowlist, payload-hash idempotency and delta event pull.
+
+## Important API routes
+Base: `/wp-json/parsian-final/v1`
+
+- `GET /health`, `GET /me`
+- `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/revoke-device`
+- `GET|POST /sync/devices`, `POST /sync/push`, `GET /sync/pull`
+- `POST /proformas`, `GET /proformas`, `GET /proformas/{id}`, `POST /proformas/{id}/approve`
+- `POST /payments/{id}/approve`, `GET /ledger/journals`, `GET /ledger/trial-balance`, `GET /ledger/party-statement`
+- Bank routes include account management, statement import batches and reconciliation; consult `includes/class-bank.php` for current request schema.
 
 ## Staging-only setup
-1. Copy this directory to `wp-content/plugins/parsian-final`.
-2. Activate **PARSIAN FINAL Core** on a disposable staging WordPress site.
-3. Check `/wp-json/parsian-final/v1/health`.
-4. Assign a test user a PARSIAN role and verify `/wp-json/parsian-final/v1/me`.
-5. Exercise write endpoints only with synthetic test data.
+1. Back up the staging database and files.
+2. Copy this directory to `wp-content/plugins/parsian-final`.
+3. Activate **PARSIAN FINAL Core** on disposable staging only.
+4. Check `/wp-json/parsian-final/v1/health` and verify the reported plugin/schema versions.
+5. Create synthetic test users for manager, accountant and seller roles.
+6. Run the guarded WP-CLI acceptance harnesses only against the isolated staging database:
+   - `tests/finance-ledger-acceptance.php`
+   - `tests/auth-sync-acceptance.php`
+7. Rehearse rollback and backup restore before any production consideration.
 
-## Known gaps — not production-ready
-- Mobile/desktop bearer token issuance, refresh, revocation and secure device attestation are not implemented.
-- Browser cookie authentication needs standard WordPress REST nonce/CSRF protections and HTTPS.
-- Login throttling is a basic transient counter, not a hardened distributed rate limiter.
-- CRM assignment model and customer-level query scoping require completion and tests.
-- Proforma persistence, manager approval, final invoice conversion and immutable audit trail are not implemented.
-- Finance posting, double-entry ledger, reconciliation, cheque lifecycle and supplier subledger are not implemented.
-- Inventory balances, reservation, valuation and approval posting are not implemented.
-- Sync pull currently exposes event records only; domain change events, per-user filtering, cursor signatures and conflict resolution need implementation.
-- Device enrollment is account-authenticated but does not yet implement a separate manager approval/attestation process.
-- Automated PHP lint, WordPress integration tests, security tests, staging installation, backup/restore and release packaging have not yet been run.
+## Known limitations — not production-ready
+- Source implementation is not equivalent to successful WordPress/MySQL runtime validation. The acceptance harnesses and migrations still require staging execution.
+- Bank CSV/XLSX parsing, duplicate-file/row handling, partial and many-to-many reconciliation require fixture and integration tests; opening/closing statement balance controls and period close remain outstanding.
+- Accounting still needs full tax/discount treatment, returns/credit notes, period close and complete reconciliation acceptance.
+- Sync pull still uses a numeric cursor and is not fully bound to per-customer assignment scopes. Aggregate-version conflict resolution, transactional processing/approval of queued operations, retention and retry policies are incomplete.
+- Web panel screens are an initial UI scaffold; operational CRUD/reporting workflows and nonce injection from the WordPress host remain incomplete.
+- Android flavors are scaffolded; encrypted local DB, token vault, outbox/inbox, WorkManager sync and business workflows remain incomplete.
+- Windows clients, installer, signed release artifacts, backup/restore acceptance and end-to-end security tests are not complete.
 
-Do not install on production or use real customer/financial data until the listed controls and acceptance tests are complete.
-
-
-## Sales and ledger workflow (v0.2.0 development)
-- POST /proformas persists a draft proforma and its validated line items for an assigned active customer.
-- GET /proformas, GET /proformas/{id} list and retrieve documents within the caller's scope.
-- POST /proformas/{id}/approve requires the manager approval capability; it locks the draft, issues one final invoice, copies invoice lines, posts a balanced receivable/sales journal, and changes the proforma state in one database transaction.
-- POST /payments/{id}/approve posts customer receipts or supplier payments to the general ledger after finance approval. Cash, bank/card and cheque clearing/payable accounts are mapped to the baseline chart.
-- GET /ledger/journals and GET /ledger/trial-balance expose posted journal data to finance-authorized users.
-- GET /ledger/party-statement provides customer/supplier subledger activity and debit-credit totals.
-- A version-gated schema upgrade creates the new sales and ledger tables and seeds baseline accounts on the next plugin load.
-
-Accounting scope note: the current invoice journal recognizes gross sales and customer receivables only. Tax, discounts, COGS/inventory valuation, returns/credit notes, settlement reconciliation and period closing are not implemented. Issued invoices do not decrement stock. Payment approval is not a substitute for bank reconciliation.
+Do not use real customer, cheque or bank data in test fixtures. Do not install this development branch on the production site.
