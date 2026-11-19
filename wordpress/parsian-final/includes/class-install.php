@@ -411,6 +411,14 @@ final class Parsian_Final_Install {
             ) $charset;"
         ];
         foreach ($bankReconciliationTables as $sql) { dbDelta($sql); }
+        $syncColumns = [
+            'payload_sha256' => "ALTER TABLE {$p}sync_ops ADD COLUMN payload_sha256 char(64) NOT NULL DEFAULT ''"
+        ];
+        foreach ($syncColumns as $column => $sql) {
+            if (!$wpdb->get_var($wpdb->prepare("SHOW COLUMNS FROM {$p}sync_ops LIKE %s", $column))) {
+                $wpdb->query($sql);
+            }
+        }
         $bankLineColumns = [
             'bank_account_id' => "ALTER TABLE {$p}bank_statement_lines ADD COLUMN bank_account_id bigint unsigned NOT NULL DEFAULT 0",
             'import_batch_id' => "ALTER TABLE {$p}bank_statement_lines ADD COLUMN import_batch_id bigint unsigned NOT NULL DEFAULT 0"
