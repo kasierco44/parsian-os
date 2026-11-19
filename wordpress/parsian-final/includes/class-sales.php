@@ -42,6 +42,10 @@ final class Parsian_Final_Sales {
         $body=$request->get_json_params();
         if(!is_array($body)||empty($body['customer_id'])||empty($body['items'])||!is_array($body['items'])||count($body['items'])>100)
             return new WP_REST_Response(['code'=>'invalid_proforma'],400);
+        $dueDate=$body['due_date']??null;
+        if($dueDate!==null&&$dueDate!==''&&(!is_string($dueDate)||!preg_match('/^\\d{4}-\\d{2}-\\d{2}$/',$dueDate)||!checkdate((int)substr($dueDate,5,2),(int)substr($dueDate,8,2),(int)substr($dueDate,0,4))))
+            return new WP_REST_Response(['code'=>'invalid_due_date'],400);
+        if($dueDate==='')$dueDate=null;
         $customerId=absint($body['customer_id']);
         if(!$this->can_access_customer($customerId))return new WP_REST_Response(['code'=>'customer_not_assigned'],403);
         global $wpdb;
@@ -74,9 +78,9 @@ final class Parsian_Final_Sales {
         $number='PF-'.gmdate('ymd').'-'.strtoupper(wp_generate_password(6,false,false));
         $ok=$wpdb->insert($wpdb->prefix.'parsian_proformas',[
             'document_number'=>$number,'customer_id'=>$customerId,'status'=>'draft','currency'=>'IRR',
-            'total_toman'=>$total,'notes'=>sanitize_textarea_field($body['notes']??''),
+            'total_toman'=>$total,'due_date'=>$dueDate,'notes'=>sanitize_textarea_field($body['notes']??''),
             'created_by'=>get_current_user_id(),'created_at'=>$now,'updated_at'=>$now
-        ],['%s','%d','%s','%s','%d','%s','%d','%s','%s']);
+        ],['%s','%d','%s','%s','%d','%s','%s','%d','%s','%s']);
         if(!$ok){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'proforma_create_failed'],500);}
         $id=(int)$wpdb->insert_id;
         foreach($clean as $line){
@@ -140,8 +144,9 @@ final class Parsian_Final_Sales {
         $ok=$wpdb->insert($wpdb->prefix.'parsian_invoices',[
             'invoice_number'=>$invoiceNumber,'proforma_id'=>$id,'customer_id'=>(int)$doc['customer_id'],
             'status'=>'posted','currency'=>'IRR','total_toman'=>(int)$doc['total_toman'],
+            'due_date'=>!empty($doc['due_date'])?$doc['due_date']:null,
             'issued_by'=>get_current_user_id(),'issued_at'=>$now
-        ],['%s','%d','%d','%s','%s','%d','%d','%s']);
+        ],['%s','%d','%d','%s','%s','%d','%s','%d','%s']);
         if(!$ok){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'invoice_create_failed'],500);}
         $invoiceId=(int)$wpdb->insert_id;
         foreach($items as $line){
