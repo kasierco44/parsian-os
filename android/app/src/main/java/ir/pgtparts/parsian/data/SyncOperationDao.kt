@@ -24,6 +24,12 @@ interface SyncOperationDao {
  suspend fun metadata(key: String): String?
  @Query("SELECT COUNT(*) FROM sync_inbox")
  suspend fun inboxCount(): Int
+ @Query("DELETE FROM sync_outbox")
+ suspend fun clearOutbox()
+ @Query("DELETE FROM sync_inbox")
+ suspend fun clearInbox()
+ @Query("DELETE FROM sync_metadata")
+ suspend fun clearMetadata()
  @Transaction
  suspend fun persistInboxPage(events: List<SyncEventEntity>, cursor: Long) {
   if (events.isNotEmpty()) saveEvents(events)
