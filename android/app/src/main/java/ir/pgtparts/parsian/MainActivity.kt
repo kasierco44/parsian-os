@@ -69,7 +69,7 @@ private fun ParsianMobileApp(context: Context) {
             busy = true
             try {
                 dashboard = DashboardRepository.load(context)
-                message = "اطلاعات از هسته مرکزی دریافت شد."
+                message = if (dashboard?.optBoolean("_offline") == true) "اتصال برقرار نیست؛ نسخهٔ ذخیره‌شده نمایش داده می‌شود." else "اطلاعات از هسته مرکزی دریافت شد."
             } catch (error: Exception) {
                 dashboard = null
                 message = error.message ?: "دریافت اطلاعات ناموفق بود."
@@ -127,6 +127,9 @@ private fun ParsianMobileApp(context: Context) {
                     if (busy) CircularProgressIndicator(modifier = Modifier.padding(12.dp))
                     dashboard?.let { data ->
                         LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp)) {
+                            if (data.optBoolean("_offline")) {
+                                item { Text("حالت آفلاین — نمایش آخرین اطلاعات ذخیره‌شده روی همین دستگاه", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp)) }
+                            }
                             if (!seller) {
                                 item {
                                     val overview = data.optJSONObject("overview") ?: JSONObject()
