@@ -25,11 +25,7 @@ final class Parsian_Final_CRM {
                 ],
             ],
         ]);
-        register_rest_route('parsian-final/v1', '/proformas', [
-            'methods' => WP_REST_Server::CREATABLE,
-            'callback' => [$this, 'create_proforma'],
-            'permission_callback' => static function (): bool { return is_user_logged_in() && current_user_can('parsian_sales_create'); },
-        ]);
+
     }
     public function customers(WP_REST_Request $request): WP_REST_Response {
         global $wpdb;
