@@ -351,25 +351,31 @@ final class Parsian_Final_Sync {
         }
         $payload = json_decode((string)$operation['payload'],true);
         $conflict = json_decode((string)$operation['result'],true);
-        $leadId = absint($payload['lead_id'] ?? 0);
-        $lead = $leadId ? $wpdb->get_row($wpdb->prepare("SELECT id,updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d FOR UPDATE",$leadId),ARRAY_A) : null;
-        if (!$lead || (string)($conflict['server_updated_at'] ?? '') !== (string)($lead['updated_at'] ?? '')) {
-            $wpdb->query('ROLLBACK');
-            return new WP_REST_Response(['code'=>'server_record_changed_again','message'=>'اطلاعات سرور دوباره تغییر کرده است؛ تعارض را تازه‌سازی کنید.'],409);
+        $resource = sanitize_key((string)($conflict['resource_type'] ?? ''));
+        $recordId = absint($conflict['record_id'] ?? 0);
+        if ($resource === 'lead') {
+            $currentRecord = $recordId ? $wpdb->get_row($wpdb->prepare(
+                "SELECT id,display_name,phone,province,notes,status,updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d FOR UPDATE",$recordId
+            ),ARRAY_A) : null;
+            if (!$currentRecord) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'conflict_record_missing'],404); }
+            $currentRevision = hash('sha256', wp_json_encode([
+                'id'=>(int)$currentRecord['id'],'display_name'=>(string)$currentRecord['display_name'],
+                'phone'=>(string)$currentRecord['phone'],'province'=>(string)$currentRecord['province'],
+                'notes'=>(string)$currentRecord['notes'],'status'=>(string)$currentRecord['status'],
+                'updated_at'=>(string)$currentRecord['updated_at']
+            ],JSON_UNESCAPED_UNICODE));
+        } else {
+            $currentRecord = $this->versioned_record($resource,$recordId,true);
+            if (!$currentRecord) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'conflict_record_missing'],404); }
+            $currentRevision = $this->versioned_revision($resource,$currentRecord);
         }
-        $currentRecord = $wpdb->get_row($wpdb->prepare("SELECT id,display_name,phone,province,notes,status,updated_at FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$leadId),ARRAY_A);
-        if (!$currentRecord) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'conflict_record_missing'],404); }
-        $currentRevision = hash('sha256', wp_json_encode([
-            'id' => (int)$currentRecord['id'], 'display_name' => (string)$currentRecord['display_name'],
-            'phone' => (string)$currentRecord['phone'], 'province' => (string)$currentRecord['province'],
-            'notes' => (string)$currentRecord['notes'], 'status' => (string)$currentRecord['status'],
-            'updated_at' => (string)$currentRecord['updated_at']
-        ], JSON_UNESCAPED_UNICODE));
-        if (!hash_equals((string)($conflict['server_revision'] ?? ''), $currentRevision)) {
+        $currentUpdatedAt = (string)($currentRecord['updated_at'] ?? '');
+        if ($currentUpdatedAt === '' || !hash_equals((string)($conflict['server_updated_at'] ?? ''),$currentUpdatedAt) ||
+            !hash_equals((string)($conflict['server_revision'] ?? ''),$currentRevision)) {
             $wpdb->query('ROLLBACK');
             return new WP_REST_Response(['code'=>'server_record_changed_again','message'=>'نسخه سرور پس از ثبت تعارض تغییر کرده است؛ فهرست تعارض‌ها را تازه‌سازی کنید.'],409);
         }
-        $payload['base_updated_at'] = (string)$currentRecord['updated_at'];
+        $payload['base_updated_at'] = $currentUpdatedAt;
         $payload['base_revision'] = $currentRevision;
         $updated = $wpdb->update($table,['status'=>'pending_review','payload'=>wp_json_encode($payload),'result'=>null],['id'=>$id,'status'=>'conflict'],['%s','%s','%s'],['%d','%s']);
         if ($updated !== 1) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_conflict_state_changed'],409); }
