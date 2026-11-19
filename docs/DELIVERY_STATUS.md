@@ -447,3 +447,14 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Added acceptance-harness coverage for dotted operation type names, manager task assignment/completion and offline proforma draft approval. Added tasks to schema acceptance and backup snapshot export.
 - Added manager/seller task workspace and approval actions for offline lead create/update, task completion and proforma draft to the web panel; mirrored JS bundle and Android event acknowledgement.
 - These changes are source-level only until Staging acceptance runs. Do not infer database migration, runtime behavior or APK build success from source presence.
+
+
+## Release gate status after 0.4.24 work (2026-11-19)
+
+- Source-level follow-up now includes namespaced operation validation (preserving dots), manager-approved task completion, manager-approved offline proforma draft creation, manager task assignment/listing, Android acknowledgement of all three approved operation events, and matching web-panel bundle.
+- Static source verification from GitHub confirmed: web panel JS and WordPress bundle are byte-identical; task schema, task backup inclusion, schema acceptance columns, task/proforma acceptance assertions, operation handlers, and Android event mappings are present.
+- **GitHub Actions infrastructure is currently blocking executable validation.** Repeated PHP lint, plugin package, Android, Windows and web workflow jobs are created but terminate in about 2–3 seconds with `runner_id=0`, empty `steps=[]`, and no runner name. GitHub's job-log endpoint returns BlobNotFound. Re-running failed jobs did not resolve it. This means no workflow step actually ran; it does not establish a source compilation error or a passing build.
+- Repository-level Actions settings/billing/runner availability cannot be changed through repository file commits. An owner with repository/account settings access must check Actions are enabled for the private repository and that the account/org has available Actions minutes and no spending/usage restriction. Then rerun the workflows from Actions.
+- No PHP lint, WP-CLI/MySQL migration, finance acceptance, Android APK build, Windows MSI/NSIS build, web JS check, Staging install, backup restore rehearsal, or security penetration test is claimed as passed.
+- Windows still lacks encrypted local SQLite/outbox and a complete offline queue; Android offline data models/conflict resolution remain incomplete. Backup restore is not implemented in the plugin. These are explicit release blockers.
+- PR #21 remains Draft and Production remains untouched. Do not tag or distribute a final release until the Staging acceptance runbook passes and all required artifacts are produced from the same release commit.
