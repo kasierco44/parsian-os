@@ -152,7 +152,7 @@ final class Parsian_Final_Sync {
             $wpdb->query('ROLLBACK');
             return new WP_REST_Response(['code'=>'sync_operation_not_reviewable','status'=>$operation['status']],409);
         }
-        if (!in_array($operation['operation_type'], ['crm.lead.create', 'crm.lead.update'], true)) {
+        if (!in_array($operation['operation_type'], ['crm.lead.create', 'crm.lead.update', 'crm.task.complete'], true)) {
             $wpdb->query('ROLLBACK');
             return new WP_REST_Response(['code'=>'operation_handler_not_available','operation_type'=>$operation['operation_type']],422);
         }
@@ -164,6 +164,54 @@ final class Parsian_Final_Sync {
         }
         $payload = json_decode((string) $operation['payload'], true);
         if (!is_array($payload)) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'invalid_operation_payload'],422); }
+
+        if ($operation['operation_type'] === 'crm.task.complete') {
+            $taskId = absint($payload['task_id'] ?? 0);
+            if (!$taskId || ($payload['completed'] ?? true) !== true) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'offline_task_payload_invalid'],422);
+            }
+            $task = $wpdb->get_row($wpdb->prepare(
+                "SELECT id,assigned_user_id,status FROM {$wpdb->prefix}parsian_tasks WHERE id=%d FOR UPDATE",
+                $taskId
+            ), ARRAY_A);
+            if (!$task || (int) $task['assigned_user_id'] !== $ownerId) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'offline_task_not_assigned_to_actor'],403);
+            }
+            if ($task['status'] !== 'open') {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'offline_task_not_open','status'=>$task['status']],409);
+            }
+            $now = current_time('mysql', true);
+            $taskUpdated = $wpdb->update($wpdb->prefix . 'parsian_tasks', [
+                'status'=>'completed','completed_at'=>$now,'completed_by'=>$ownerId,'updated_at'=>$now
+            ], ['id'=>$taskId,'assigned_user_id'=>$ownerId,'status'=>'open'], ['%s','%s','%d','%s'], ['%d','%d','%s']);
+            if ($taskUpdated !== 1) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'offline_task_state_conflict'],409);
+            }
+            $result = ['task_id'=>$taskId,'operation_uuid'=>$operation['operation_uuid']];
+            $operationUpdated = $wpdb->update($table, [
+                'status'=>'applied','result'=>wp_json_encode($result),'processed_at'=>$now
+            ], ['id'=>$id,'status'=>'pending_review'], ['%s','%s','%s'], ['%d','%s']);
+            if ($operationUpdated !== 1) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'sync_operation_state_conflict'],409);
+            }
+            $eventOk = $wpdb->insert($wpdb->prefix . 'parsian_events', [
+                'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>$ownerId,
+                'event_type'=>'crm.task.completed.offline','aggregate_type'=>'task','aggregate_id'=>$taskId,
+                'payload'=>wp_json_encode(['task_id'=>$taskId,'assigned_user_id'=>$ownerId,'approved_by'=>get_current_user_id(),'operation_uuid'=>$operation['operation_uuid']]),
+                'created_at'=>$now
+            ], ['%s','%d','%s','%s','%d','%s','%s']);
+            if (!$eventOk) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'sync_event_write_failed'],500);
+            }
+            $wpdb->query('COMMIT');
+            return new WP_REST_Response(['status'=>'applied'] + $result,200);
+        }
 
         if ($operation['operation_type'] === 'crm.lead.update') {
             $leadId = absint($payload['lead_id'] ?? 0);
