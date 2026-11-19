@@ -156,7 +156,7 @@ final class Parsian_Final_Sales {
             'invoice_number'=>$invoiceNumber,'proforma_id'=>$id,'customer_id'=>(int)$doc['customer_id'],
             'status'=>'posted','currency'=>'IRR','total_toman'=>(int)$doc['total_toman'],
             'due_date'=>!empty($doc['due_date'])?$doc['due_date']:null,
-            'issued_by'=>get_current_user_id(),'issued_at'=>$now
+            'issued_by'=>get_current_user_id(),'issued_at'=>$now,'updated_at'=>$now
         ],['%s','%d','%d','%s','%s','%d','%s','%d','%s']);
         if(!$ok){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'invoice_create_failed'],500);}
         $invoiceId=(int)$wpdb->insert_id;
