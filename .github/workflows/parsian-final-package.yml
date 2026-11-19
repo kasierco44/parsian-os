@@ -1,0 +1,52 @@
+name: PARSIAN FINAL WordPress plugin package
+
+on:
+  push:
+    branches:
+      - feature/parsian-final-core-platform
+    paths:
+      - 'wordpress/parsian-final/**'
+      - '.github/workflows/parsian-final-package.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate plugin entrypoint
+        run: |
+          test -f wordpress/parsian-final/parsian-final.php
+          grep -q 'Plugin Name: PARSIAN FINAL Core' wordpress/parsian-final/parsian-final.php
+      - name: PHP syntax check
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: none
+          coverage: none
+      - name: Lint plugin PHP files
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do php -l "$file"; done < <(find wordpress/parsian-final -type f -name '*.php' -print0)
+      - name: Build installable ZIP
+        run: |
+          mkdir -p dist
+          cd wordpress
+          zip -qr ../dist/parsian-final-core-dev.zip parsian-final
+          cd ..
+          sha256sum dist/parsian-final-core-dev.zip > dist/SHA256SUMS.txt
+      - name: Upload plugin ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: parsian-final-wordpress-plugin-dev
+          path: |
+            dist/parsian-final-core-dev.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14

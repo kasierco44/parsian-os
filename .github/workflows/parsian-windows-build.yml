@@ -1,0 +1,42 @@
+name: PARSIAN FINAL Windows desktop bundle
+
+on:
+  push:
+    branches: [feature/parsian-final-core-platform]
+    paths:
+      - 'desktop/**'
+      - 'web/parsian-panels/**'
+      - '.github/workflows/parsian-windows-build.yml'
+  pull_request:
+    branches: [main, feature/parsian-final-core-platform]
+    paths:
+      - 'desktop/**'
+      - 'web/parsian-panels/**'
+      - '.github/workflows/parsian-windows-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-bundle:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+      - name: Build MSI and NSIS bundles
+        working-directory: desktop
+        run: cargo tauri build --bundles msi,nsis
+      - name: Upload Windows installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: parsian-windows-dev-installers
+          path: |
+            desktop/src-tauri/target/release/bundle/msi/*.msi
+            desktop/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 14

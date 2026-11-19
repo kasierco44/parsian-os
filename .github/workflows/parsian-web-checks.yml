@@ -1,0 +1,33 @@
+name: PARSIAN FINAL web panel checks
+
+on:
+  push:
+    branches: [feature/parsian-final-core-platform]
+    paths:
+      - 'web/parsian-panels/**'
+      - '.github/workflows/parsian-web-checks.yml'
+  pull_request:
+    branches: [main, feature/parsian-final-core-platform]
+    paths:
+      - 'web/parsian-panels/**'
+      - '.github/workflows/parsian-web-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web-static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check JavaScript syntax
+        run: node --check web/parsian-panels/app.js
+      - name: Check required panel assets
+        run: |
+          test -s web/parsian-panels/index.html
+          test -s web/parsian-panels/styles.css
+          test -s web/parsian-panels/README.md
