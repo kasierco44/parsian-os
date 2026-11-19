@@ -8,8 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import net.sqlcipher.database.SQLiteDatabase
 import net.sqlcipher.database.SupportFactory
 import ir.pgtparts.parsian.security.SessionStore
-
-@Database(entities = [SyncOperationEntity::class, SyncEventEntity::class, SyncMetadataEntity::class, DashboardSnapshotEntity::class], version = 4, exportSchema = true)
+@Database(entities = [SyncOperationEntity::class, SyncEventEntity::class, SyncMetadataEntity::class, DashboardSnapshotEntity::class, OfflineRecordEntity::class], version = 5, exportSchema = true)
 abstract class ParsianDatabase : RoomDatabase() {
  abstract fun syncOperations(): SyncOperationDao
  companion object {
@@ -29,12 +28,18 @@ abstract class ParsianDatabase : RoomDatabase() {
     database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_sync_inbox_eventUuid ON sync_inbox(eventUuid)")
    }
   }
+  private val MIGRATION_4_5 = object : Migration(4, 5) {
+   override fun migrate(database: SupportSQLiteDatabase) {
+    database.execSQL("CREATE TABLE IF NOT EXISTS offline_records (resourceType TEXT NOT NULL, recordId INTEGER NOT NULL, payloadJson TEXT NOT NULL, updatedAtEpochMs INTEGER NOT NULL, PRIMARY KEY(resourceType, recordId))")
+    database.execSQL("CREATE INDEX IF NOT EXISTS index_offline_records_resourceType ON offline_records(resourceType)")
+   }
+  }
   @Volatile private var INSTANCE: ParsianDatabase? = null
   fun get(context: Context): ParsianDatabase = INSTANCE ?: synchronized(this) {
    SQLiteDatabase.loadLibs(context)
    INSTANCE ?: Room.databaseBuilder(context.applicationContext, ParsianDatabase::class.java, "parsian-local.db")
     .openHelperFactory(SupportFactory(SQLiteDatabase.getBytes(SessionStore.databasePassphrase(context))))
-    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
     .build().also { INSTANCE = it }
   }
  }
