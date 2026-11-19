@@ -13,7 +13,14 @@ This repository state is a development baseline, not a production release. No pr
 
 - Sync pull now scopes non-manager/non-accountant event streams to the authenticated actor; operation payload size and cross-user duplicate UUID handling are checked, and device last-seen is updated. This is an initial mitigation, not a complete tenant/assignment-aware sync model.
 - Inventory movement requests now require an active product and positive bounded quantity, use pagination for item lists, and emit an audit event. They remain pending and do not change stock balances.
-- Added GitHub Actions workflows for PHP syntax lint and development ZIP packaging. Their runs have not yet been observed; no successful lint or artifact is claimed.
+- GitHub Actions jobs have recently failed before any step starts (`runner_id=0`, empty `steps`, and unavailable job logs). This prevents claiming a current PHP lint, Android build, or package result.
+
+## Follow-up source review (2026-11-19, plugin 0.4.25)
+
+- Fixed the sync approval allowlist so `sales.proforma.draft` can reach its transactional manager-approval handler; the existing WP-CLI acceptance fixture covers creation and persisted totals.
+- Android seller UI now surfaces enqueue failures for offline task completion, lead updates and proforma drafts instead of silently swallowing exceptions.
+- These are source changes only. The latest source has not passed PHP lint, Gradle compilation, WP-CLI runtime acceptance or device testing because the available Actions job still has no runner/steps and no logs.
+- Backup export and checksum validation remain non-destructive; automatic restore is not implemented.
 
 ## Sales and ledger implementation update (2026-11-19)
 
@@ -40,12 +47,12 @@ Accounting limitations remain: tax, discounts, cost-of-goods-sold, stock decreme
 
 - No WordPress staging installation or WordPress integration test has been performed for this branch.
 - No PHP lint/security test result is available for the latest plugin changes.
-- The proforma endpoint validates a draft payload only; it does not persist a proforma, implement manager approval, create a final invoice, or post accounting/inventory entries.
+- Offline `sales.proforma.draft` now has a manager-approval handler that validates seller/customer assignment, active products, quantities and amounts, then creates a draft proforma and event in one transaction. It does not issue a final invoice or reserve stock. This source path is not yet runtime-tested on Staging.
 - Payment and cheque records remain pending; there is no double-entry general ledger, reconciliation, supplier subledger, cheque lifecycle, or approval/posting endpoint yet.
 - Inventory movements are pending requests; stock balances, reservations, valuation, and posting are not complete.
-- Sync endpoints are an initial scaffold; per-user delta filtering, signed cursors, full durable client outbox/inbox, conflict resolution, and retry/backoff are not complete.
-- Mobile access-token/refresh-token lifecycle and revocation are not implemented; current authentication is WordPress cookie/session oriented.
-- Customer and lead management screens, accountant/admin web panels, Android customer app, Android seller app, Windows desktop apps, and PWA clients are not complete in this branch.
+- Sync includes token-authenticated device registration, idempotent operation intake, actor-scoped event pull, Android encrypted Room outbox/inbox and manager review handlers for lead create/update, task completion and proforma drafts. Conflict resolution, signed cursors, robust dead-letter/retry policy and end-to-end offline acceptance remain incomplete.
+- Android access/refresh token rotation and device revocation are implemented in source; runtime security validation, expiry/replay tests and device acceptance remain outstanding.
+- Role-based web panels and Android seller/customer source projects exist. Android builds and device tests are not verified; Windows encrypted offline storage and complete offline business workflows remain incomplete.
 
 ## Android build workflow finding
 
