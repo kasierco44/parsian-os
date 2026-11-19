@@ -123,14 +123,6 @@ private fun ParsianMobileApp(context: Context) {
                             },
                             modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
                         ) { Text("ثبت سرنخ در صف آفلاین") }
-                    } catch (error: Exception) {
-                                        message = error.message ?: "ثبت پیش‌نویس انجام نشد."
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
-                        ) { Text("ثبت پیش‌فاکتور آفلاین") }
-                    }
                     if (busy) CircularProgressIndicator(modifier = Modifier.padding(12.dp))
                     dashboard?.let { data ->
                         LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp)) {
