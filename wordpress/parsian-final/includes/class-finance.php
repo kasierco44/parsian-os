@@ -7,6 +7,11 @@ final class Parsian_Final_Finance {
             'callback' => [$this, 'create_payment'],
             'permission_callback' => static function (): bool { return is_user_logged_in() && current_user_can('parsian_finance_write'); },
         ]);
+        register_rest_route('parsian-final/v1', '/payments/(?P<id>\\d+)/approve', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'approve_payment'],
+            'permission_callback' => static function (): bool { return is_user_logged_in() && current_user_can('parsian_finance_write'); },
+        ]);
         register_rest_route('parsian-final/v1', '/cheques', [
             'methods' => WP_REST_Server::CREATABLE,
             'callback' => [$this, 'create_cheque'],
@@ -94,5 +99,55 @@ final class Parsian_Final_Finance {
             $per_page,$offset
         ),ARRAY_A);
         return new WP_REST_Response(['items'=>$rows?:[],'page'=>$page,'per_page'=>$per_page],200);
+    }
+    public function approve_payment(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $id=absint($request['id']);
+        $wpdb->query('START TRANSACTION');
+        $table=$wpdb->prefix.'parsian_payments';
+        $payment=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d FOR UPDATE",$id),ARRAY_A);
+        if(!$payment){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'payment_not_found'],404);}
+        if($payment['status']==='posted' && (int)$payment['journal_entry_id']>0){
+            $journalId=(int)$payment['journal_entry_id'];$wpdb->query('COMMIT');
+            return new WP_REST_Response(['status'=>'already_posted','journal_entry_id'=>$journalId],200);
+        }
+        if($payment['status']!=='pending_approval'){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'payment_not_approvable'],409);}
+        $partyType=$payment['party_type'];$partyId=(int)$payment['party_id'];
+        if(!in_array($partyType,['customer','supplier'],true)||$partyId<1){
+            $wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'party_mapping_required'],422);
+        }
+        if($payment['direction']==='in' && $partyType!=='customer'){
+            $wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'incoming_payment_requires_customer'],422);
+        }
+        if($payment['direction']==='out' && $partyType!=='supplier'){
+            $wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'outgoing_payment_requires_supplier'],422);
+        }
+        $method=$payment['method'];
+        $assetCode=$method==='cash'?'1200':($method==='cheque'?'1220':'1210');
+        if($payment['direction']==='out' && $method==='cheque')$assetCode='2200';
+        $amount=(int)$payment['amount_toman'];
+        if($payment['direction']==='in'){
+            $lines=[
+                ['account_code'=>$assetCode,'debit_toman'=>$amount,'credit_toman'=>0,'party_type'=>$partyType,'party_id'=>$partyId],
+                ['account_code'=>'1100','debit_toman'=>0,'credit_toman'=>$amount,'party_type'=>$partyType,'party_id'=>$partyId]
+            ];
+        } else {
+            $lines=[
+                ['account_code'=>'2100','debit_toman'=>$amount,'credit_toman'=>0,'party_type'=>$partyType,'party_id'=>$partyId],
+                ['account_code'=>$assetCode,'debit_toman'=>0,'credit_toman'=>$amount,'party_type'=>$partyType,'party_id'=>$partyId]
+            ];
+        }
+        $journalId=Parsian_Final_Ledger::create_entry('payment',$id,'ثبت دریافت/پرداخت شماره '.$id,$lines,get_current_user_id());
+        if(!$journalId){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'journal_post_failed'],500);}
+        $updated=$wpdb->update($table,['status'=>'posted','journal_entry_id'=>$journalId],['id'=>$id,'status'=>'pending_approval'],['%s','%d'],['%d','%s']);
+        if($updated!==1){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'payment_state_conflict'],409);}
+        $wpdb->insert($wpdb->prefix.'parsian_events',[
+            'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>get_current_user_id(),
+            'event_type'=>'finance.payment.posted','aggregate_type'=>'payment','aggregate_id'=>$id,
+            'payload'=>wp_json_encode(['payment_id'=>$id,'journal_entry_id'=>$journalId,'amount_toman'=>$amount]),
+            'created_at'=>current_time('mysql',true)
+        ],['%s','%d','%s','%s','%d','%s','%s']);
+        $wpdb->query('COMMIT');
+        return new WP_REST_Response(['status'=>'posted','payment_id'=>$id,'journal_entry_id'=>$journalId,'amount_toman'=>$amount],200);
     }
 }
