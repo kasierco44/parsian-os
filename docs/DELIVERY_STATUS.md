@@ -215,3 +215,12 @@ Keep the existing live site and its database untouched until a staging backup, m
 - New routes: GET/POST `/bank/accounts`; GET/POST/PATCH `/bank/accounts/{id}`; POST `/bank/import`; GET `/bank/import-batches/{id}`; POST `/bank/reconcile`.
 - Source commits: `ff6f55b3e1381a458ca26dc306174ae1ccfb6902`, `688824aba8204ea50cddaf6ee247a9515f9deb72`, `7c518fd9d89cefe107b7478104a1812921613344`, `b77a5071f97b912c488ca4d8ec10bd123ccc9658`, `79ed44d88264d6b876edcff5e572c941fa72db32`, `052b266bd30ebd2577269faf40c0e60d6f418805`.
 - Verification status: no PHP lint, WP database migration, CSV/XLSX fixture, concurrency, or reconciliation integration test has yet been observed for these commits. Treat this as implemented source, not a validated release. The legacy matcher still needs a compatibility review against the new allocation table; bank opening/closing statement balance controls and period close are still outstanding.
+
+
+## Ledger and receivables acceptance test harness (2026-11-19)
+
+- Added `wordpress/parsian-final/tests/finance-ledger-acceptance.php`, a WP-CLI integration harness that creates isolated synthetic journals and invoices, verifies opening balance, period debit/credit, closing balance, chronological running balance, and all five receivables-aging buckets, then removes its fixtures.
+- The harness refuses to run unless `PARSIAN_ALLOW_FINANCE_TESTS=true` is explicitly defined and refuses a WordPress environment marked production.
+- The harness has been added to source but has **not** been executed against a staging WordPress database. A successful test result is not claimed.
+- Updated the legacy exact-match endpoint to write into the new reconciliation allocation table in the same transaction, so legacy matches consume allocation capacity and cannot be silently re-used by the new matcher.
+- Follow-up verification still required: PHP lint on the full plugin, isolated staging migration, execution of the WP-CLI harness, and bank CSV/XLSX fixtures including duplicate-file, duplicate-row, malformed-row, partial and multi-journal cases.
