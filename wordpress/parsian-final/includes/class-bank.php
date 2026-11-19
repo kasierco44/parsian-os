@@ -204,7 +204,6 @@ final class Parsian_Final_Bank {
                 $wpdb->query('ROLLBACK');return $this->error('bank_account_ledger_mismatch',409,['journal_entry_id'=>$journal,'statement_line_id'=>(int)$line['id']]);
             }
         }
-        }
         foreach($allocations as $a){$ok=$wpdb->insert($this->table('bank_reconciliation_matches'),[
             'statement_line_id'=>absint($a['statement_line_id']),'journal_entry_id'=>absint($a['journal_entry_id']),
             'matched_amount_toman'=>(int)$a['amount_toman'],'match_group_uuid'=>$group,'matched_by'=>$actor,'matched_at'=>$now
