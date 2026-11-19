@@ -35,3 +35,14 @@ Initial central-platform implementation scaffold for the PARSIAN FINAL suite.
 - Automated PHP lint, WordPress integration tests, security tests, staging installation, backup/restore and release packaging have not yet been run.
 
 Do not install on production or use real customer/financial data until the listed controls and acceptance tests are complete.
+
+
+## Sales and ledger workflow (v0.2.0 development)
+- POST /proformas persists a draft proforma and its validated line items for an assigned active customer.
+- GET /proformas, GET /proformas/{id} list and retrieve documents within the caller's scope.
+- POST /proformas/{id}/approve requires the manager approval capability; it locks the draft, issues one final invoice, copies invoice lines, posts a balanced receivable/sales journal, and changes the proforma state in one database transaction.
+- POST /payments/{id}/approve posts customer receipts or supplier payments to the general ledger after finance approval. Cash, bank/card and cheque clearing/payable accounts are mapped to the baseline chart.
+- GET /ledger/journals and GET /ledger/trial-balance expose posted journal data to finance-authorized users.
+- A version-gated schema upgrade creates the new sales and ledger tables and seeds baseline accounts on the next plugin load.
+
+Accounting scope note: the current invoice journal recognizes gross sales and customer receivables only. Tax, discounts, COGS/inventory valuation, returns/credit notes, settlement reconciliation and period closing are not implemented. Issued invoices do not decrement stock. Payment approval is not a substitute for bank reconciliation.
