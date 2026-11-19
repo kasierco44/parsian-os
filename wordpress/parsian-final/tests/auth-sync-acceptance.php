@@ -253,6 +253,13 @@ try {
     $paymentKeep->set_param('id',$paymentOperationId);$paymentKeep->set_param('decision','keep_server');
     $assert($sync->resolve_conflict($paymentKeep)->get_status()===200,'manager can keep the server payment metadata');
     $assert($wpdb->get_var($wpdb->prepare("SELECT reference FROM {$wpdb->prefix}parsian_payments WHERE id=%d",$paymentId))==='QA-SERVER-REFERENCE','stale payment reference never overwrites server value');
+    wp_set_current_user($financeUserId);
+    $financePullRequest = new WP_REST_Request('GET','/parsian-final/v1/sync/pull');
+    $financePullRequest->set_param('since_id',0);
+    $financePulled = $sync->pull($financePullRequest)->get_data();
+    $financeSyncEvents = array_filter($financePulled['items']??[],static fn($event)=>str_starts_with((string)($event['event_type']??''),'sync.') && in_array((string)($event['aggregate_type']??''),['invoice','payment'],true));
+    $assert(count($financeSyncEvents)>=2,'accountant delta stream includes invoice/payment conflict events for local outbox acknowledgement');
+    wp_set_current_user($userId);
 
     $leadOperation=wp_generate_uuid4();
     $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
