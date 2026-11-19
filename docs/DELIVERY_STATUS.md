@@ -250,3 +250,19 @@ Keep the existing live site and its database untouched until a staging backup, m
 - PHP CLI 8.4 was available in the working environment. Manual `php -l` checks passed for the current source copies of `class-auth.php`, `class-sync.php`, `parsian-final.php`, `tests/auth-sync-acceptance.php`, and `tests/finance-ledger-acceptance.php`.
 - This is a targeted syntax check, **not** a full-plugin lint: the modified installer and bank reconciliation source were not linted in the local CLI session. The GitHub Actions lint runs still failed before exposing job steps/logs, so whole-plugin lint remains unverified.
 - The working environment has no WP-CLI, MySQL client, or PHP MySQL driver available. Consequently the migration and database acceptance harnesses cannot be executed here. They require an isolated WordPress + MySQL staging environment.
+
+
+## Web client scaffold update (2026-11-19)
+
+- Added `web/parsian-panels/` with a responsive Persian RTL shell, industrial visual styling, role-aware navigation for manager/accountant/seller/customer, and WordPress REST health and identity checks.
+- The UI filters visible modules using capabilities returned by `GET /me`; this is presentation only. Server endpoints remain responsible for authorization and record-level scoping.
+- WordPress cookie-based REST requests require a valid REST nonce. The hosting integration must inject `window.PARSIAN_CONFIG.apiRoot` and `window.PARSIAN_CONFIG.nonce` from an authenticated WordPress session. No credentials are hard-coded.
+- Business module screens are placeholders. They do not yet implement operational CRUD, accounting reports, reconciliation, or CRM workflows. No fabricated balances or KPI values are shown.
+- No browser/e2e test, staging deployment, Android APK, Windows installer, or production release is claimed for this web scaffold.
+
+## Current workstream priority
+
+1. Complete the three web workspaces against documented REST contracts and enforce server-side role/record scope.
+2. Implement Android seller and customer clients using the same API, encrypted local storage, durable outbox and WorkManager.
+3. Implement Windows role workspaces, offline persistence, backup/restore and installer validation.
+4. Keep all client builds behind staging, integration, security and recovery tests. Do not merge PR #21 or deploy to production without explicit acceptance.
