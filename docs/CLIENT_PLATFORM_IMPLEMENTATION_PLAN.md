@@ -144,3 +144,9 @@ Build requirements:
 - This is a UI scaffold only. The operational manager, accountant and seller workflows, nonce injection by the WordPress host, browser tests, and staging deployment remain to be completed.
 
 No Android APK, Windows installer, production deployment, or end-to-end offline-sync acceptance is currently claimed.
+
+
+### Android implementation status (2026-11-19)
+- The initial Gradle project uses separate seller/customer product flavors and role-specific Compose launch screens.
+- Room, WorkManager, Retrofit and OkHttp dependencies are declared, but encrypted local persistence, token vault, API repositories, durable outbox/inbox, retry worker, and business workflows remain to be implemented.
+- A GitHub Actions workflow attempts both debug APK variants. Until its run succeeds and artifacts are inspected, no APK is considered built or delivered.
