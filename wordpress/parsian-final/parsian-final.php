@@ -24,6 +24,7 @@ require_once PARSIAN_FINAL_PATH . 'includes/class-bank.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-ledger.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-sales.php';
 require_once PARSIAN_FINAL_PATH . 'includes/class-auth.php';
+require_once PARSIAN_FINAL_PATH . 'includes/class-panels.php';
 register_activation_hook(__FILE__, ['Parsian_Final_Install', 'activate']);
 register_deactivation_hook(__FILE__, ['Parsian_Final_Install', 'deactivate']);
 add_action('plugins_loaded', static function (): void {
@@ -39,4 +40,5 @@ add_action('plugins_loaded', static function (): void {
     (new Parsian_Final_Sales())->register_routes();
     (new Parsian_Final_Ledger())->register_routes();
     (new Parsian_Final_Auth())->register_routes();
+    (new Parsian_Final_Panels())->register_hooks();
 });
