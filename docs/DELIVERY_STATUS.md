@@ -384,3 +384,8 @@ Keep the existing live site and its database untouched until a staging backup, m
 ### Sync operation authorization (2026-11-19)
 - The push endpoint now checks the originating user's domain capability before accepting an offline CRM or sales operation. Customer accounts cannot enqueue seller-only lead/proforma commands merely because they have general device-sync permission.
 - Plugin development version is now 0.4.19. Staging acceptance still required.
+
+
+### Accountant registers (2026-11-19)
+- Added a paginated read endpoint for payments and role-aware payment/cheque registers in the accountant and manager panels. The approve action calls the existing server-side payment posting transaction; it does not post client-side journal entries.
+- Plugin development version is now 0.4.20. Creation forms, cheque lifecycle UI and bank statement import/reconciliation screens remain to be completed.
