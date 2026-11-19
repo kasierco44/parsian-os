@@ -76,7 +76,11 @@ final class Parsian_Final_Sync {
             if(!is_array($op)||!wp_is_uuid($op['operation_uuid']??'')||empty($op['type'])||!isset($op['payload'])||!is_array($op['payload'])){
                 $results[]=['status'=>'rejected','code'=>'invalid_operation'];continue;
             }
-            $type=sanitize_key($op['type']);
+            // Operation names are namespaced with dots; sanitize_key() strips dots in WordPress.
+            $type=strtolower(trim((string)$op['type']));
+            if (!preg_match('/^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)+$/', $type)) {
+                $results[]=['operation_uuid'=>$op['operation_uuid'],'status'=>'rejected','code'=>'invalid_operation_type'];continue;
+            }
             $allowedTypes=['crm.lead.create','crm.lead.update','crm.task.complete','sales.proforma.draft'];
             $payload=wp_json_encode($op['payload']);
             if(!in_array($type,$allowedTypes,true)||strlen((string)$payload)>65535){
