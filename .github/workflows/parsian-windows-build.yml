@@ -32,7 +32,7 @@ jobs:
         run: cargo install tauri-cli --version "^2" --locked
       - name: Verify desktop manifest
         working-directory: desktop/src-tauri
-        run: cargo metadata --locked --no-deps
+        run: cargo metadata --no-deps
       - name: Build MSI and NSIS bundles
         working-directory: desktop
         run: cargo tauri build --verbose --bundles msi,nsis
