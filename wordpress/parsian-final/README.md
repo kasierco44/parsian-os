@@ -1,6 +1,6 @@
 # PARSIAN FINAL — WordPress Core
 
-Central WordPress plugin source for PARSIAN FINAL. Development source version: **0.4.24**.
+Central WordPress plugin source for PARSIAN FINAL. Development source version: **0.4.25**.
 
 ## Architecture
 
@@ -22,7 +22,7 @@ Central WordPress plugin source for PARSIAN FINAL. Development source version: *
 - Cheque lifecycle and event history.
 - Bank account register, CSV/XLSX statement import, statement-line views, one-to-one and grouped reconciliation allocation APIs.
 - Opaque access/refresh tokens, rotation, token-family revocation, device registration and device revocation.
-- Offline sync outbox/inbox API, idempotency hash, delta event pull, manager review queue and supported offline lead creation approval.
+- Offline sync outbox/inbox API, idempotency hash, delta event pull, manager review queue, offline lead create/update, task completion and proforma draft approval. These flows are source-level implementations and still require isolated Staging acceptance tests.
 - Manager-only JSON database snapshot export with SHA-256 validation (non-destructive; not a restore system).
 
 ## Important API routes
@@ -46,9 +46,9 @@ Follow `docs/STAGING_ACCEPTANCE_RUNBOOK.md` before running migrations or fixture
 
 - The latest schema source has not yet been executed against Staging. Whole-plugin PHP lint and both WP-CLI acceptance harnesses still need a verified pass.
 - No APK or Windows MSI/NSIS installer is confirmed. Android and Windows builds, clean-device/VM installation, update, uninstall and signing tests remain outstanding.
-- Android has encrypted Room outbox/inbox, token storage, seller/customer read views and offline lead drafts; aggregate-version conflict resolution, full domain processors, dead-letter handling and complete business workflows remain incomplete.
+- Android has encrypted Room outbox/inbox, token storage, seller/customer read views, offline lead create/update, task completion and proforma draft entry. Aggregate-version conflict resolution, robust retry/dead-letter handling and full business workflows remain incomplete.
 - Windows Tauri has remote bearer authentication and Credential Manager storage but no local encrypted SQLite outbox/inbox or full offline workflow yet.
-- Only `crm.lead.create` is currently applied from the manager review queue. Other allowlisted offline operation types remain pending until their safe domain handlers are implemented.
+- The manager review queue has handlers for `crm.lead.create`, `crm.lead.update`, `crm.task.complete` and `sales.proforma.draft`. Runtime acceptance on an isolated Staging database is still outstanding.
 - Bank statement upload and reconciliation APIs/UI exist, but CSV/XLSX fixtures, opening/closing balance controls and end-to-end matching tests remain outstanding.
 - Accounting still needs full tax/discount treatment, returns/credit notes, period close and full COGS/stock valuation acceptance.
 - Backup export is limited to 10,000 rows per table and 20 MiB; it excludes WordPress uploads/media, credentials and device tokens. Validation does not restore data. Full backup requires host-level database plus files backup.
@@ -58,7 +58,7 @@ Follow `docs/STAGING_ACCEPTANCE_RUNBOOK.md` before running migrations or fixture
 Do not install this development build on Production, do not merge PR #21, and do not treat source commits or a green syntax check as proof of operational readiness.
 
 
-### Offline task and proforma workflow (0.4.24)
+### Offline task and proforma workflow (0.4.25)
 - Added task storage and manager assignment endpoint (`POST /tasks`); sellers can list only their assigned tasks (`GET /tasks`).
 - Manager-approved offline `crm.task.complete` updates the assigned task in one transaction and emits a delta-sync event.
 - Manager-approved offline `sales.proforma.draft` validates customer assignment, active products, quantities and amounts, creates a draft proforma only, and records its event and operation result transactionally. It does not issue an invoice or reserve stock.
