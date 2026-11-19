@@ -17,7 +17,7 @@ global $wpdb;
 $assert=static function($condition,string $message):void {
     if(!$condition)throw new RuntimeException('ASSERTION FAILED: '.$message);
 };
-$userId=0;$device=wp_generate_uuid4();$operation=wp_generate_uuid4();
+$userId=0;$customerId=0;$productId=0;$device=wp_generate_uuid4();$operation=wp_generate_uuid4();
 $authTable=$wpdb->prefix.'parsian_auth_tokens';
 $assert($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$authTable))===$authTable,'token auth table exists after plugin migration');
 $auth=new Parsian_Final_Auth();$sync=new Parsian_Final_Sync();
@@ -228,7 +228,7 @@ try {
         }
         $wpdb->delete($wpdb->prefix.'parsian_customers',['created_by'=>$userId],['%d']);
         $wpdb->delete($wpdb->prefix.'parsian_products',['created_by'=>$userId],['%d']);
-        delete_user_meta($userId,'parsian_customer_'.$customerId);
+        if ($customerId > 0) delete_user_meta($userId,'parsian_customer_'.$customerId);
 
         $wpdb->delete($wpdb->prefix.'parsian_events',['actor_user_id'=>$userId],['%d']);
         $wpdb->delete($wpdb->prefix.'parsian_events',['event_type'=>'crm.foreign.qa'],['%s']);
