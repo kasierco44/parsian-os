@@ -36,6 +36,9 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
+      - name: Run Android unit tests
+        working-directory: android
+        run: gradle --no-daemon --stacktrace :app:testSellerDebugUnitTest :app:testCustomerDebugUnitTest
       - name: Assemble seller and customer debug APKs
         working-directory: android
         run: gradle --no-daemon --stacktrace :app:assembleSellerDebug :app:assembleCustomerDebug
