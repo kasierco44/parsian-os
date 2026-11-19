@@ -379,3 +379,8 @@ Keep the existing live site and its database untouched until a staging backup, m
 - The manager approval/rejection endpoints now write the review event in the same database transaction as the operation status. Events are attributed to the originating seller for their restricted delta stream, with the reviewing manager recorded in the payload.
 - Android now updates the local outbox item to applied/rejected when the matching review event arrives; duplicate push responses marked applied are also handled as applied.
 - Plugin development version is now 0.4.18. This review lifecycle still requires the WP-CLI acceptance harness to pass on Staging.
+
+
+### Sync operation authorization (2026-11-19)
+- The push endpoint now checks the originating user's domain capability before accepting an offline CRM or sales operation. Customer accounts cannot enqueue seller-only lead/proforma commands merely because they have general device-sync permission.
+- Plugin development version is now 0.4.19. Staging acceptance still required.
