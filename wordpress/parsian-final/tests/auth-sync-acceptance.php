@@ -126,6 +126,28 @@ try {
     $updatedLeadRow = $wpdb->get_row($wpdb->prepare("SELECT display_name,province FROM {$wpdb->prefix}parsian_leads WHERE id=%d",$createdLead),ARRAY_A);
     $assert(($updatedLeadRow['display_name']??'')==='Updated Offline QA Lead' && ($updatedLeadRow['province']??'')==='Tehran','offline lead update changes only the originating seller lead');
 
+    $crm = new Parsian_Final_CRM();
+    $taskRequest = new WP_REST_Request('POST','/parsian-final/v1/tasks');
+    $taskRequest->set_param('title','Offline completion QA task');
+    $taskRequest->set_param('description','Acceptance fixture');
+    $taskRequest->set_param('assigned_user_id',$userId);
+    $taskCreated = $crm->create_task($taskRequest);
+    $assert($taskCreated->get_status()===201,'manager task assignment endpoint creates a seller task');
+    $taskId = (int)($taskCreated->get_data()['id']??0);
+    $taskOperation = wp_generate_uuid4();
+    $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
+        'operation_uuid'=>$taskOperation,'type'=>'crm.task.complete',
+        'payload'=>['task_id'=>$taskId,'completed'=>true]
+    ]]]));
+    $taskQueued = $sync->push($push)->get_data();
+    $assert(($taskQueued['results'][0]['status']??'')==='pending_review','offline task completion waits for manager approval');
+    $taskOperationId = (int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_sync_ops WHERE operation_uuid=%s",$taskOperation));
+    $taskApprove = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$taskOperationId.'/approve');
+    $taskApprove->set_param('id',$taskOperationId);
+    $taskApproved = $sync->approve_operation($taskApprove);
+    $assert($taskApproved->get_status()===200 && ($taskApproved->get_data()['status']??'')==='applied','manager approval applies offline task completion');
+    $assert($wpdb->get_var($wpdb->prepare("SELECT status FROM {$wpdb->prefix}parsian_tasks WHERE id=%d",$taskId))==='completed','approved task is marked completed in the task register');
+
     // Verify seller event isolation and cursor progress over another user's event.
     $foreignEventId = 0;
     $foreignEventOk = $wpdb->insert($wpdb->prefix.'parsian_events', [
@@ -177,6 +199,7 @@ try {
         $wpdb->delete($wpdb->prefix.'parsian_sync_ops',['user_id'=>$userId],['%d']);
         $wpdb->delete($wpdb->prefix.'parsian_devices',['user_id'=>$userId],['%d']);
         $wpdb->delete($wpdb->prefix.'parsian_leads',['owner_user_id'=>$userId],['%d']);
+        $wpdb->delete($wpdb->prefix.'parsian_tasks',['assigned_user_id'=>$userId],['%d']);
         $wpdb->delete($wpdb->prefix.'parsian_events',['actor_user_id'=>$userId],['%d']);
         $wpdb->delete($wpdb->prefix.'parsian_events',['event_type'=>'crm.foreign.qa'],['%s']);
         require_once ABSPATH.'wp-admin/includes/user.php';
