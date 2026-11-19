@@ -107,3 +107,14 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Stock supplier identifiers are currently numeric references; supplier master-data validation and purchase-order matching remain to be connected.
 - This is weighted-average inventory costing, not FIFO. Tax, landed-cost allocation, returns, stock counts/adjustments with approval policy, multi-warehouse locations, and automated reservation on invoice approval remain follow-up work.
 - No Android APK, Windows installer, or production release is claimed.
+
+
+## Customer receipt allocation update
+
+- Added a payment-allocation table linking posted incoming customer receipts to posted invoices.
+- Added allocation endpoint with transaction locks and limits against both unallocated receipt value and remaining invoice balance.
+- Incremental allocations to the same payment/invoice pair are supported.
+- Added invoice balance and customer outstanding endpoints.
+- Allocation is a subledger operation only: it intentionally does not create another GL journal because the receipt has already credited trade receivables when posted.
+- Invoice status is not overwritten by collection status; inventory fulfillment remains an independent state transition.
+- PHP lint/package workflows on the newest finance commits reported failure before producing runner step details (job logs unavailable). The last confirmed successful PHP lint and development package were on code head 7b1a6c65321e68b43dfb82d4ee9ceef445ff60c0, before the payment-allocation change. Re-run validation is required; do not treat the newer commits as verified.
