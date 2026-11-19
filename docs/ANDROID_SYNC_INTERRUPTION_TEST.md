@@ -18,7 +18,7 @@ gradle --no-daemon :app:testSellerDebugUnitTest :app:testCustomerDebugUnitTest
 1. Build and install the seller/customer debug APKs from the same commit on an Android emulator configured for API 26 or newer.
 2. Point the app at a disposable Staging WordPress environment and sign in with a test user/device.
 3. Disable network connectivity and create one customer update and one draft-proforma update. Confirm both are queued locally and are not reported as server-applied.
-4. Restore connectivity. Start Sync, then use the emulator network console to apply 100% packet loss while the request/response is in flight. Repeat at least once during push and once during pull.
+4. Restore connectivity. Start Sync, then use the emulator console to interrupt the network while the request/response is in flight. From a terminal, `adb emu network loss 100` applies total packet loss; restore it with `adb emu network loss 0`. Repeat at least once during push and once during pull.
 5. Restore network quality to normal and run Sync again. Confirm the same operation UUIDs are retried; the server contains one operation per UUID, no duplicate proforma/payment/invoice is created, and the pull cursor advances only after the inbox page is persisted.
 6. Edit the same customer/proforma on Staging before manager approval. Confirm the manager queue shows a conflict with server/device values side by side.
 7. Choose **Keep server** and verify the old device edit is marked rejected locally after the next pull. Repeat with **Rebase device changes**, approve the rebased operation separately, and verify the resulting server value.
