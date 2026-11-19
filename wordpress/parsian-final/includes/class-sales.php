@@ -82,7 +82,7 @@ final class Parsian_Final_Sales {
         foreach($clean as $line){
             $line['proforma_id']=$id;
             if(!$wpdb->insert($wpdb->prefix.'parsian_proforma_items',$line,
-                ['%d','%d','%s','%d','%d','%d','%d'])){
+                ['%d','%s','%d','%d','%d','%d'])){
                 $wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'proforma_item_create_failed'],500);
             }
         }
@@ -147,7 +147,7 @@ final class Parsian_Final_Sales {
         foreach($items as $line){
             $line['invoice_id']=$invoiceId;
             if(!$wpdb->insert($wpdb->prefix.'parsian_invoice_items',$line,
-                ['%d','%d','%s','%d','%d','%d','%d'])){
+                ['%d','%s','%d','%d','%d','%d'])){
                 $wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'invoice_item_create_failed'],500);
             }
         }
