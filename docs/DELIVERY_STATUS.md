@@ -353,3 +353,8 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Web and Android data tables now format dates with the Persian Jalali calendar and translate common workflow statuses; monetary values and counts use Persian digits.
 - Plugin development version is 0.4.11. The staging acceptance runbook now specifies a database backup, full PHP lint, schema check, both WP-CLI acceptance harnesses and REST health check.
 - Local PHP lint passed for the new customer portal and backup classes and for the REST/CORS class. This still does not replace whole-plugin PHP lint, Android Gradle build, Windows Tauri build or live Staging validation.
+
+
+### Role copy accuracy and current package version (2026-11-19)
+- Adjusted manager, accountant, seller and customer descriptions to avoid implying unfinished sales-target, cheque, task or order screens are already delivered.
+- Plugin development version is now 0.4.12; the staging runbook is aligned to this version.
