@@ -6,3 +6,5 @@
 .parsian-os-app .desktop-login-form{display:grid;gap:10px;max-width:460px;margin-top:18px}.parsian-os-app .desktop-login-form input{width:100%;border:1px solid #d9dce1;border-radius:8px;padding:12px;font:inherit;font-size:12px;background:#fff;color:#202329}.parsian-os-app .desktop-login-form input:focus{outline:2px solid #c6282840;border-color:#c62828}.parsian-os-app #desktop-logout{margin-inline-start:10px}
 
 .parsian-os-app .desktop-form-input{display:block;width:100%;max-width:460px;margin:9px 0;border:1px solid #d9dce1;border-radius:8px;padding:11px;font:inherit;font-size:12px;background:#fff;color:#202329}
+
+.parsian-os-app .conflict-detail{white-space:normal;max-width:360px;min-width:240px;padding:9px;margin:0 0 8px;background:#fff4e5;border:1px solid #e8c58d;border-radius:7px;color:#704b16;font-size:11px;line-height:1.7;overflow-wrap:anywhere}
