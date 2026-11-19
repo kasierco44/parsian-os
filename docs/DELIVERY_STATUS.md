@@ -358,3 +358,8 @@ Keep the existing live site and its database untouched until a staging backup, m
 ### Role copy accuracy and current package version (2026-11-19)
 - Adjusted manager, accountant, seller and customer descriptions to avoid implying unfinished sales-target, cheque, task or order screens are already delivered.
 - Plugin development version is now 0.4.12; the staging runbook is aligned to this version.
+
+
+### WordPress panel style isolation (2026-11-19)
+- Scoped the shared panel stylesheet to a dedicated root class so it no longer applies generic body, main, aside, header, table or form styles across the surrounding WordPress admin UI. The standalone Tauri shell uses the same root class.
+- Plugin development version is now 0.4.14 and the plugin CSS bundle matches the standalone panel stylesheet.
