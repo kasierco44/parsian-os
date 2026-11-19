@@ -25,7 +25,7 @@ const modules=[
 {key:'portal-payments',cap:'parsian_customer_portal_read',roles:['customer'],icon:'₮',title:'دریافت‌های من',desc:'دریافت‌های ثبت‌شده برای حساب شما',endpoint:'/portal/payments',fields:[['amount_toman','مبلغ (تومان)'],['method','روش'],['reference','شناسه پیگیری'],['status','وضعیت'],['created_at','تاریخ ثبت']]},
 {key:'backup',cap:'parsian_manage_settings',roles:['manager'],icon:'⬇',title:'پشتیبان‌گیری',desc:'خروجی امن داده‌های هسته و اعتبارسنجی فایل پشتیبان',endpoint:'/backup/export'},
 {key:'assignments',cap:'parsian_manage_users',roles:['manager'],icon:'⇄',title:'تخصیص کاربران',desc:'اتصال فروشنده و حساب مشتری به پرونده مشتری',endpoint:'/customers'},
-{key:'sync-review',cap:'parsian_manage_users',roles:['manager'],icon:'⇧',title:'بررسی عملیات آفلاین',desc:'بررسی پیش‌نویس‌های رسیده از دستگاه‌های فروشندگان',endpoint:'/sync/operations',fields:[['operation_uuid','شناسه عملیات'],['operation_type','نوع عملیات'],['user_id','شناسه فروشنده'],['payload','اطلاعات عملیات'],['conflict','جزئیات تعارض'],['created_at','زمان ثبت'],['status','وضعیت']]}
+{key:'sync-review',cap:'parsian_manage_users',roles:['manager'],icon:'⇧',title:'بررسی عملیات آفلاین',desc:'بررسی پیش‌نویس‌های رسیده از دستگاه‌های فروشندگان',endpoint:'/sync/operations',fields:[['operation_uuid','شناسه عملیات'],['operation_type','نوع عملیات'],['user_id','شناسه فروشنده'],['payload','اطلاعات عملیات'],['created_at','زمان ثبت'],['status','وضعیت']]}
 ];
 let currentUser={},currentRole='guest';
 const money=value=>new Intl.NumberFormat('fa-IR').format(Number(value||0));
