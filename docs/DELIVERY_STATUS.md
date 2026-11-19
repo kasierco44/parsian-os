@@ -151,3 +151,12 @@ Keep the existing live site and its database untouched until a staging backup, m
 ### CI status after finance lifecycle changes
 - The GitHub Actions PHP lint and plugin packaging runs triggered by the latest commits returned failure before exposing any runner steps or job logs (logs_url is null). This is not evidence of a PHP syntax error or a successful check; CI execution is currently inconclusive and requires runner/workflow diagnostics.
 - No ZIP artifact from the current 0.4.0 branch has been verified. The earlier development ZIP belongs to an older code head and must not be used as the current build.
+
+
+### Allocation and reversal consistency
+
+- Payment allocations now carry active/reversed state and reversal event metadata.
+- Invoice balances and customer outstanding reports count active allocations only.
+- When a linked cheque is bounced, returned or cancelled, the corresponding payment is marked reversed and its active invoice allocations are reversed in the same transaction as the cheque reversal journal.
+- Added pending-cheque payment linking for workflows where the cheque record is entered after the payment journal.
+- This closes the key subledger error where a bounced cheque could otherwise leave an invoice incorrectly appearing paid.
