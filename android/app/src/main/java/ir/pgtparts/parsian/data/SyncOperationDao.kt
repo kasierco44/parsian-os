@@ -3,6 +3,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 @Dao
 interface SyncOperationDao {
  @Insert(onConflict = OnConflictStrategy.ABORT)
@@ -15,4 +16,17 @@ interface SyncOperationDao {
  suspend fun recordRetry(uuid: String, error: String)
  @Query("SELECT COUNT(*) FROM sync_outbox WHERE status = 'queued'")
  suspend fun queuedCount(): Int
+ @Insert(onConflict = OnConflictStrategy.REPLACE)
+ suspend fun saveEvents(events: List<SyncEventEntity>)
+ @Insert(onConflict = OnConflictStrategy.REPLACE)
+ suspend fun saveMetadata(metadata: SyncMetadataEntity)
+ @Query("SELECT metaValue FROM sync_metadata WHERE metaKey = :key LIMIT 1")
+ suspend fun metadata(key: String): String?
+ @Query("SELECT COUNT(*) FROM sync_inbox")
+ suspend fun inboxCount(): Int
+ @Transaction
+ suspend fun persistInboxPage(events: List<SyncEventEntity>, cursor: Long) {
+  if (events.isNotEmpty()) saveEvents(events)
+  saveMetadata(SyncMetadataEntity("pull_cursor", cursor.toString()))
+ }
 }
