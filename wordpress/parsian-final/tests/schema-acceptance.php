@@ -11,7 +11,7 @@ if (wp_get_environment_type() === 'production') {
 }
 global $wpdb;
 $expected = [
-    'customers','suppliers','leads','products','proformas','proforma_items','invoices','invoice_items',
+    'customers','suppliers','leads','tasks','products','proformas','proforma_items','invoices','invoice_items',
     'payments','cheques','ledger_accounts','journal_entries','journal_lines','stock_movements',
     'stock_ledger','stock_reservations','events','devices','sync_ops','auth_tokens','cheque_events',
     'bank_statement_lines','bank_accounts','bank_import_batches','bank_reconciliation_matches','payment_allocations'
