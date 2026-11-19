@@ -17,7 +17,7 @@ global $wpdb;
 $assert=static function($condition,string $message):void {
     if(!$condition)throw new RuntimeException('ASSERTION FAILED: '.$message);
 };
-$userId=0;$customerId=0;$productId=0;$device=wp_generate_uuid4();$operation=wp_generate_uuid4();
+$userId=0;$financeUserId=0;$customerId=0;$productId=0;$invoiceId=0;$paymentId=0;$device=wp_generate_uuid4();$financeDevice=wp_generate_uuid4();$operation=wp_generate_uuid4();
 $authTable=$wpdb->prefix.'parsian_auth_tokens';
 $assert($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s',$authTable))===$authTable,'token auth table exists after plugin migration');
 $auth=new Parsian_Final_Auth();$sync=new Parsian_Final_Sync();
@@ -172,6 +172,85 @@ try {
     $proformaKeep->set_param('id',$proformaUpdateId);$proformaKeep->set_param('decision','keep_server');
     $assert($sync->resolve_conflict($proformaKeep)->get_status()===200,'manager can keep server proforma revision');
     $assert($wpdb->get_var($wpdb->prepare("SELECT notes FROM {$wpdb->prefix}parsian_proformas WHERE id=%d",$proformaId))==='Server proforma note','keeping server does not overwrite proforma data');
+
+    // Finance records use revision checks too; posted invoice facts are not mutable offline.
+    $financeSuffix = wp_generate_password(10,false,false);
+    $financeUserId = wp_insert_user([
+        'user_login'=>'parsian_finance_qa_'.$financeSuffix,'user_pass'=>wp_generate_password(32,true,true),
+        'user_email'=>'parsian-finance-qa-'.$financeSuffix.'@example.invalid','role'=>'parsian_accountant'
+    ]);
+    if (is_wp_error($financeUserId)) throw new RuntimeException($financeUserId->get_error_message());
+    $financeUser = new WP_User($financeUserId);
+    $financeUser->add_cap('parsian_sync_use');
+    $financeUser->add_cap('parsian_finance_write');
+    $financeUser->add_cap('parsian_finance_read');
+    $invoiceOk = $wpdb->insert($wpdb->prefix.'parsian_invoices',[
+        'invoice_number'=>'QA-INV-'.$financeSuffix,'proforma_id'=>0,'customer_id'=>$customerId,
+        'status'=>'posted','currency'=>'IRR','total_toman'=>5000,'due_date'=>'2027-01-01',
+        'issued_by'=>$financeUserId,'issued_at'=>current_time('mysql',true),'updated_at'=>current_time('mysql',true)
+    ]);
+    $assert($invoiceOk===1,'invoice fixture for revision test is created');
+    $invoiceId = (int)$wpdb->insert_id;
+    $paymentOk = $wpdb->insert($wpdb->prefix.'parsian_payments',[
+        'direction'=>'in','amount_toman'=>2500,'party_type'=>'customer','party_id'=>$customerId,
+        'method'=>'cash','reference'=>'QA-ORIGINAL','status'=>'pending_approval',
+        'created_by'=>$financeUserId,'created_at'=>current_time('mysql',true),'updated_at'=>current_time('mysql',true)
+    ]);
+    $assert($paymentOk===1,'payment fixture for revision test is created');
+    $paymentId = (int)$wpdb->insert_id;
+    $financeDeviceRequest = new WP_REST_Request('POST','/parsian-final/v1/sync/devices');
+    $financeDeviceRequest->set_body(wp_json_encode(['device_uuid'=>$financeDevice,'platform'=>'android','label'=>'Finance QA device']));
+    wp_set_current_user($financeUserId);
+    $assert($sync->register_device($financeDeviceRequest)->get_status()===200,'accountant device registration succeeds');
+    $finance = new Parsian_Final_Finance();
+    $invoiceSnapshot = $finance->invoice_balance(new WP_REST_Request('GET','/parsian-final/v1/invoices/'.$invoiceId.'/balance'));
+    $invoiceSnapshotData = $invoiceSnapshot->get_data()['invoice'] ?? [];
+    $assert(!empty($invoiceSnapshotData['revision']) && !empty($invoiceSnapshotData['updated_at']),'invoice balance exposes revision and timestamp');
+    $invoiceUpdateUuid = wp_generate_uuid4();
+    $financePush = new WP_REST_Request('POST','/parsian-final/v1/sync/push');
+    $financePush->set_body(wp_json_encode(['device_uuid'=>$financeDevice,'operations'=>[[
+        'operation_uuid'=>$invoiceUpdateUuid,'type'=>'finance.invoice.update',
+        'payload'=>['invoice_id'=>$invoiceId,'due_date'=>'2027-02-01','base_updated_at'=>$invoiceSnapshotData['updated_at'],'base_revision'=>$invoiceSnapshotData['revision']]
+    ]]]));
+    $invoiceQueued = $sync->push($financePush)->get_data();
+    $assert(($invoiceQueued['results'][0]['status']??'')==='pending_review','offline invoice metadata update is queued');
+    $invoiceOperationId = (int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_sync_ops WHERE operation_uuid=%s",$invoiceUpdateUuid));
+    $wpdb->update($wpdb->prefix.'parsian_invoices',['due_date'=>'2027-03-01','updated_at'=>gmdate('Y-m-d H:i:s',time()+50)],['id'=>$invoiceId],['%s','%s'],['%d']);
+    wp_set_current_user($userId);
+    $invoiceApprove = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$invoiceOperationId.'/approve');
+    $invoiceApprove->set_param('id',$invoiceOperationId);
+    $invoiceConflict = $sync->approve_operation($invoiceApprove);
+    $assert($invoiceConflict->get_status()===409 && ($invoiceConflict->get_data()['status']??'')==='conflict','concurrent invoice metadata change is detected');
+    $invoiceKeep = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$invoiceOperationId.'/resolve-conflict');
+    $invoiceKeep->set_param('id',$invoiceOperationId);$invoiceKeep->set_param('decision','keep_server');
+    $assert($sync->resolve_conflict($invoiceKeep)->get_status()===200,'manager can keep the server invoice metadata');
+
+    wp_set_current_user($financeUserId);
+    $paymentList = $finance->list_payments(new WP_REST_Request('GET','/parsian-final/v1/payments'))->get_data();
+    $paymentSnapshot = null;
+    foreach (($paymentList['items']??[]) as $candidate) if ((int)$candidate['id']===$paymentId) {$paymentSnapshot=$candidate;break;}
+    $assert(is_array($paymentSnapshot) && !empty($paymentSnapshot['revision']) && !empty($paymentSnapshot['updated_at']),'payment register exposes revision and timestamp');
+    $paymentUpdateUuid = wp_generate_uuid4();
+    $financePush->set_body(wp_json_encode(['device_uuid'=>$financeDevice,'operations'=>[[
+        'operation_uuid'=>$paymentUpdateUuid,'type'=>'finance.payment.update',
+        'payload'=>['payment_id'=>$paymentId,'reference'=>'QA-DEVICE-REFERENCE','base_updated_at'=>$paymentSnapshot['updated_at'],'base_revision'=>$paymentSnapshot['revision']]
+    ]]]));
+    $paymentQueued = $sync->push($financePush)->get_data();
+    $assert(($paymentQueued['results'][0]['status']??'')==='pending_review','offline payment update is queued');
+    $paymentOperationId = (int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}parsian_sync_ops WHERE operation_uuid=%s",$paymentUpdateUuid));
+    $wpdb->update($wpdb->prefix.'parsian_payments',['reference'=>'QA-SERVER-REFERENCE','updated_at'=>gmdate('Y-m-d H:i:s',time()+60)],['id'=>$paymentId],['%s','%s'],['%d']);
+    wp_set_current_user($userId);
+    $paymentApprove = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$paymentOperationId.'/approve');
+    $paymentApprove->set_param('id',$paymentOperationId);
+    $paymentConflict = $sync->approve_operation($paymentApprove);
+    $assert($paymentConflict->get_status()===409 && ($paymentConflict->get_data()['status']??'')==='conflict','concurrent payment edit is detected');
+    $paymentConflictRow = $wpdb->get_row($wpdb->prepare("SELECT result FROM {$wpdb->prefix}parsian_sync_ops WHERE id=%d",$paymentOperationId),ARRAY_A);
+    $paymentConflictData = json_decode((string)$paymentConflictRow['result'],true);
+    $assert(($paymentConflictData['server_record']['reference']??'')==='QA-SERVER-REFERENCE','payment conflict preserves current server reference');
+    $paymentKeep = new WP_REST_Request('POST','/parsian-final/v1/sync/operations/'.$paymentOperationId.'/resolve-conflict');
+    $paymentKeep->set_param('id',$paymentOperationId);$paymentKeep->set_param('decision','keep_server');
+    $assert($sync->resolve_conflict($paymentKeep)->get_status()===200,'manager can keep the server payment metadata');
+    $assert($wpdb->get_var($wpdb->prepare("SELECT reference FROM {$wpdb->prefix}parsian_payments WHERE id=%d",$paymentId))==='QA-SERVER-REFERENCE','stale payment reference never overwrites server value');
 
     $leadOperation=wp_generate_uuid4();
     $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
@@ -345,9 +424,17 @@ try {
     $_SERVER['HTTP_AUTHORIZATION']='Bearer '.$refreshData['access_token']['token'];
     $assert((int)$auth->authenticate_bearer(0)===0,'revoked device access token is rejected');
 
-    WP_CLI::success('Auth/sync acceptance passed: token lifecycle, idempotent retries, revision-based lead conflict detection, manager keep/rebase resolution, task/proforma approval, seller event isolation and device revocation.');
+    WP_CLI::success('PARSIAN ONE auth/sync acceptance passed: idempotency, lead/customer/proforma/invoice/payment revisions, manager conflict decisions, task/proforma review, seller isolation and device revocation.');
 } finally {
     if($oldAuthorization===null)unset($_SERVER['HTTP_AUTHORIZATION']);else $_SERVER['HTTP_AUTHORIZATION']=$oldAuthorization;
+    if($financeUserId){
+        $wpdb->delete($wpdb->prefix.'parsian_sync_ops',['user_id'=>$financeUserId],['%d']);
+        $wpdb->delete($wpdb->prefix.'parsian_devices',['user_id'=>$financeUserId],['%d']);
+        if ($invoiceId) $wpdb->delete($wpdb->prefix.'parsian_invoices',['id'=>$invoiceId],['%d']);
+        if ($paymentId) $wpdb->delete($wpdb->prefix.'parsian_payments',['id'=>$paymentId],['%d']);
+        require_once ABSPATH.'wp-admin/includes/user.php';
+        wp_delete_user($financeUserId);
+    }
     if($userId){
         $wpdb->delete($wpdb->prefix.'parsian_auth_tokens',['user_id'=>$userId],['%d']);
         $wpdb->delete($wpdb->prefix.'parsian_sync_ops',['user_id'=>$userId],['%d']);
