@@ -510,6 +510,16 @@ try {
     $exportValidationRequest->set_body(wp_json_encode($exportedData));
     $exportValidation = $backupService->validate_snapshot($exportValidationRequest);
     $assert($exportValidation->get_status() === 200 && ($exportValidation->get_data()['valid'] ?? false) === true, 'actual consistent database export validates against its checksum and manifest');
+    $restorePlanRequest = new WP_REST_Request('POST', '/parsian-final/v1/backup/restore-plan');
+    $restorePlanRequest->set_body(wp_json_encode($exportedData));
+    $restorePlan = $backupService->restore_plan($restorePlanRequest);
+    $assert($restorePlan->get_status() === 200 && ($restorePlan->get_data()['ready'] ?? true) === false && ($restorePlan->get_data()['writes_performed'] ?? true) === false, 'restore preflight refuses to proceed without explicit target URL confirmation');
+    $restorePlanConfirmedRequest = new WP_REST_Request('POST', '/parsian-final/v1/backup/restore-plan');
+    $restorePlanConfirmedRequest->set_body(wp_json_encode($exportedData));
+    $restorePlanConfirmedRequest->set_param('target_site_confirmation', home_url('/'));
+    $restorePlanConfirmed = $backupService->restore_plan($restorePlanConfirmedRequest);
+    $assert($restorePlanConfirmed->get_status() === 200 && ($restorePlanConfirmed->get_data()['ready'] ?? false) === true && ($restorePlanConfirmed->get_data()['restored'] ?? true) === false, 'staging restore preflight requires explicit target confirmation and performs no writes');
+
 
 
 
