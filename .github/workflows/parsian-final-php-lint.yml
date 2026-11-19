@@ -1,4 +1,4 @@
-name: PARSIAN FINAL PHP lint
+name: PARSIAN ONE PHP lint
 
 on:
   push:
@@ -47,5 +47,5 @@ jobs:
           done
       - name: Verify plugin metadata
         run: |
-          grep -q '^ \* Plugin Name: PARSIAN FINAL Core$' wordpress/parsian-final/parsian-final.php
+          grep -q '^ \* Plugin Name: PARSIAN ONE Core$' wordpress/parsian-final/parsian-final.php
           grep -q "register_activation_hook" wordpress/parsian-final/parsian-final.php
