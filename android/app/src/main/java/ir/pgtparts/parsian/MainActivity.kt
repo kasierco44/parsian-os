@@ -151,6 +151,7 @@ private fun ParsianMobileApp(context: Context) {
                                 item { portalSection(data, "customers", "مشتریان تخصیص‌یافته", listOf("display_name", "province", "status")) }
                                 item { portalSection(data, "leads", "سرنخ‌های فروش من", listOf("display_name", "phone", "province", "status")) }
                                 item { taskSection(data, context) { message = "تکمیل وظیفه به صف آفلاین اضافه شد؛ پس از تأیید مدیر قطعی می‌شود."; SyncScheduler.enqueue(context) } }
+                                item { leadUpdateSection(context) { message = "ویرایش سرنخ به صف آفلاین اضافه شد؛ پس از تأیید مدیر اعمال می‌شود."; SyncScheduler.enqueue(context) } }
                                 item { proformaDraftSection(context) { message = "پیش‌نویس پیش‌فاکتور به صف آفلاین اضافه شد؛ تأیید مدیر لازم است."; SyncScheduler.enqueue(context) } }
                                 item { portalSection(data, "proformas", "پیش‌فاکتورهای من", listOf("document_number", "total_toman", "status")) }
                             }
@@ -220,6 +221,38 @@ private fun taskSection(data: JSONObject, context: Context, onQueued: () -> Unit
             }
         }
     }
+}
+
+@Composable
+private fun leadUpdateSection(context: Context, onQueued: () -> Unit) {
+    var leadId by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var province by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    Text("ویرایش سرنخ آفلاین", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
+    OutlinedTextField(value = leadId, onValueChange = { leadId = it }, label = { Text("شناسه سرنخ متعلق به شما") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("نام جدید") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("شماره تماس جدید") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(value = province, onValueChange = { province = it }, label = { Text("استان جدید") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("یادداشت جدید") }, modifier = Modifier.fillMaxWidth())
+    Button(enabled = leadId.toLongOrNull()?.let { it > 0 } == true && (name.isNotBlank() || phone.isNotBlank() || province.isNotBlank() || notes.isNotBlank()),
+        onClick = {
+            scope.launch {
+                try {
+                    val payload = JSONObject().put("lead_id", leadId.toLong())
+                    if (name.isNotBlank()) payload.put("display_name", name.trim())
+                    if (phone.isNotBlank()) payload.put("phone", phone.trim())
+                    if (province.isNotBlank()) payload.put("province", province.trim())
+                    if (notes.isNotBlank()) payload.put("notes", notes.trim())
+                    Outbox.enqueue(context, "crm.lead.update", payload)
+                    leadId = ""; name = ""; phone = ""; province = ""; notes = ""
+                    onQueued()
+                } catch (_: Exception) { }
+            }
+        }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+    ) { Text("ثبت ویرایش در صف آفلاین") }
 }
 
 @Composable
