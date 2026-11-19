@@ -85,12 +85,12 @@ final class Parsian_Final_Sync {
             if (!preg_match('/^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)+$/', $type)) {
                 $results[]=['operation_uuid'=>$op['operation_uuid'],'status'=>'rejected','code'=>'invalid_operation_type'];continue;
             }
-            $allowedTypes=['crm.lead.create','crm.lead.update','crm.task.complete','sales.proforma.draft'];
+            $allowedTypes=['crm.lead.create','crm.lead.update','crm.customer.update','crm.task.complete','sales.proforma.draft','sales.proforma.update','finance.invoice.update','finance.payment.update'];
             $payload=wp_json_encode($op['payload']);
             if(!in_array($type,$allowedTypes,true)||strlen((string)$payload)>65535){
                 $results[]=['operation_uuid'=>$op['operation_uuid'],'status'=>'rejected','code'=>'operation_too_large_or_invalid'];continue;
             }
-            $requiredCapability = str_starts_with($type, 'sales.') ? 'parsian_sales_create' : 'parsian_crm_write';
+            $requiredCapability = str_starts_with($type, 'sales.') ? 'parsian_sales_create' : (str_starts_with($type, 'finance.') ? 'parsian_finance_write' : 'parsian_crm_write');
             if (!current_user_can($requiredCapability)) {
                 $results[]=['operation_uuid'=>$op['operation_uuid'],'status'=>'rejected','code'=>'operation_actor_not_authorized'];continue;
             }
@@ -142,6 +142,188 @@ final class Parsian_Final_Sync {
         return new WP_REST_Response(['items' => $rows ?: []], 200);
     }
 
+    private function versioned_spec(string $resource): ?array {
+        global $wpdb;
+        $p = $wpdb->prefix . 'parsian_';
+        $specs = [
+            'customer' => [
+                'table'=>$p.'customers',
+                'select'=>"SELECT id,display_name,phone,province,city,address,credit_limit_toman,notes,status,created_at,COALESCE(updated_at,created_at) AS updated_at FROM {$p}customers",
+                'fields'=>['id','display_name','phone','province','city','address','credit_limit_toman','notes','status','created_at','updated_at'],
+                'owner'=>'assigned_seller'
+            ],
+            'proforma' => [
+                'table'=>$p.'proformas',
+                'select'=>"SELECT id,document_number,customer_id,status,total_toman,due_date,notes,created_by,created_at,updated_at,invoice_id FROM {$p}proformas",
+                'fields'=>['id','document_number','customer_id','status','total_toman','due_date','notes','created_by','created_at','updated_at','invoice_id'],
+                'owner'=>'created_by'
+            ],
+            'invoice' => [
+                'table'=>$p.'invoices',
+                'select'=>"SELECT id,invoice_number,proforma_id,customer_id,status,total_toman,due_date,issued_by,issued_at,COALESCE(updated_at,issued_at) AS updated_at,journal_entry_id FROM {$p}invoices",
+                'fields'=>['id','invoice_number','proforma_id','customer_id','status','total_toman','due_date','issued_by','issued_at','updated_at','journal_entry_id'],
+                'owner'=>'issued_by'
+            ],
+            'payment' => [
+                'table'=>$p.'payments',
+                'select'=>"SELECT id,direction,amount_toman,party_type,party_id,method,reference,status,created_by,created_at,COALESCE(updated_at,created_at) AS updated_at,journal_entry_id FROM {$p}payments",
+                'fields'=>['id','direction','amount_toman','party_type','party_id','method','reference','status','created_by','created_at','updated_at','journal_entry_id'],
+                'owner'=>'created_by'
+            ],
+        ];
+        return $specs[$resource] ?? null;
+    }
+
+    private function versioned_record(string $resource, int $recordId, bool $lock = false): ?array {
+        global $wpdb;
+        $spec = $this->versioned_spec($resource);
+        if (!$spec || $recordId < 1) return null;
+        $sql = $spec['select'] . ' WHERE id=%d' . ($lock ? ' FOR UPDATE' : '');
+        $row = $wpdb->get_row($wpdb->prepare($sql, $recordId), ARRAY_A);
+        return is_array($row) ? $row : null;
+    }
+
+    private function versioned_revision(string $resource, array $row): string {
+        $spec = $this->versioned_spec($resource);
+        if (!$spec) return '';
+        $data = [];
+        foreach ($spec['fields'] as $field) {
+            $value = $row[$field] ?? '';
+            if (in_array($field, ['id','customer_id','total_toman','created_by','invoice_id','proforma_id','issued_by','journal_entry_id','party_id','amount_toman','credit_limit_toman'], true)) {
+                $value = (int)$value;
+            } else {
+                $value = (string)$value;
+            }
+            $data[$field] = $value;
+        }
+        if ($resource === 'proforma') {
+            global $wpdb;
+            $items = $wpdb->get_results($wpdb->prepare(
+                "SELECT product_id,description,quantity,unit_price_toman,line_total_toman FROM {$wpdb->prefix}parsian_proforma_items WHERE proforma_id=%d ORDER BY id",
+                (int)$row['id']
+            ), ARRAY_A) ?: [];
+            $data['items_revision'] = hash('sha256', wp_json_encode($items, JSON_UNESCAPED_UNICODE));
+        }
+        return hash('sha256', wp_json_encode($data, JSON_UNESCAPED_UNICODE));
+    }
+
+    private function versioned_update_operation(WP_REST_Request $request, array $operation, array $payload, int $ownerId): ?WP_REST_Response {
+        global $wpdb;
+        $type = (string)$operation['operation_type'];
+        $map = [
+            'crm.customer.update'=>['resource'=>'customer','id_key'=>'customer_id','mutable'=>['display_name','phone','province','city','address','notes']],
+            'sales.proforma.update'=>['resource'=>'proforma','id_key'=>'proforma_id','mutable'=>['due_date','notes']],
+            'finance.invoice.update'=>['resource'=>'invoice','id_key'=>'invoice_id','mutable'=>['due_date']],
+            'finance.payment.update'=>['resource'=>'payment','id_key'=>'payment_id','mutable'=>['method','reference']],
+        ];
+        if (!isset($map[$type])) return null;
+        $config = $map[$type];
+        $resource = $config['resource'];
+        $recordId = absint($payload[$config['id_key']] ?? 0);
+        $row = $this->versioned_record($resource, $recordId, true);
+        if (!$row) {
+            $wpdb->query('ROLLBACK');
+            return new WP_REST_Response(['code'=>'sync_target_record_not_found','resource_type'=>$resource],404);
+        }
+        $assigned = true;
+        if ($resource === 'customer') {
+            $assigned = (bool)$wpdb->get_var($wpdb->prepare(
+                "SELECT umeta_id FROM {$wpdb->usermeta} WHERE user_id=%d AND meta_key=%s AND meta_value='1' LIMIT 1",
+                $ownerId, 'parsian_customer_' . $recordId
+            ));
+        } else {
+            $ownerField = $resource === 'invoice' ? 'issued_by' : ($resource === 'payment' ? 'created_by' : 'created_by');
+            $assigned = (int)($row[$ownerField] ?? 0) === $ownerId;
+        }
+        if (!$assigned) {
+            $wpdb->query('ROLLBACK');
+            return new WP_REST_Response(['code'=>'sync_target_record_not_owned_by_actor'],403);
+        }
+        $allowedStatus = [
+            'customer'=>['active'],
+            'proforma'=>['draft'],
+            'invoice'=>['posted','fulfilled'],
+            'payment'=>['pending_approval']
+        ];
+        if (!in_array((string)($row['status'] ?? ''), $allowedStatus[$resource], true)) {
+            $wpdb->query('ROLLBACK');
+            return new WP_REST_Response(['code'=>'sync_target_state_not_editable','status'=>$row['status']??''],409);
+        }
+        $serverUpdatedAt = (string)($row['updated_at'] ?? '');
+        $serverRevision = $this->versioned_revision($resource, $row);
+        $baseUpdatedAt = trim((string)($payload['base_updated_at'] ?? ''));
+        $baseRevision = trim((string)($payload['base_revision'] ?? ''));
+        if ($baseUpdatedAt === '' || $baseRevision === '' || $serverUpdatedAt === '' ||
+            !hash_equals($serverUpdatedAt, $baseUpdatedAt) || !hash_equals($serverRevision, $baseRevision)) {
+            $deviceChanges = array_intersect_key($payload, array_flip($config['mutable']));
+            $conflict = [
+                'kind'=>'record_changed_on_server','resource_type'=>$resource,'record_id'=>$recordId,
+                'base_updated_at'=>$baseUpdatedAt,'server_updated_at'=>$serverUpdatedAt,
+                'server_revision'=>$serverRevision,'server_record'=>$row,'device_changes'=>$deviceChanges
+            ];
+            $wpdb->update($wpdb->prefix.'parsian_sync_ops',[
+                'status'=>'conflict','result'=>wp_json_encode($conflict)
+            ],['id'=>(int)$operation['id'],'status'=>'pending_review'],['%s','%s'],['%d','%s']);
+            $wpdb->query('COMMIT');
+            return new WP_REST_Response(['status'=>'conflict','code'=>'record_changed_on_server','conflict'=>$conflict],409);
+        }
+        $changes = [];
+        foreach ($config['mutable'] as $field) {
+            if (!array_key_exists($field, $payload)) continue;
+            if ($field === 'due_date') {
+                $date = $payload[$field];
+                if ($date !== null && $date !== '' && (!is_string($date) || !preg_match('/^\\d{4}-\\d{2}-\\d{2}$/',$date) ||
+                    !checkdate((int)substr($date,5,2),(int)substr($date,8,2),(int)substr($date,0,4)))) {
+                    $wpdb->query('ROLLBACK');
+                    return new WP_REST_Response(['code'=>'sync_update_date_invalid'],422);
+                }
+                $changes[$field] = ($date === '') ? null : $date;
+            } elseif ($field === 'credit_limit_toman') {
+                $changes[$field] = absint($payload[$field]);
+            } elseif ($field === 'method') {
+                $method = sanitize_key((string)$payload[$field]);
+                if (!in_array($method,['cash','transfer','card','cheque','other'],true)) {
+                    $wpdb->query('ROLLBACK');
+                    return new WP_REST_Response(['code'=>'sync_payment_method_invalid'],422);
+                }
+                $changes[$field] = $method;
+            } elseif ($field === 'reference') {
+                $value = sanitize_text_field((string)$payload[$field]);
+                if (strlen($value)>190) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_payment_reference_invalid'],422); }
+                $changes[$field] = $value;
+            } elseif ($field === 'notes') {
+                $changes[$field] = sanitize_textarea_field((string)$payload[$field]);
+            } else {
+                $value = trim(sanitize_text_field((string)$payload[$field]));
+                $max = $field === 'display_name' ? 190 : ($field === 'phone' ? 40 : 100);
+                if (($field === 'display_name' && $value === '') || strlen($value)>$max) {
+                    $wpdb->query('ROLLBACK');
+                    return new WP_REST_Response(['code'=>'sync_update_field_invalid','field'=>$field],422);
+                }
+                $changes[$field] = $value;
+            }
+        }
+        if (!$changes) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_update_empty'],422); }
+        $changes['updated_at'] = current_time('mysql',true);
+        $updated = $wpdb->update($this->versioned_spec($resource)['table'],$changes,['id'=>$recordId]);
+        if ($updated === false) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_versioned_update_failed'],500); }
+        $now = current_time('mysql',true);
+        $result = ['resource_type'=>$resource,'record_id'=>$recordId,'operation_uuid'=>$operation['operation_uuid']];
+        $opUpdated = $wpdb->update($wpdb->prefix.'parsian_sync_ops',[
+            'status'=>'applied','result'=>wp_json_encode($result),'processed_at'=>$now
+        ],['id'=>(int)$operation['id'],'status'=>'pending_review'],['%s','%s','%s'],['%d','%s']);
+        if ($opUpdated !== 1) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_operation_state_conflict'],409); }
+        $eventOk = $wpdb->insert($wpdb->prefix.'parsian_events',[
+            'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>$ownerId,
+            'event_type'=>'sync.'.$resource.'.updated.offline','aggregate_type'=>$resource,
+            'aggregate_id'=>$recordId,'payload'=>wp_json_encode([$config['id_key']=>$recordId,'approved_by'=>get_current_user_id(),'operation_uuid'=>$operation['operation_uuid']]),
+            'created_at'=>$now
+        ],['%s','%d','%s','%s','%d','%s','%s']);
+        if (!$eventOk) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_event_write_failed'],500); }
+        $wpdb->query('COMMIT');
+        return new WP_REST_Response(['status'=>'applied']+$result,200);
+    }
+
     /**
      * Manager resolution is explicit. keep_server rejects the stale device patch;
      * apply_device rebases it to the exact current server timestamp and returns it
@@ -157,7 +339,7 @@ final class Parsian_Final_Sync {
         $table = $wpdb->prefix . 'parsian_sync_ops';
         $wpdb->query('START TRANSACTION');
         $operation = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d FOR UPDATE",$id),ARRAY_A);
-        if (!$operation || $operation['status'] !== 'conflict' || $operation['operation_type'] !== 'crm.lead.update') {
+        if (!$operation || $operation['status'] !== 'conflict') {
             $wpdb->query('ROLLBACK');
             return new WP_REST_Response(['code'=>'sync_conflict_not_found'],404);
         }
@@ -211,19 +393,27 @@ final class Parsian_Final_Sync {
             $wpdb->query('ROLLBACK');
             return new WP_REST_Response(['code'=>'sync_operation_not_reviewable','status'=>$operation['status']],409);
         }
-        if (!in_array($operation['operation_type'], ['crm.lead.create', 'crm.lead.update', 'crm.task.complete', 'sales.proforma.draft'], true)) {
+        if (!in_array($operation['operation_type'], ['crm.lead.create', 'crm.lead.update', 'crm.customer.update', 'crm.task.complete', 'sales.proforma.draft', 'sales.proforma.update', 'finance.invoice.update', 'finance.payment.update'], true)) {
             $wpdb->query('ROLLBACK');
             return new WP_REST_Response(['code'=>'operation_handler_not_available','operation_type'=>$operation['operation_type']],422);
         }
         $ownerId = (int) $operation['user_id'];
         $owner = get_userdata($ownerId);
-        $ownerCapability = str_starts_with((string) $operation['operation_type'], 'sales.') ? 'parsian_sales_create' : 'parsian_crm_write';
-        if (!$owner || !in_array('parsian_seller', (array) $owner->roles, true) || !user_can($owner, $ownerCapability)) {
+        $operationType = (string) $operation['operation_type'];
+        $financeOperation = str_starts_with($operationType, 'finance.');
+        $ownerCapability = $financeOperation ? 'parsian_finance_write' : (str_starts_with($operationType, 'sales.') ? 'parsian_sales_create' : 'parsian_crm_write');
+        $allowedActor = $financeOperation
+            ? ($owner && (in_array('parsian_accountant', (array)$owner->roles, true) || in_array('administrator', (array)$owner->roles, true)))
+            : ($owner && in_array('parsian_seller', (array)$owner->roles, true));
+        if (!$owner || !$allowedActor || !user_can($owner, $ownerCapability)) {
             $wpdb->query('ROLLBACK');
-            return new WP_REST_Response(['code'=>'operation_actor_not_seller'],403);
+            return new WP_REST_Response(['code'=>'operation_actor_not_authorized'],403);
         }
         $payload = json_decode((string) $operation['payload'], true);
         if (!is_array($payload)) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'invalid_operation_payload'],422); }
+
+        $versionedResult = $this->versioned_update_operation($request, $operation, $payload, $ownerId);
+        if ($versionedResult instanceof WP_REST_Response) return $versionedResult;
 
         if ($operation['operation_type'] === 'sales.proforma.draft') {
             $customerId = absint($payload['customer_id'] ?? 0);
