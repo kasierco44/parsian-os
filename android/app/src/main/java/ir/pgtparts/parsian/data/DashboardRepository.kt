@@ -64,6 +64,7 @@ object DashboardRepository {
             result.put("customers", authorized(context, "/customers?per_page=50"))
             result.put("leads", authorized(context, "/leads?per_page=50"))
             result.put("proformas", authorized(context, "/proformas?per_page=50"))
+            result.put("tasks", authorized(context, "/tasks?per_page=50"))
         }
         return result
     }
