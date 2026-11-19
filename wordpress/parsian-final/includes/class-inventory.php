@@ -109,14 +109,22 @@ final class Parsian_Final_Inventory {
         $itemQty=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(quantity),0) FROM {$wpdb->prefix}parsian_invoice_items WHERE invoice_id=%d AND product_id=%d",$invoice,$pid));
         if($itemQty<1||$qty>$itemQty){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'reservation_exceeds_invoice_quantity'],409);}
         $s=$this->stock($pid,true);
-        $old=(int)$wpdb->get_var($wpdb->prepare("SELECT COALESCE(SUM(quantity),0) FROM {$wpdb->prefix}parsian_stock_reservations WHERE reference_type='invoice' AND reference_id=%d AND product_id=%d AND status='reserved'",$invoice,$pid));
+        $reservationTable=$wpdb->prefix.'parsian_stock_reservations';
+        $existing=$wpdb->get_row($wpdb->prepare("SELECT id,quantity FROM {$reservationTable} WHERE reference_type='invoice' AND reference_id=%d AND product_id=%d AND status='reserved' FOR UPDATE",$invoice,$pid),ARRAY_A);
+        $old=(int)($existing['quantity']??0);
         if($old+$qty>$itemQty||$qty>$s['available']){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'insufficient_stock_or_invoice_qty','available'=>$s['available'],'already_reserved'=>$old],409);}
-        $ok=$wpdb->insert($wpdb->prefix.'parsian_stock_reservations',[
-            'reference_type'=>'invoice','reference_id'=>$invoice,'product_id'=>$pid,'quantity'=>$qty,'status'=>'reserved',
-            'created_by'=>get_current_user_id(),'created_at'=>current_time('mysql',true)
-        ],['%s','%d','%d','%d','%s','%d','%s']);
-        if(!$ok){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'reservation_conflict'],409);}
-        $rid=(int)$wpdb->insert_id; $this->event('inventory.stock.reserved','invoice',$invoice,['reservation_id'=>$rid,'product_id'=>$pid,'quantity'=>$qty]);
+        if($existing){
+            $ok=$wpdb->update($reservationTable,['quantity'=>$old+$qty],['id'=>(int)$existing['id']],['%d'],['%d']);
+            $rid=(int)$existing['id'];
+        }else{
+            $ok=$wpdb->insert($reservationTable,[
+                'reference_type'=>'invoice','reference_id'=>$invoice,'product_id'=>$pid,'quantity'=>$qty,'status'=>'reserved',
+                'created_by'=>get_current_user_id(),'created_at'=>current_time('mysql',true)
+            ],['%s','%d','%d','%d','%s','%d','%s']);
+            $rid=(int)$wpdb->insert_id;
+        }
+        if(!$ok){$wpdb->query('ROLLBACK');return new WP_REST_Response(['code'=>'reservation_write_failed'],409);}
+        $this->event('inventory.stock.reserved','invoice',$invoice,['reservation_id'=>$rid,'product_id'=>$pid,'quantity_added'=>$qty,'quantity_reserved_total'=>$old+$qty]);
         $wpdb->query('COMMIT'); return new WP_REST_Response(['reservation_id'=>$rid,'status'=>'reserved','stock'=>$this->stock($pid)],201);
     }
     public function release_reservation(WP_REST_Request $request): WP_REST_Response {
