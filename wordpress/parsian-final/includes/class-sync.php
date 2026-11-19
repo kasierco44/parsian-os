@@ -148,7 +148,7 @@ final class Parsian_Final_Sync {
             $wpdb->query('ROLLBACK');
             return new WP_REST_Response(['code'=>'sync_operation_not_reviewable','status'=>$operation['status']],409);
         }
-        if ($operation['operation_type'] !== 'crm.lead.create') {
+        if (!in_array($operation['operation_type'], ['crm.lead.create', 'crm.lead.update'], true)) {
             $wpdb->query('ROLLBACK');
             return new WP_REST_Response(['code'=>'operation_handler_not_available','operation_type'=>$operation['operation_type']],422);
         }
@@ -160,6 +160,75 @@ final class Parsian_Final_Sync {
         }
         $payload = json_decode((string) $operation['payload'], true);
         if (!is_array($payload)) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'invalid_operation_payload'],422); }
+
+        if ($operation['operation_type'] === 'crm.lead.update') {
+            $leadId = absint($payload['lead_id'] ?? 0);
+            $lead = $leadId ? $wpdb->get_row($wpdb->prepare(
+                "SELECT id, owner_user_id FROM {$wpdb->prefix}parsian_leads WHERE id=%d FOR UPDATE",
+                $leadId
+            ), ARRAY_A) : null;
+            if (!$lead || (int) $lead['owner_user_id'] !== $ownerId) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'offline_lead_not_owned_by_actor'],403);
+            }
+
+            $changes = [];
+            $formats = [];
+            $limits = ['display_name'=>190, 'phone'=>40, 'province'=>100];
+            foreach ($limits as $field => $maxLength) {
+                if (array_key_exists($field, $payload)) {
+                    $value = trim(sanitize_text_field((string) $payload[$field]));
+                    if (($field === 'display_name' && $value === '') || strlen($value) > $maxLength) {
+                        $wpdb->query('ROLLBACK');
+                        return new WP_REST_Response(['code'=>'offline_lead_update_invalid','field'=>$field],422);
+                    }
+                    $changes[$field] = $value;
+                    $formats[] = '%s';
+                }
+            }
+            if (array_key_exists('notes', $payload)) {
+                $changes['notes'] = sanitize_textarea_field((string) $payload['notes']);
+                $formats[] = '%s';
+            }
+            if (!$changes) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'offline_lead_update_empty'],422);
+            }
+            $changes['updated_at'] = current_time('mysql', true);
+            $formats[] = '%s';
+            $updatedLead = $wpdb->update(
+                $wpdb->prefix . 'parsian_leads',
+                $changes,
+                ['id'=>$leadId, 'owner_user_id'=>$ownerId],
+                $formats,
+                ['%d','%d']
+            );
+            if ($updatedLead === false) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'offline_lead_update_failed'],500);
+            }
+            $result = ['lead_id'=>$leadId,'operation_uuid'=>$operation['operation_uuid']];
+            $updatedOperation = $wpdb->update($table, [
+                'status'=>'applied','result'=>wp_json_encode($result),'processed_at'=>current_time('mysql',true)
+            ], ['id'=>$id,'status'=>'pending_review'], ['%s','%s','%s'], ['%d','%s']);
+            if ($updatedOperation !== 1) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'sync_operation_state_conflict'],409);
+            }
+            $eventOk = $wpdb->insert($wpdb->prefix . 'parsian_events', [
+                'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>$ownerId,
+                'event_type'=>'crm.lead.updated.offline','aggregate_type'=>'lead','aggregate_id'=>$leadId,
+                'payload'=>wp_json_encode(['lead_id'=>$leadId,'owner_user_id'=>$ownerId,'approved_by'=>get_current_user_id(),'operation_uuid'=>$operation['operation_uuid']]),
+                'created_at'=>current_time('mysql',true)
+            ], ['%s','%d','%s','%s','%d','%s','%s']);
+            if (!$eventOk) {
+                $wpdb->query('ROLLBACK');
+                return new WP_REST_Response(['code'=>'sync_event_write_failed'],500);
+            }
+            $wpdb->query('COMMIT');
+            return new WP_REST_Response(['status'=>'applied'] + $result, 200);
+        }
+
         $name = trim(sanitize_text_field((string) ($payload['name'] ?? '')));
         $phone = trim(sanitize_text_field((string) ($payload['phone'] ?? '')));
         $province = trim(sanitize_text_field((string) ($payload['province'] ?? '')));
