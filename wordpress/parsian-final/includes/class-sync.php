@@ -176,9 +176,9 @@ final class Parsian_Final_Sync {
         ], ['id'=>$id,'status'=>'pending_review'], ['%s','%s','%s'], ['%d','%s']);
         if ($updated !== 1) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_operation_state_conflict'],409); }
         $wpdb->insert($wpdb->prefix . 'parsian_events', [
-            'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>get_current_user_id(),
+            'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>$ownerId,
             'event_type'=>'crm.lead.created.offline','aggregate_type'=>'lead','aggregate_id'=>$leadId,
-            'payload'=>wp_json_encode(['lead_id'=>$leadId,'owner_user_id'=>$ownerId,'operation_uuid'=>$operation['operation_uuid']]),
+            'payload'=>wp_json_encode(['lead_id'=>$leadId,'owner_user_id'=>$ownerId,'approved_by'=>get_current_user_id(),'operation_uuid'=>$operation['operation_uuid']]),
             'created_at'=>current_time('mysql',true)
         ], ['%s','%d','%s','%s','%d','%s','%s']);
         $wpdb->query('COMMIT');
@@ -202,9 +202,9 @@ final class Parsian_Final_Sync {
         ], ['id'=>$id,'status'=>'pending_review'], ['%s','%s','%s'], ['%d','%s']);
         if ($updated !== 1) { $wpdb->query('ROLLBACK'); return new WP_REST_Response(['code'=>'sync_operation_state_conflict'],409); }
         $wpdb->insert($wpdb->prefix . 'parsian_events', [
-            'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>get_current_user_id(),
+            'event_uuid'=>wp_generate_uuid4(),'actor_user_id'=>(int)$operation['user_id'],
             'event_type'=>'sync.operation.rejected','aggregate_type'=>'sync_operation','aggregate_id'=>$id,
-            'payload'=>wp_json_encode(['operation_uuid'=>$operation['operation_uuid'],'reason'=>$reason]),
+            'payload'=>wp_json_encode(['operation_uuid'=>$operation['operation_uuid'],'reason'=>$reason,'reviewed_by'=>get_current_user_id()]),
             'created_at'=>current_time('mysql',true)
         ], ['%s','%d','%s','%s','%d','%s','%s']);
         $wpdb->query('COMMIT');
