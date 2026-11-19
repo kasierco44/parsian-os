@@ -170,3 +170,12 @@ Keep the existing live site and its database untouched until a staging backup, m
 - Aging currently measures elapsed days since invoice issue date because the invoice schema does not yet contain a contractual due_date. It must not be interpreted as overdue aging until due-date support is added.
 - Corrected trial balance aggregation so journal lines belonging to non-posted entries are excluded from debit/credit totals.
 - This update is source-level only at this point. PHP lint, migration/runtime checks, database-backed statement tests, and aging tie-out are still required before this module is accepted.
+
+
+## Due-date based receivables aging update (2026-11-19)
+
+- Added nullable due_date fields to proformas and invoices, including guarded upgrade migrations for existing WordPress installations.
+- Proforma creation accepts an optional validated YYYY-MM-DD due_date; manager approval carries that date to the final invoice.
+- Receivables aging now uses days past due, with buckets: not due, 1–30, 31–60, 61–90, and over 90 days.
+- Legacy invoices without a due_date use issued_at date as a clearly disclosed fallback. Their aging is therefore an estimate until due dates are backfilled.
+- These code changes have not yet passed PHP lint or database migration/integration tests. The latest Actions workflow run available for the ledger change is not present; a prior lint attempt failed without runner logs. Do not treat the change as validated.
