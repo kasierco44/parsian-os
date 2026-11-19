@@ -11,6 +11,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 object DashboardRepository {
@@ -54,19 +55,30 @@ object DashboardRepository {
     }
 
     suspend fun load(context: Context): JSONObject {
-        val result = JSONObject()
-        if (BuildConfig.APP_ROLE == "customer") {
-            result.put("overview", authorized(context, "/portal/overview"))
-            result.put("invoices", authorized(context, "/portal/invoices"))
-            result.put("proformas", authorized(context, "/portal/proformas"))
-            result.put("payments", authorized(context, "/portal/payments"))
-        } else {
-            result.put("customers", authorized(context, "/customers?per_page=50"))
-            result.put("leads", authorized(context, "/leads?per_page=50"))
-            result.put("proformas", authorized(context, "/proformas?per_page=50"))
-            result.put("tasks", authorized(context, "/tasks?per_page=50"))
+        val dao = ParsianDatabase.get(context).syncOperations()
+        return try {
+            val result = JSONObject()
+            if (BuildConfig.APP_ROLE == "customer") {
+                result.put("overview", authorized(context, "/portal/overview"))
+                result.put("invoices", authorized(context, "/portal/invoices"))
+                result.put("proformas", authorized(context, "/portal/proformas"))
+                result.put("payments", authorized(context, "/portal/payments"))
+            } else {
+                result.put("customers", authorized(context, "/customers?per_page=50"))
+                result.put("leads", authorized(context, "/leads?per_page=50"))
+                result.put("proformas", authorized(context, "/proformas?per_page=50"))
+                result.put("tasks", authorized(context, "/tasks?per_page=50"))
+            }
+            dao.saveDashboardSnapshot(DashboardSnapshotEntity("dashboard", result.toString()))
+            result.put("_offline", false)
+            result
+        } catch (error: IOException) {
+            val cached = dao.dashboardSnapshot("dashboard")
+                ?: throw IllegalStateException("اتصال برقرار نیست و هنوز اطلاعاتی برای نمایش آفلاین ذخیره نشده است.")
+            JSONObject(cached.payloadJson)
+                .put("_offline", true)
+                .put("_cached_at_epoch_ms", cached.updatedAtEpochMs)
         }
-        return result
     }
 
     suspend fun logout(context: Context) {
@@ -85,6 +97,7 @@ object DashboardRepository {
         dao.clearOutbox()
         dao.clearInbox()
         dao.clearMetadata()
+        dao.clearDashboardSnapshots()
         SessionStore.clear(context)
     }
 }
