@@ -101,6 +101,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
      if (uuid.isBlank()) continue
      when (item.optString("status")) {
       "pending_review", "accepted" -> dao.updateStatus(uuid, "pending_review")
+      "conflict" -> dao.updateStatus(uuid, "conflict", "record_changed_on_server")
       "applied" -> dao.updateStatus(uuid, "applied")
       "rejected" -> dao.updateStatus(uuid, "rejected", item.optString("code"))
       "retry" -> dao.recordRetry(uuid, "server_requested_retry")
