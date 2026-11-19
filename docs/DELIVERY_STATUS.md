@@ -74,3 +74,10 @@ Keep the existing live site and its database untouched until a staging backup, m
 - The branch head has since advanced with documentation-only commit `a0ad4e2b82dcfe867e20dcb2a2ae174d483f0c41`; the plugin source included in the artifact matches the latest plugin code commit.
 - Android workflow still fails before Gradle because its configured working directory `mobile/remote-sales-crm` is absent from this branch. No APK artifact exists.
 - ZIP creation and PHP lint are verified; WordPress staging install, runtime/API integration, accounting acceptance tests, and backup/restore are not verified. Treat the ZIP as a development package only, not a production-ready accounting release.
+
+
+## Latest verification after party subledger endpoint
+
+- PHP lint: passed, GitHub Actions run `44463175271`, code head `eb4263e5e00e9f5125eeb29d7f87622d5d1dab74`.
+- Development ZIP: built and uploaded successfully, GitHub Actions run `44463175263`, artifact `parsian-final-wordpress-plugin-dev`, artifact ID `14501425379`, SHA-256 `25c2d672c0a63c7a940bdbd067d27231c21f2d1d1449895e83495db51e4e2498` (expires 2026-12-03).
+- This confirms PHP syntax and packaging only. No live/staging WordPress runtime test or finance acceptance test has been run.
