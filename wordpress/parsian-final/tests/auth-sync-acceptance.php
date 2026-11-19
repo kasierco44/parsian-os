@@ -33,6 +33,7 @@ try {
     $user=new WP_User($userId);
     $user->add_cap('parsian_access_core');
     $user->add_cap('parsian_sync_use');
+    $user->add_cap('parsian_sales_create');
     // Test fixture has manager review capability so the queue processor can be exercised.
     $user->add_cap('parsian_manage_users');
 
@@ -85,6 +86,14 @@ try {
     ]]]));
     $conflict=$sync->push($push)->get_data();
     $assert(($conflict['results'][0]['code']??'')==='operation_uuid_conflict','same operation UUID with changed payload is rejected');
+
+    $proformaOperation = wp_generate_uuid4();
+    $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
+        'operation_uuid'=>$proformaOperation,'type'=>'sales.proforma.draft',
+        'payload'=>['customer_id'=>123,'items'=>[['product_id'=>1,'quantity'=>1,'unit_price_toman'=>1000]]]
+    ]]]));
+    $proformaQueued = $sync->push($push)->get_data();
+    $assert(($proformaQueued['results'][0]['status']??'')==='pending_review','namespaced sales.proforma.draft operation is accepted into manager review queue');
 
     $leadOperation=wp_generate_uuid4();
     $push->set_body(wp_json_encode(['device_uuid'=>$device,'operations'=>[[
