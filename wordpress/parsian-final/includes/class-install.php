@@ -344,6 +344,24 @@ final class Parsian_Final_Install {
             ) $charset;"
         ];
         foreach ($financeLifecycleTables as $sql) { dbDelta($sql); }
+        $authTokenTable = "CREATE TABLE {$p}auth_tokens (
+            id bigint unsigned NOT NULL AUTO_INCREMENT,
+            token_hash char(64) NOT NULL,
+            token_type varchar(12) NOT NULL,
+            family_uuid char(36) NOT NULL,
+            user_id bigint unsigned NOT NULL,
+            device_uuid char(36) NOT NULL,
+            expires_at datetime NOT NULL,
+            revoked_at datetime NULL,
+            created_at datetime NOT NULL,
+            last_used_at datetime NULL,
+            PRIMARY KEY  (id),
+            UNIQUE KEY token_hash (token_hash),
+            KEY user_device (user_id,device_uuid),
+            KEY family_lookup (family_uuid),
+            KEY token_expiry (token_type,expires_at)
+        ) $charset;";
+        dbDelta($authTokenTable);
         $bankReconciliationTables = [
             "CREATE TABLE {$p}bank_accounts (
                 id bigint unsigned NOT NULL AUTO_INCREMENT,
