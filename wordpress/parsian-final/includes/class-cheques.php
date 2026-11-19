@@ -181,7 +181,7 @@ final class Parsian_Final_Cheques {
         global $wpdb;
         $status=sanitize_key($request->get_param('status')??'');
         $where=''; $args=[];
-        if(in_array($status,['unmatched','matched'],true)){$where=' WHERE match_status=%s';$args[]=$status;}
+        if(in_array($status,['unmatched','partial','matched'],true){$where=' WHERE match_status=%s';$args[]=$status;}
         $sql="SELECT id,bank_account_ref,external_line_id,transaction_date,direction,amount_toman,reference,description,matched_journal_entry_id,match_status,matched_at FROM {$wpdb->prefix}parsian_bank_statement_lines{$where} ORDER BY transaction_date DESC,id DESC LIMIT 250";
         $rows=$args?$wpdb->get_results($wpdb->prepare($sql,...$args),ARRAY_A):$wpdb->get_results($sql,ARRAY_A);
         return new WP_REST_Response(['items'=>$rows?:[]],200);
@@ -223,7 +223,7 @@ final class Parsian_Final_Cheques {
     }
     public function reconciliation_summary(WP_REST_Request $request): WP_REST_Response {
         global $wpdb;
-        $row=$wpdb->get_row("SELECT COUNT(*) total_lines,SUM(CASE WHEN match_status='matched' THEN 1 ELSE 0 END) matched_lines,SUM(CASE WHEN match_status='unmatched' THEN 1 ELSE 0 END) unmatched_lines,SUM(CASE WHEN match_status='unmatched' AND direction='in' THEN amount_toman ELSE 0 END) unmatched_in_toman,SUM(CASE WHEN match_status='unmatched' AND direction='out' THEN amount_toman ELSE 0 END) unmatched_out_toman FROM {$wpdb->prefix}parsian_bank_statement_lines",ARRAY_A);
+        $row=$wpdb->get_row("SELECT COUNT(*) total_lines,SUM(CASE WHEN match_status='matched' THEN 1 ELSE 0 END) matched_lines,SUM(CASE WHEN match_status='partial' THEN 1 ELSE 0 END) partial_lines,SUM(CASE WHEN match_status='unmatched' THEN 1 ELSE 0 END) unmatched_lines,SUM(CASE WHEN match_status='unmatched' AND direction='in' THEN amount_toman ELSE 0 END) unmatched_in_toman,SUM(CASE WHEN match_status='unmatched' AND direction='out' THEN amount_toman ELSE 0 END) unmatched_out_toman FROM {$wpdb->prefix}parsian_bank_statement_lines",ARRAY_A);
         return new WP_REST_Response(['summary'=>$row?:[],'matching_policy'=>'exact_amount_direction_single_journal_entry'],200);
     }
 }
